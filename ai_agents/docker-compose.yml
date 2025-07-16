@@ -12,6 +12,9 @@ services:
       - "${SERVER_PORT}:${SERVER_PORT}"
     volumes:
       - ./:/app
+      - ../bridge_project:/bridge_project
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
       - ${LOG_PATH}:${LOG_PATH}
       - ../.vscode/:/app/.vscode
       - ../tools/pylint/.pylintrc:/tools/pylint/.pylintrc

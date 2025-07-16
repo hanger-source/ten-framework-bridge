@@ -136,3 +136,11 @@ ai_agents/xdump_config
 ai_agents/.idea
 ai_agents/*.log
 ai_agents/*.pcm
+
+ai_agents/agents/_go.mod
+ai_agents/agents/_go.sum
+ai_agents/agents/generated_auto_import_addons.go
+ai_agents/agents/go.mod
+ai_agents/agents/examples/bridge
+ai_agents/agents/ten_packages/extension/go_bridge
+ai_agents/agents/bin/main

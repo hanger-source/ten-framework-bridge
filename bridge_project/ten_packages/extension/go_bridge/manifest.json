@@ -1,0 +1,26 @@
+{
+  "type": "extension",
+  "name": "go_bridge",
+  "version": "0.0.1",
+  "tags": [
+    "go"
+  ],
+  "dependencies": [
+    {
+      "type": "system",
+      "name": "ten_runtime_go",
+      "version": "0.10"
+    }
+  ],
+  "package": {
+    "include": [
+      "**",
+      ".vscode/**",
+      "docs/**"
+    ]
+  },
+  "scripts": {
+    "test": "tests/bin/start"
+  },
+  "api": {}
+}
