@@ -194,6 +194,14 @@
         }
       }
     ],
+    "video_frame_in": [
+      {
+        "name": "video_frame",
+        "property": {
+          "properties": {}
+        }
+      }
+    ],
     "audio_frame_out": [
       {
         "name": "pcm_frame"

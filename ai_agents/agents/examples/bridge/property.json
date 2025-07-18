@@ -331,6 +331,11 @@
                 "remote_stream_id": 123,
                 "subscribe_audio": true,
                 "publish_audio": true,
+                "subscribe_video": true,
+                "subscribe_video_pix_fmt": 1,
+                "publish_video": true,
+                "publish_video_auto_publishing": true,
+                "publish_video_frame_rate": 1,
                 "publish_data": true,
                 "subscribe_audio_sample_rate": 24000
               }
@@ -395,6 +400,16 @@
               "audio_frame": [
                 {
                   "name": "pcm_frame",
+                  "dest": [
+                    {
+                      "extension": "v2v"
+                    }
+                  ]
+                }
+              ],
+              "video_frame": [
+                {
+                  "name": "video_frame",
                   "dest": [
                     {
                       "extension": "v2v"

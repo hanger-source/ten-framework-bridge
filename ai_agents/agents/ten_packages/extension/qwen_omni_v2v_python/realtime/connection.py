@@ -10,6 +10,7 @@ from ten_runtime import AsyncTenEnv
 
 from typing import Any, AsyncGenerator
 from .struct import (
+    InputImageBufferAppend,
     InputAudioBufferAppend,
     ClientToServerMessage,
     ServerToClientMessage,
@@ -92,6 +93,12 @@ class RealtimeApiConnection:
             # auth=auth,
             headers=headers,
         )
+
+    async def send_image_data(self, image_data: bytes):
+        """image_data is assumed to be raw RGBA bytes, shape (width x height x 4), 8 bits per channel"""
+        base64_image_data = base64.b64encode(image_data).decode("utf-8")
+        message = InputImageBufferAppend(image=base64_image_data)
+        await self.send_request(message)
 
     async def send_audio_data(self, audio_data: bytes):
         """audio_data is assumed to be pcm16 24kHz mono little-endian"""

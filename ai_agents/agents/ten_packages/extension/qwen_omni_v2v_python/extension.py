@@ -79,6 +79,11 @@ from .realtime.struct import (
     AudioFormats
 )
 
+from PIL import Image
+from io import BytesIO
+from base64 import b64encode
+import cv2
+
 CMD_IN_FLUSH = "flush"
 CMD_IN_ON_USER_JOINED = "on_user_joined"
 CMD_IN_ON_USER_LEFT = "on_user_left"
@@ -89,6 +94,69 @@ class Role(str, Enum):
     User = "user"
     Assistant = "assistant"
 
+def rgb2jpegBytes(ten_env: AsyncTenEnv, rgb_data, width, height):
+    expected_rgb = width * height * 3
+    expected_rgba = width * height * 4
+    actual_len = len(rgb_data)
+    ten_env.log_info(
+        f"rgb_data len={actual_len}, width={width}, height={height}, "
+        f"expect RGB={expected_rgb}, expect RGBA={expected_rgba}"
+    )
+    # 自动判断格式
+    if actual_len == width * height * 3:
+        # RGB 格式
+        pil_image = Image.frombytes("RGB", (width, height), bytes(rgb_data))
+    elif actual_len == width * height * 4:
+        # RGBA 格式
+        pil_image = Image.frombytes("RGBA", (width, height), bytes(rgb_data)).convert("RGB")
+    elif actual_len == int(width * height * 1.5):
+        # YUV420 格式
+        yuv = np.frombuffer(rgb_data, dtype=np.uint8)
+        yuv = yuv.reshape((height * 3 // 2, width))
+        rgb_array = cv2.cvtColor(yuv, cv2.COLOR_YUV2RGB_I420)
+        pil_image = Image.fromarray(rgb_array)
+    else:
+        ten_env.log_error(f"Unknown image data format: len={actual_len}")
+        return None
+
+    pil_image = pil_image.convert("RGB")
+    pil_image = resize_image_keep_aspect(pil_image, 512)
+    buffered = BytesIO()
+    pil_image.save(buffered, format="JPEG")
+    jpeg_image_data = buffered.getvalue()
+    return jpeg_image_data
+
+def resize_image_keep_aspect(image, max_size=512):
+    """
+    Resize an image while maintaining its aspect ratio, ensuring the larger dimension is max_size.
+    If both dimensions are smaller than max_size, the image is not resized.
+
+    :param image: A PIL Image object
+    :param max_size: The maximum size for the larger dimension (width or height)
+    :return: A PIL Image object (resized or original)
+    """
+    # Get current width and height
+    width, height = image.size
+
+    # If both dimensions are already smaller than max_size, return the original image
+    if width <= max_size and height <= max_size:
+        return image
+
+    # Calculate the aspect ratio
+    aspect_ratio = width / height
+
+    # Determine the new dimensions
+    if width > height:
+        new_width = max_size
+        new_height = int(max_size / aspect_ratio)
+    else:
+        new_height = max_size
+        new_width = int(max_size * aspect_ratio)
+
+    # Resize the image with the new dimensions
+    resized_image = image.resize((new_width, new_height))
+
+    return resized_image
 
 @dataclass
 class QwenOmniRealtimeConfig(BaseConfig):
@@ -155,6 +223,8 @@ class QwenOmniRealtimeExtension(AsyncLLMBaseExtension):
         self.ctx: dict = {}
         self.input_end = time.time()
 
+        self.image_queue = asyncio.Queue(maxsize=5)
+
     async def on_init(self, ten_env: AsyncTenEnv) -> None:
         await super().on_init(ten_env)
         ten_env.log_debug("on_init")
@@ -209,6 +279,7 @@ class QwenOmniRealtimeExtension(AsyncLLMBaseExtension):
             ten_env.log_info("Finish init client")
 
             self.loop.create_task(self._loop())
+            self.loop.create_task(self._on_video(ten_env))
         except Exception as e:
             traceback.print_exc()
             self.ten_env.log_error(f"Failed to init client {e}")
@@ -572,6 +643,45 @@ class QwenOmniRealtimeExtension(AsyncLLMBaseExtension):
                 f"Error send append_context data {message} {e}"
             )
 
+    async def on_video_frame(self, async_ten_env, video_frame):
+        await super().on_video_frame(async_ten_env, video_frame)
+        image_data = video_frame.get_buf()
+        image_width = video_frame.get_width()
+        image_height = video_frame.get_height()
+
+        # Use non-blocking put to avoid memory buildup
+        try:
+            self.image_queue.put_nowait([image_data, image_width, image_height])
+        except asyncio.QueueFull:
+            # Drop frames if queue is full to maintain performance
+            pass
+
+    async def _on_video(self, _: AsyncTenEnv):
+        while True:
+
+            # Process the first frame from the queue
+            [image_data, image_width, image_height] = (
+                await self.image_queue.get()
+            )
+            self.video_buff = rgb2jpegBytes(
+                self.ten_env, image_data, image_width, image_height
+            )
+            try:
+                if self.video_buff is not None and self.connected:
+                    self.ten_env.log_info(f"send image")
+                    await self.conn.send_image_data(self.video_buff)
+                else:
+                    self.ten_env.log_error("Image encode failed, not sending image.")
+            except Exception as e:
+                self.ten_env.log_error(f"Failed to send image {e}")
+
+            # Skip remaining frames for the second
+            while not self.image_queue.empty():
+                await self.image_queue.get()
+
+            # Wait for 2 second before processing the next frame
+            await asyncio.sleep(2)
+
     # Direction: IN
     async def _on_audio(self, buff: bytearray):
         self.buff += buff
@@ -644,14 +754,9 @@ class QwenOmniRealtimeExtension(AsyncLLMBaseExtension):
             su.session.modalities = ["text"]
 
         if self.config.input_transcript:
-            input_audio_transcription_model = "whisper-1"
-            if self.config.vendor == 'qwen':
-                input_audio_transcription_model = 'gummy-realtime-v1'
             su.session.input_audio_transcription = InputAudioTranscription(
-                model=input_audio_transcription_model
+                model='gummy-realtime-v1'
             )
-        # 新增：发送前打印 su 的内容
-        # self.ten_env.log_info(f"[update_session] su: {su}")
         await self.conn.send_request(su)
 
     async def on_tools_update(

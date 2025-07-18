@@ -232,6 +232,7 @@ ItemParam = Union[
 # For reference:
 class EventType(str, Enum):
     SESSION_UPDATE = "session.update"
+    INPUT_IMAGE_BUFFER_APPEND = "input_image_buffer.append"
     INPUT_AUDIO_BUFFER_APPEND = "input_audio_buffer.append"
     INPUT_AUDIO_BUFFER_COMMIT = "input_audio_buffer.commit"
     INPUT_AUDIO_BUFFER_CLEAR = "input_audio_buffer.clear"
@@ -646,6 +647,12 @@ ServerToClientMessages = Union[
 class ClientToServerMessage:
     event_id: str = field(default_factory=generate_event_id)
 
+@dataclass
+class InputImageBufferAppend(ClientToServerMessage):
+    image: Optional[str] = field(default=None)
+    type: str = (
+        EventType.INPUT_IMAGE_BUFFER_APPEND
+    )  # Default argument (has a default value)
 
 @dataclass
 class InputAudioBufferAppend(ClientToServerMessage):
@@ -765,6 +772,7 @@ class SessionUpdate(ClientToServerMessage):
 
 # Union of all client-to-server message types
 ClientToServerMessages = Union[
+    InputImageBufferAppend,
     InputAudioBufferAppend,
     InputAudioBufferCommit,
     InputAudioBufferClear,
@@ -799,6 +807,8 @@ def parse_client_message(unparsed_string: str) -> ClientToServerMessage:
     data = json.loads(unparsed_string)
 
     # Dynamically select the correct message class based on the `type` field, using from_dict
+    if data["type"] == EventType.INPUT_IMAGE_BUFFER_APPEND:
+        return from_dict(InputImageBufferAppend, data)
     if data["type"] == EventType.INPUT_AUDIO_BUFFER_APPEND:
         return from_dict(InputAudioBufferAppend, data)
     elif data["type"] == EventType.INPUT_AUDIO_BUFFER_COMMIT:
