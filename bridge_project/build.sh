@@ -40,3 +40,4 @@ dst_base="/app/agents"
 link_dir_recursive "$src_base" "$dst_base" examples ten_packages
 
 task use AGENT=agents/examples/bridge
+# task use AGENT=agents/examples/ws_audio

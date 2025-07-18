@@ -35,7 +35,7 @@
               "extension_group": "stt",
               "property": {
                 "api_key": "${env:DEEPGRAM_API_KEY}",
-                "language": "zh-CN",
+                "language": "en-US",
                 "model": "nova-2",
                 "sample_rate": 16000
               }
@@ -60,17 +60,14 @@
             {
               "type": "extension",
               "name": "tts",
-              "addon": "elevenlabs_tts_python",
+              "addon": "fish_audio_tts",
               "extension_group": "tts",
-              "property":{
-                "api_key": "${env:ELEVENLABS_TTS_KEY}",
-                "model_id": "eleven_multilingual_v2",
-                "optimize_streaming_latency": 0,
+              "property": {
+                "api_key": "${env:FISH_AUDIO_TTS_KEY}",
+                "model_id": "d8639b5cc95548f5afbcfe22d3ba5ce5",
+                "optimize_streaming_latency": true,
                 "request_timeout_seconds": 30,
-                "similarity_boost": 0.75,
-                "speaker_boost": false,
-                "stability": 0.5,
-                "voice_id": "pNInz6obpgDQGcFmaJgB"
+                "base_url": "https://api.fish.audio"
               }
             },
             {
@@ -110,12 +107,28 @@
               "type": "extension",
               "name": "go_bridge",
               "addon": "go_bridge",
-              "extension_group": "default",
-              "property": {
-              }
+              "extension_group": "default"
+            }, {
+              "type": "extension",
+              "name": "node_ws_audio",
+              "addon": "node_ws_audio",
+              "extension_group": "default"
             }
           ],
           "connections": [
+            {
+              "extension": "node_ws_audio",
+              "audio_frame": [
+                {
+                  "name": "pcm_frame",
+                  "dest": [
+                    {
+                      "extension": "streamid_adapter"
+                    }
+                  ]
+                }
+              ]
+            },
             {
               "extension": "agora_rtc",
               "cmd": [
@@ -306,145 +319,6 @@
                   "dest": [
                     {
                       "extension": "stt"
-                    }
-                  ]
-                }
-              ]
-            }
-          ]
-        }
-      },{
-        "name": "voice_assistant_realtime",
-        "auto_start": true,
-        "graph": {
-          "nodes": [
-            {
-              "type": "extension",
-              "name": "agora_rtc",
-              "addon": "agora_rtc",
-              "extension_group": "rtc",
-              "property": {
-                "app_id": "${env:AGORA_APP_ID}",
-                "token": "",
-                "channel": "ten_agent_test",
-                "stream_id": 1234,
-                "remote_stream_id": 123,
-                "subscribe_audio": true,
-                "publish_audio": true,
-                "publish_data": true,
-                "subscribe_audio_sample_rate": 24000
-              }
-            },
-            {
-              "type": "extension",
-              "name": "v2v",
-              "addon": "openai_v2v_python",
-              "extension_group": "llm",
-              "property": {
-                "api_key": "${env:OPENAI_REALTIME_API_KEY}",
-                "base_uri": "${env:OPENAI_REALTIME_BASE_URL}",
-                "vendor": "${env:OPENAI_REALTIME_VENDOR}",
-                "vad_type": "server_vad",
-                "greeting": "TEN Agent connected. How can I help you today?",
-                "temperature": 0.9,
-                "model": "${env:OPENAI_REALTIME_MODEL}",
-                "max_tokens": 2048,
-                "voice": "Chelsie",
-                "language": "zh-CN",
-                "server_vad": true,
-                "dump": true,
-                "max_history": 10
-              }
-            },
-            {
-              "type": "extension",
-              "name": "message_collector",
-              "addon": "message_collector",
-              "extension_group": "transcriber",
-              "property": {}
-            }
-          ],
-          "connections": [
-            {
-              "extension": "agora_rtc",
-              "cmd": [
-                {
-                  "name": "on_user_joined",
-                  "dest": [
-                    {
-                      "extension": "v2v"
-                    }
-                  ]
-                },
-                {
-                  "name": "on_user_left",
-                  "dest": [
-                    {
-                      "extension": "v2v"
-                    }
-                  ]
-                },
-                {
-                  "name": "on_connection_failure",
-                  "dest": [
-                    {
-                      "extension": "v2v"
-                    }
-                  ]
-                }
-              ],
-              "audio_frame": [
-                {
-                  "name": "pcm_frame",
-                  "dest": [
-                    {
-                      "extension": "v2v"
-                    }
-                  ]
-                }
-              ]
-            },
-            {
-              "extension": "v2v",
-              "cmd": [
-                {
-                  "name": "flush",
-                  "dest": [
-                    {
-                      "extension": "agora_rtc"
-                    }
-                  ]
-                }
-              ],
-              "data": [
-                {
-                  "name": "text_data",
-                  "dest": [
-                    {
-                      "extension": "message_collector"
-                    }
-                  ]
-                }
-              ],
-              "audio_frame": [
-                {
-                  "name": "pcm_frame",
-                  "dest": [
-                    {
-                      "extension": "agora_rtc"
-                    }
-                  ]
-                }
-              ]
-            },
-            {
-              "extension": "message_collector",
-              "data": [
-                {
-                  "name": "data",
-                  "dest": [
-                    {
-                      "extension": "agora_rtc"
                     }
                   ]
                 }
