@@ -13,10 +13,10 @@ from ten_runtime import (
 
 
 @register_addon_as_extension("qwen_omni_v2v_python")
-class OpenAIRealtimeExtensionAddon(Addon):
+class QwenOmniRealtimeExtensionAddon(Addon):
 
     def on_create_instance(self, ten_env: TenEnv, name: str, context) -> None:
-        from .extension import OpenAIRealtimeExtension
+        from .extension import QwenOmniRealtimeExtension
 
-        ten_env.log_info("OpenAIRealtimeExtensionAddon on_create_instance")
-        ten_env.on_create_instance_done(OpenAIRealtimeExtension(name), context)
+        ten_env.log_info("QwenOmniRealtimeExtensionAddon on_create_instance")
+        ten_env.on_create_instance_done(QwenOmniRealtimeExtension(name), context)

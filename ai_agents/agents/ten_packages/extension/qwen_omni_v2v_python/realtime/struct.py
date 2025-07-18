@@ -702,7 +702,7 @@ class ResponseCreateParams:
     input_items: Optional[List[ItemParam]] = (
         None  # Initial messages to use for generation
     )
-    modalities: Optional[Set[str]] = (
+    modalities: Optional[List[str]] = (
         None  # Allowed modalities (e.g., "text", "audio")
     )
     instructions: Optional[str] = None  # Instructions or guidance for the model

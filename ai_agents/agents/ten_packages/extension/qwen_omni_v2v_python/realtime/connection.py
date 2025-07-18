@@ -1,3 +1,5 @@
+# -- coding: utf-8 --
+
 import asyncio
 import base64
 import json
@@ -15,9 +17,7 @@ from .struct import (
     to_json,
 )
 
-DEFAULT_VIRTUAL_MODEL = "gpt-4o-realtime-preview"
-
-VENDOR_AZURE = "azure"
+DEFAULT_VIRTUAL_MODEL = "qwen-omni-turbo-realtime"
 
 VENDOR_QWEN = "qwen"
 
@@ -54,10 +54,10 @@ class RealtimeApiConnection:
         self.ten_env = ten_env
         self.vendor = vendor
         self.url = f"{base_uri}{path}"
-        if not self.vendor and "model=" not in self.url:
+        if "model=" not in self.url:
             self.url += f"?model={model}"
 
-        self.api_key = api_key or os.environ.get("OPENAI_API_KEY")
+        self.api_key = api_key
         self.websocket: aiohttp.ClientWebSocketResponse | None = None
         self.verbose = verbose
         self.session = aiohttp.ClientSession()
@@ -75,8 +75,6 @@ class RealtimeApiConnection:
     async def connect(self):
         headers = {}
         auth = None
-        if self.vendor == VENDOR_AZURE:
-            headers = {"api-key": self.api_key}
         if self.vendor == VENDOR_QWEN:
             headers = {"Authorization": f"Bearer {self.api_key or ''}"}
         elif not self.vendor:

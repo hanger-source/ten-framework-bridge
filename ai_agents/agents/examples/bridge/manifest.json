@@ -195,6 +195,10 @@
       "type": "extension",
       "name": "node_ws_audio",
       "version": "0.0.1"
+    },{
+      "type": "extension",
+      "name": "qwen_omni_v2v_python",
+      "version": "0.1.0"
     }
   ],
   "scripts": {

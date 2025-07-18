@@ -48,6 +48,7 @@ from .realtime.struct import (
     SessionCreated,
     ItemCreated,
     UserMessageItemParam,
+    ResponseCreateParams,
     AssistantMessageItemParam,
     ItemInputAudioTranscriptionCompleted,
     ItemInputAudioTranscriptionFailed,
@@ -90,12 +91,12 @@ class Role(str, Enum):
 
 
 @dataclass
-class OpenAIRealtimeConfig(BaseConfig):
-    base_uri: str = "wss://api.openai.com"
+class QwenOmniRealtimeConfig(BaseConfig):
+    base_uri: str = "wss://dashscope.aliyuncs.com/api-ws"
     api_key: str = ""
     path: str = "/v1/realtime"
-    model: str = "gpt-4o-realtime-preview"
-    language: str = "en-US"
+    model: str = "qwen-omni-turbo-realtime"
+    language: str = "zh-CN"
     prompt: str = ""
     temperature: float = 0.5
     max_tokens: int = 1024
@@ -123,7 +124,7 @@ class OpenAIRealtimeConfig(BaseConfig):
         }
 
 
-class OpenAIRealtimeExtension(AsyncLLMBaseExtension):
+class QwenOmniRealtimeExtension(AsyncLLMBaseExtension):
 
     def __init__(self, name: str):
         super().__init__(name)
@@ -132,7 +133,7 @@ class OpenAIRealtimeExtension(AsyncLLMBaseExtension):
         self.session = None
         self.session_id = None
 
-        self.config: OpenAIRealtimeConfig = None
+        self.config: QwenOmniRealtimeConfig = None
         self.stopped: bool = False
         self.connected: bool = False
         self.buffer: bytearray = b""
@@ -165,7 +166,7 @@ class OpenAIRealtimeExtension(AsyncLLMBaseExtension):
 
         self.loop = asyncio.get_event_loop()
 
-        self.config = await OpenAIRealtimeConfig.create_async(ten_env=ten_env)
+        self.config = await QwenOmniRealtimeConfig.create_async(ten_env=ten_env)
         ten_env.log_info(f"config: {self.config}")
 
         if not self.config.api_key:
@@ -240,7 +241,7 @@ class OpenAIRealtimeExtension(AsyncLLMBaseExtension):
         except Exception as e:
             traceback.print_exc()
             self.ten_env.log_error(
-                f"OpenAIV2VExtension on audio frame failed {e}"
+                f"QwenOmniV2VExtension on audio frame failed {e}"
             )
 
     async def on_cmd(self, ten_env: AsyncTenEnv, cmd: Cmd) -> None:
@@ -831,14 +832,19 @@ class OpenAIRealtimeExtension(AsyncLLMBaseExtension):
             if self.config.greeting:
                 text = "Say '" + self.config.greeting + "' to me."
             self.ten_env.log_info(f"send greeting {text}")
-            await self.conn.send_request(
-                ItemCreate(
-                    item=UserMessageItemParam(
-                        content=[{"type": ContentType.InputText, "text": text}]
-                    )
+            # await self.conn.send_request(
+            #     ItemCreate(
+            #         item=UserMessageItemParam(
+            #             content=[{"type": ContentType.InputText, "text": text}]
+            #         )
+            #     )
+            # )
+            await self.conn.send_request(ResponseCreate(
+                response=ResponseCreateParams(
+                    instructions=f"you should say greeting: {text}",
+                    modalities=["text", "audio"]
                 )
-            )
-            await self.conn.send_request(ResponseCreate())
+            ))
 
     async def _flush(self) -> None:
         try:

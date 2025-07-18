@@ -338,16 +338,15 @@
             {
               "type": "extension",
               "name": "v2v",
-              "addon": "openai_v2v_python",
+              "addon": "qwen_omni_v2v_python",
               "extension_group": "llm",
               "property": {
-                "api_key": "${env:OPENAI_REALTIME_API_KEY}",
-                "base_uri": "${env:OPENAI_REALTIME_BASE_URL}",
-                "vendor": "${env:OPENAI_REALTIME_VENDOR}",
+                "api_key": "${env:QWEN_OMNI_REALTIME_API_KEY}",
+                "base_uri": "${env:QWEN_OMNI_REALTIME_BASE_URL}",
+                "vendor": "${env:QWEN_OMNI_REALTIME_VENDOR}",
                 "vad_type": "server_vad",
-                "greeting": "TEN Agent connected. How can I help you today?",
                 "temperature": 0.9,
-                "model": "${env:OPENAI_REALTIME_MODEL}",
+                "model": "${env:QWEN_OMNI_REALTIME_MODEL}",
                 "max_tokens": 2048,
                 "voice": "Chelsie",
                 "language": "zh-CN",
@@ -455,7 +454,7 @@
       }
     ],
     "log": {
-      "level": 2
+      "level": 1
     }
   }
 }
