@@ -189,21 +189,6 @@ class QWenLLMExtension(Extension):
         self.model, _ = ten.get_property_string("model")
         self.prompt, _ = ten.get_property_string("prompt")
         self.max_history, _ = ten.get_property_int("max_memory_length")
-        greeting, _ = ten.get_property_string("greeting")
-
-        if greeting:
-            try:
-                output_data = Data.create("text_data")
-                output_data.set_property_string(
-                    DATA_OUT_TEXT_DATA_PROPERTY_TEXT, greeting
-                )
-                output_data.set_property_bool(
-                    DATA_OUT_TEXT_DATA_PROPERTY_TEXT_END_OF_SEGMENT, True
-                )
-                ten.send_data(output_data)
-                ten.log_info(f"greeting [{greeting}] sent")
-            except Exception as e:
-                ten.log_error(f"greeting [{greeting}] send failed, err: {e}")
 
         dashscope.api_key = self.api_key
         self.thread = threading.Thread(target=self.async_handle, args=[ten])
@@ -277,6 +262,22 @@ class QWenLLMExtension(Extension):
         elif cmd_name == "call_chat":
             self.queue.put((cmd, ts))
             return  # cmd_result will be returned once it's processed
+        elif cmd_name == 'on_user_joined':
+            greeting, _ = ten.get_property_string("greeting")
+            if greeting:
+                try:
+                    output_data = Data.create("text_data")
+                    output_data.set_property_string(
+                        DATA_OUT_TEXT_DATA_PROPERTY_TEXT, greeting
+                    )
+                    output_data.set_property_bool(
+                        DATA_OUT_TEXT_DATA_PROPERTY_TEXT_END_OF_SEGMENT, True
+                    )
+                    ten.send_data(output_data)
+                    ten.log_info(f"greeting [{greeting}] sent")
+                except Exception as e:
+                    ten.log_error(f"greeting [{greeting}] send failed, err: {e}")
+
         else:
             ten.log_info(f"unknown cmd {cmd_name}")
 

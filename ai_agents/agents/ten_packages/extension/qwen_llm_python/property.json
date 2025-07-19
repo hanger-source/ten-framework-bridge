@@ -1,1 +1,5 @@
-{}
+{
+    "model": "${env:QWEN_LLM_MODEL}",
+    "api_key": "${env:QWEN_DASHSCOPE_API_KEY}",
+    "greeting": "你好"
+}

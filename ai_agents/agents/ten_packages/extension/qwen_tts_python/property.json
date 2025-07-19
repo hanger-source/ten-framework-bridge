@@ -1,0 +1,5 @@
+{
+    "api_key": "${env:QWEN_DASHSCOPE_API_KEY}",
+    "model": "qwen-tts",
+    "voice": "Cherry"
+}

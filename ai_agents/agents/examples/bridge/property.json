@@ -43,34 +43,12 @@
             {
               "type": "extension",
               "name": "llm",
-              "addon": "openai_chatgpt_python",
-              "extension_group": "chatgpt",
+              "addon": "qwen_llm_python",
+              "extension_group": "qwen",
               "property": {
-                "api_key": "${env:OPENAI_API_KEY}",
-                "base_url": "${env:OPENAI_API_BASE}",
-                "frequency_penalty": 0.9,
-                "greeting": "TEN Agent connected. How can I help you today?",
-                "max_memory_length": 10,
-                "max_tokens": 512,
-                "model": "${env:OPENAI_MODEL}",
-                "prompt": "",
-                "proxy_url": "${env:OPENAI_PROXY_URL}"
-              }
-            },
-            {
-              "type": "extension",
-              "name": "tts",
-              "addon": "elevenlabs_tts_python",
-              "extension_group": "tts",
-              "property":{
-                "api_key": "${env:ELEVENLABS_TTS_KEY}",
-                "model_id": "eleven_multilingual_v2",
-                "optimize_streaming_latency": 0,
-                "request_timeout_seconds": 30,
-                "similarity_boost": 0.75,
-                "speaker_boost": false,
-                "stability": 0.5,
-                "voice_id": "pNInz6obpgDQGcFmaJgB"
+                "model": "${env:QWEN_LLM_MODEL}",
+                "api_key": "${env:QWEN_DASHSCOPE_API_KEY}",
+                "greeting": "你好!"
               }
             },
             {
@@ -112,6 +90,16 @@
               "addon": "go_bridge",
               "extension_group": "default",
               "property": {
+              }
+            },{
+              "type": "extension",
+              "name": "tts",
+              "addon": "qwen_tts_python",
+              "extension_group": "tts",
+              "property": {
+                "api_key": "${env:QWEN_DASHSCOPE_API_KEY}",
+                "model": "qwen-tts-2025-05-22",
+                "voice": "Cherry"
               }
             }
           ],
@@ -172,10 +160,10 @@
                   "name": "text_data",
                   "dest": [
                     {
-                      "extension": "tts"
+                      "extension": "message_collector"
                     },
                     {
-                      "extension": "message_collector"
+                      "extension": "tts"
                     },
                     {
                       "extension": "go_bridge"

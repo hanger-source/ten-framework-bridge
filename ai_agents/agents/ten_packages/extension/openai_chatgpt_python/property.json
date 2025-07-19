@@ -1,5 +1,5 @@
 {
-    "base_url": "",
+    "base_url": "${env:OPENAI_API_BASE}",
     "api_key": "${env:OPENAI_API_KEY}",
     "frequency_penalty": 0.9,
     "model": "${env:OPENAI_MODEL}",
