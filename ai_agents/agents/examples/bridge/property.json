@@ -97,9 +97,7 @@
               "addon": "qwen_tts_python",
               "extension_group": "tts",
               "property": {
-                "api_key": "${env:QWEN_DASHSCOPE_API_KEY}",
-                "model": "qwen-tts-2025-05-22",
-                "voice": "Cherry"
+                "api_key": "${env:QWEN_DASHSCOPE_API_KEY}"
               }
             }
           ],
