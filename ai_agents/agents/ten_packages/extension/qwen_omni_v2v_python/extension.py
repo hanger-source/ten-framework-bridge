@@ -165,7 +165,8 @@ class QwenOmniRealtimeConfig(BaseConfig):
     path: str = "/v1/realtime"
     model: str = "qwen-omni-turbo-realtime"
     language: str = "zh-CN"
-    prompt: str = ""
+    prompt: str = '''我们正在进行一场实时的视频对话。如果你收到了照片，请你将我提供的所有视觉输入都视为一个连续的视频流，
+    而不是孤立的静态图片。在你的回复中，请务必避免使用‘照片’、‘图片’或‘图像’这些词语来描述你所看到的内容。\n'''
     temperature: float = 0.5
     max_tokens: int = 1024
     voice: str = "alloy"
@@ -725,16 +726,11 @@ class QwenOmniRealtimeExtension(AsyncLLMBaseExtension):
         prompt = self._replace(self.config.prompt)
 
         self.ten_env.log_info(f"update session {prompt} {tools}")
-        if self.config.vad_type == "server_vad":
-            vad_params = ServerVADUpdateParams(
-                threshold=self.config.vad_threshold,
-                prefix_padding_ms=self.config.vad_prefix_padding_ms,
-                silence_duration_ms=self.config.vad_silence_duration_ms,
-            )
-        else:  # semantic vad
-            vad_params = SemanticVADUpdateParams(
-                eagerness=self.config.vad_eagerness,
-            )
+        vad_params = ServerVADUpdateParams(
+            threshold=self.config.vad_threshold,
+            prefix_padding_ms=self.config.vad_prefix_padding_ms,
+            silence_duration_ms=self.config.vad_silence_duration_ms,
+        )
         su = SessionUpdate(
             session=SessionUpdateParams(
                 instructions=prompt,
@@ -946,7 +942,7 @@ class QwenOmniRealtimeExtension(AsyncLLMBaseExtension):
             # )
             await self.conn.send_request(ResponseCreate(
                 response=ResponseCreateParams(
-                    instructions=f"you should say greeting: {text}",
+                    instructions=f"{self.config.prompt + text}",
                     modalities=["text", "audio"]
                 )
             ))
