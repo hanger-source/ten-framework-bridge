@@ -1,2 +1,5 @@
 dashscope>=1.23.9
 requests
+emoji
+markdown>=3.8.2
+beautifulsoup4

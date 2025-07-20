@@ -30,24 +30,12 @@
             },
             {
               "type": "extension",
-              "name": "stt",
-              "addon": "deepgram_asr_python",
-              "extension_group": "stt",
-              "property": {
-                "api_key": "${env:DEEPGRAM_API_KEY}",
-                "language": "zh-CN",
-                "model": "nova-2",
-                "sample_rate": 16000
-              }
-            },
-            {
-              "type": "extension",
               "name": "llm",
               "addon": "qwen_llm_python",
               "extension_group": "qwen",
               "property": {
-                "model": "${env:QWEN_LLM_MODEL}",
-                "api_key": "${env:QWEN_DASHSCOPE_API_KEY}",
+                "model": "qwen-turbo",
+                "api_key": "${env:BAILIAN_DASHSCOPE_API_KEY}",
                 "greeting": "你好!"
               }
             },
@@ -97,7 +85,15 @@
               "addon": "qwen_tts_python",
               "extension_group": "tts",
               "property": {
-                "api_key": "${env:QWEN_DASHSCOPE_API_KEY}"
+                "api_key": "${env:BAILIAN_DASHSCOPE_API_KEY}"
+              }
+            },{
+              "type": "extension",
+              "name": "stt",
+              "addon": "paraformer_asr_python",
+              "extension_group": "stt",
+              "property": {
+                "api_key": "${env:BAILIAN_DASHSCOPE_API_KEY}"
               }
             }
           ],

@@ -1,0 +1,36 @@
+{
+  "type": "extension",
+  "name": "paraformer_asr_python",
+  "version": "0.1.0",
+  "dependencies": [
+    {
+      "type": "system",
+      "name": "ten_runtime_python",
+      "version": "0.10"
+    },
+    {
+      "type": "system",
+      "name": "ten_ai_base",
+      "version": "=0.6.9"
+    }
+  ],
+  "interface": "../../system/ten_ai_base/api/asr-interface.json",
+  "api": {
+    "property": {
+      "properties": {
+        "appid": {
+          "type": "string"
+        },
+        "token": {
+          "type": "string"
+        },
+        "api_url": {
+          "type": "string"
+        },
+        "cluster": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

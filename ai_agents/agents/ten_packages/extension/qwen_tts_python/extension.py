@@ -7,6 +7,10 @@ import dashscope
 import requests
 import traceback
 import base64
+import emoji
+import markdown # pip install markdown
+from bs4 import BeautifulSoup # pip install beautifulsoup4
+
 from dataclasses import dataclass
 from datetime import datetime
 from typing import AsyncIterator
@@ -19,6 +23,10 @@ from ten_runtime import (
 from ten_runtime.audio_frame import AudioFrameDataFmt
 from ten_ai_base.config import BaseConfig
 
+def md_to_text(md):
+    html = markdown.markdown(md)
+    soup = BeautifulSoup(html, features='html.parser')
+    return soup.get_text()
 
 @dataclass
 class QwenTTSTTSConfig(BaseConfig):
@@ -81,12 +89,14 @@ class QwenTTSExtension(AsyncTTSBaseExtension):
             if not t.text:
                 return
 
-            ten_env.log_debug(f"TTS text {t.text}")
+            clean_text = emoji.replace_emoji(t.text, replace='')
+            clean_text=md_to_text(clean_text)
+            ten_env.log_debug(f"TTS text {t.text} {clean_text}")
 
             responses = dashscope.audio.qwen_tts.SpeechSynthesizer.call(
                 model=self.config.model,
                 api_key=self.config.api_key,
-                text=t.text,
+                text=clean_text,
                 voice=self.config.voice,
                 stream=stream
             )

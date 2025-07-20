@@ -1,5 +1,4 @@
 {
     "api_key": "${env:BAILIAN_DASHSCOPE_API_KEY}",
-    "model": "qwen-tts",
-    "voice": "Cherry"
+    "model": "paraformer-realtime-v2"
 }
