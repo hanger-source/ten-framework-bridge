@@ -49,7 +49,7 @@ export function HeaderRoomInfo() {
           <TooltipTrigger className="flex items-center space-x-2 text-lg font-semibold">
             <InfoIcon className="h-4 w-4 md:h-5 md:w-5" />
             <span className="hidden text-sm md:inline-block">
-              Channel Name:{" "}
+              房间名称:{" "}
             </span>
             <span className="max-w-24 text-sm md:text-base">
               {channel}
@@ -63,11 +63,11 @@ export function HeaderRoomInfo() {
                   <td></td>
                 </tr>
                 <tr>
-                  <td className="pr-2">Room:</td>
+                  <td className="pr-2">房间:</td>
                   <td className="text-[#0888FF]">{channel}</td>
                 </tr>
                 <tr>
-                  <td className="pr-2">Participant:</td>
+                  <td className="pr-2">参与者:</td>
                   <td className="text-[#0888FF]">{userId}</td>
                 </tr>
                 <tr>
