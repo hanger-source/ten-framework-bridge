@@ -19,6 +19,7 @@ import MicrophoneBlock from "@/components/Agent/Microphone"
 import VideoBlock from "@/components/Agent/Camera"
 import dynamic from "next/dynamic"
 import ChatCard from "@/components/Chat/ChatCard"
+import TalkingheadBlock from "@/components/Agent/TalkingHead"
 
 let hasInit: boolean = false
 
@@ -131,9 +132,9 @@ export default function RTCCard(props: { className?: string }) {
   }
 
   return (
-    <div className={cn("flex h-full flex-col min-h-0", className)}>
-      {/* Scrollable top region (Avatar or ChatCard) */}
-      <div className="min-h-0 overflow-y-auto z-10">
+    <div className={cn("flex h-full flex-col min-h-0 bg-gray-50", className)}>
+      {/* Scrollable top region (Avatar or ChatCard or Talkinghead) */}
+      <div className="flex-1 min-h-0 z-10">
         {useTrulienceAvatar ? (
           !avatarInLargeWindow ? (
             <div className="h-60 w-full p-1">
@@ -142,16 +143,19 @@ export default function RTCCard(props: { className?: string }) {
           ) : (
             !isCompactLayout &&
             <ChatCard
-              className="m-0 w-full h-full rounded-b-lg bg-[#181a1d] md:rounded-lg"
+              className="m-0 w-full h-full rounded-b-lg bg-white shadow-lg border border-gray-200 md:rounded-lg"
             />
           )
         ) : (
-          <AgentView  audioTrack={remoteuser?.audioTrack} />
+          // <AgentView  audioTrack={remoteuser?.audioTrack} />
+          <div style={{ height: 700, minHeight: 500 }} className="bg-white rounded-lg shadow-lg border border-gray-200">
+            <TalkingheadBlock audioTrack={remoteuser?.audioTrack} />
+          </div>
         )}
       </div>
 
       {/* Bottom region for microphone and video blocks */}
-      <div className="w-full space-y-2 px-2 py-2">
+      <div className="w-full space-y-2 px-2 py-2 bg-white rounded-lg shadow-sm border border-gray-200">
         <MicrophoneBlock audioTrack={audioTrack} />
         <VideoBlock
           cameraTrack={videoTrack}

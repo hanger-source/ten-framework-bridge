@@ -63,7 +63,7 @@ export default function Action(props: { className?: string }) {
     if (agentConnected) {
       await apiStopService(channel);
       dispatch(setAgentConnected(false));
-      toast.success("Agent disconnected");
+      toast.success("Agent 已断开连接");
       stopPing();
     } else {
       const selectedGraph = graphList.find(
@@ -95,7 +95,7 @@ export default function Action(props: { className?: string }) {
         throw new Error(msg);
       }
       dispatch(setAgentConnected(true));
-      toast.success("Agent connected");
+      toast.success("Agent 已连接");
       startPing();
     }
     setLoading(false);
@@ -126,15 +126,15 @@ export default function Action(props: { className?: string }) {
       {/* Action Bar */}
       <div
         className={cn(
-          "mx-2 mt-2 flex items-center justify-between rounded-t-lg bg-[#181a1d] p-2 md:m-2 md:rounded-lg",
+          "mx-2 mt-2 flex items-center justify-between rounded-t-lg bg-white shadow-sm border border-gray-200 p-2 md:m-2 md:rounded-lg",
           className
         )}
       >
         {/* -- Description Part */}
         <div className="hidden md:block">
-          <span className="text-sm font-bold">Description</span>
-          <span className="ml-2 text-xs text-muted-foreground whitespace-nowrap">
-            A Realtime Conversational AI Agent powered by TEN
+          <span className="text-sm font-bold text-gray-800">Description</span>
+          <span className="ml-2 text-xs text-gray-600 whitespace-nowrap">
+          实时对话式 AI Agent
           </span>
 
         </div>
@@ -178,10 +178,10 @@ export default function Action(props: { className?: string }) {
                 svgProps={{ className: "h-4 w-4 text-muted-foreground" }}
               >
                 {loading
-                  ? "Connecting"
+                  ? "连接中"
                   : !agentConnected
-                    ? "Connect"
-                    : "Disconnect"}
+                    ? "连接"
+                    : "断开"}
               </LoadingButton>
             </div>
           </div>

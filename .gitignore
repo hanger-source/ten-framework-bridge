@@ -143,3 +143,4 @@ ai_agents/agents/generated_auto_import_addons.go
 ai_agents/agents/go.mod
 ai_agents/agents/bin/main
 package-lock.json
+/ai_agents/server/core

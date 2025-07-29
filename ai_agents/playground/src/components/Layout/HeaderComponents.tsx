@@ -81,11 +81,11 @@ export function HeaderRoomInfo() {
                   </td>
                 </tr>
                 <tr>
-                  <td className="pr-2">Room connected:</td>
+                  <td className="pr-2">房间连接:</td>
                   <td className="text-[#0888FF]">{roomConnectedText}</td>
                 </tr>
                 <tr>
-                  <td className="pr-2">Agent connected:</td>
+                  <td className="pr-2">Agent 连接:</td>
                   <td className="text-[#0888FF]">{agentConnectedText}</td>
                 </tr>
               </tbody>

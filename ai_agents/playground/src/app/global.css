@@ -10,7 +10,7 @@
 
 html,
 body {
-  background-color: #0f0f11;
+  background-color: #f9fafb;
   font-family: "PingFang SC";
   height: 100%;
 }
@@ -20,9 +20,9 @@ a {
   text-decoration: none;
 }
 
-@media (prefers-color-scheme: dark) {
+@media (prefers-color-scheme: light) {
   html {
-    color-scheme: dark;
+    color-scheme: light;
   }
 }
 
@@ -98,20 +98,18 @@ a {
 
 ::-webkit-scrollbar-track {
   background: transparent;
-  border-radius: 5px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: hsl(var(--muted));
+  background: #d1d5db;
   border-radius: 5px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--muted-foreground));
+  background: #9ca3af;
 }
 
-/* For Firefox */
 * {
   scrollbar-width: thin;
-  scrollbar-color: hsl(var(--muted)) transparent;
+  scrollbar-color: #d1d5db transparent;
 }

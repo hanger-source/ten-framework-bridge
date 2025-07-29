@@ -97,7 +97,7 @@ export default function VideoBlock(props: {
 
   return (
     <VideoDeviceWrapper
-      title="VIDEO"
+      title="视频"
       Icon={videoSourceType === VideoSourceType.CAMERA ? CamIconByStatus : ScreenIconByStatus}
       onIconClick={onClickMute}
       isActive={!videoMute}
@@ -119,7 +119,7 @@ interface SelectItem {
 }
 
 const DEFAULT_ITEM: SelectItem = {
-  label: "Default",
+  label: "默认",
   value: "default",
   deviceId: "",
 }
@@ -160,7 +160,7 @@ const CamSelect = (props: { videoTrack?: ICameraVideoTrack }) => {
       items={items}
       value={value}
       onChange={onChange}
-      placeholder="Select a camera"
+      placeholder="选择摄像头"
     />
   )
 }

@@ -50,13 +50,13 @@ export default function MicrophoneBlock(props: {
 
   return (
     <CommonDeviceWrapper
-      title="MICROPHONE"
+      title="麦克风"
       Icon={MicIconByStatus}
       onIconClick={onClickMute}
       isActive={!audioMute}
       select={<MicrophoneSelect audioTrack={audioTrack} />}
     >
-      <div className="mt-3 flex h-12 flex-col items-center justify-center gap-2.5 self-stretch rounded-md border border-[#272A2F] bg-[#1E2024] p-2 shadow-[0px_2px_2px_0px_rgba(0,0,0,0.25)]">
+      <div className="mt-3 flex h-12 flex-col items-center justify-center gap-2.5 self-stretch rounded-md border border-gray-200 bg-white p-2 shadow-sm">
         <AudioVisualizer
           type="user"
           barWidth={4}

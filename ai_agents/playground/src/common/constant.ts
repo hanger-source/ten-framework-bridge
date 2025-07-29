@@ -71,10 +71,10 @@ export enum VideoSourceType {
 }
 
 export const VIDEO_SOURCE_OPTIONS = [{
-  label: "Camera",
+  label: "摄像头",
   value: VideoSourceType.CAMERA,
 }, {
-  label: "Screen Share",
+  label: "屏幕共享",
   value: VideoSourceType.SCREEN,
 }]
 

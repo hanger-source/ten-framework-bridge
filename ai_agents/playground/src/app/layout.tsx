@@ -6,7 +6,7 @@ import { Toaster } from "@/components/ui/sonner"
 import "./global.css"
 
 export const metadata: Metadata = {
-  title: "TEN Agent | Real-Time Multimodal AI Agent",
+  title: "Real-Time Multimodal AI Agent",
   description:
     "TEN Agent is an open-source multimodal AI agent that can speak, see, and access a knowledge base(RAG).",
   appleWebApp: {
@@ -31,7 +31,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className="dark">
+      <head>
+        <script src="https://cubism.live2d.com/sdk-web/cubismcore/live2dcubismcore.min.js"></script>
+      </head>
+      <body>
         {/* <ConfigProvider
           theme={{
             components: {
@@ -43,7 +46,7 @@ export default function RootLayout({
         > */}
         <StoreProvider>{children}</StoreProvider>
         {/* </ConfigProvider> */}
-        <Toaster richColors closeButton theme="dark" />
+        <Toaster richColors closeButton theme="light" />
       </body>
     </html>
   )
