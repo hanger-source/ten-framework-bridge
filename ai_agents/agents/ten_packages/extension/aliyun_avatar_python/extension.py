@@ -15,11 +15,11 @@ import atexit
 import json
 
 # 配置参数（请根据实际情况填写）
-ACCESS_KEY_ID = "LTAI5t8N2HF7jNGm2paYxCLc"
-ACCESS_KEY_SECRET = "Hg90doCX4BEgJk8aBh8PQsXa0MmKcd"
+ACCESS_KEY_ID = "<ACCESS_KEY_ID>"
+ACCESS_KEY_SECRET = "<ACCESS_KEY_SECRET>"
 ENDPOINT = "avatar.cn-zhangjiakou.aliyuncs.com"
 TENANT_ID = 30651
-APP_ID = "3dtn212a17"
+APP_ID = "<APP_ID>"
 USER_ID = "avatar_sample_userId"
 USER_NAME = "avatar_sample_userName"
 
