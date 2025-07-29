@@ -137,6 +137,8 @@ main() {
   echo "build_cxx_extensions..."
   build_cxx_extensions $APP_HOME
   echo "build_go_app..."
+#  echo "当前 $APP_HOME 目录内容如下："
+  tree -L 3 "$APP_HOME"
   build_go_app $APP_HOME
   echo "install_python_requirements..."
   install_python_requirements $APP_HOME

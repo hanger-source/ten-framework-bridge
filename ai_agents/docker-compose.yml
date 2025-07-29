@@ -24,12 +24,55 @@ services:
       - .env
     networks:
       - ten_agent_network
-  ten_agent_playground:
-    image: ghcr.io/ten-framework/ten_agent_playground:0.10.11-8-g94c71358
-    container_name: ten_agent_playground
+  # my_ten_agent_build_env:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile.buildEnv
+  #   container_name: my_ten_agent_build_env
+  #   platform: linux/amd64
+  #   tty: true
+  #   stdin_open: true
+  #   restart: always
+  #   # ports:
+  #   #   - "${GRAPH_DESIGNER_SERVER_PORT}:${GRAPH_DESIGNER_SERVER_PORT}"
+  #   #   - "${SERVER_PORT}:${SERVER_PORT}"
+  #   volumes:
+  #     - ./:/app
+  #     - ../bridge_project:/bridge_project
+  #     - /etc/localtime:/etc/localtime:ro
+  #     - /etc/timezone:/etc/timezone:ro
+  #     - ${LOG_PATH}:${LOG_PATH}
+  #     - ../.vscode/:/app/.vscode
+  #     - ../tools/pylint/.pylintrc:/tools/pylint/.pylintrc
+  #     - ../tools/upgrade:/tools/upgrade
+  #   working_dir: /app
+  #   env_file:
+  #     - .env
+  #   networks:
+  #     - ten_agent_network
+  # ten_agent_playground:
+  #   image: ghcr.io/ten-framework/ten_agent_playground:0.10.11-8-g94c71358
+  #   container_name: ten_agent_playground
+  #   restart: always
+  #   ports:
+  #     - "3000:3000"
+  #   networks:
+  #     - ten_agent_network
+  #   environment:
+  #     - AGENT_SERVER_URL=http://ten_agent_dev:8080
+  #     - TEN_DEV_SERVER_URL=http://ten_agent_dev:49483
+  my_ten_agent_playground:
+    image: node:20-alpine
+    container_name: my_ten_agent_playground
     restart: always
     ports:
       - "3000:3000"
+    volumes:
+      - ./playground/.next/standalone:/app
+      - ./playground/.next/static:/app/.next/static
+      - ./playground/public:/app/public
+    working_dir: /app
+    command: ["node", "server.js"]
     networks:
       - ten_agent_network
     environment:

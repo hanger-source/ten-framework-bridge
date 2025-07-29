@@ -211,6 +211,10 @@
       "type": "extension",
       "name": "paraformer_asr_python",
       "version": "0.1.0"
+    },{
+      "type": "extension",
+      "name": "aliyun_avatar_python",
+      "version": "0.1.0"
     }
   ],
   "scripts": {

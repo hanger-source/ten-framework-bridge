@@ -18,6 +18,7 @@ from ten_ai_base.transcription import AssistantTranscription
 from ten_ai_base.tts import AsyncTTSBaseExtension
 from ten_runtime import (
     AudioFrame,
+    Data,
     AsyncTenEnv,
 )
 from ten_runtime.audio_frame import AudioFrameDataFmt
@@ -92,6 +93,9 @@ class QwenTTSExtension(AsyncTTSBaseExtension):
             clean_text = emoji.replace_emoji(t.text, replace='')
             clean_text=md_to_text(clean_text)
             ten_env.log_debug(f"TTS text {t.text} {clean_text}")
+
+            if not clean_text:
+                return
 
             responses = dashscope.audio.qwen_tts.SpeechSynthesizer.call(
                 model=self.config.model,

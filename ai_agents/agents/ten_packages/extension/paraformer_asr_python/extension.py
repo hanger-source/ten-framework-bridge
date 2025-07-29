@@ -129,7 +129,7 @@ class ParaformerASRExtension(AsyncASRBaseExtension):
     ) -> bool:
         self.session_id = session_id
         if self.recognition:
-            self.ten_env.log_info(f"Paraformer ASR send_audio {len(frame.get_buf())}")
+            # self.ten_env.log_info(f"Paraformer ASR send_audio {len(frame.get_buf())}")
             try:
                 self.recognition.send_audio_frame(frame.get_buf())
             except Exception as e:

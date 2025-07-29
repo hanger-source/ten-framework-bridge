@@ -1,0 +1,91 @@
+FROM golang:1.22.5-bookworm
+
+ARG SESSION_CONTROL_CONF=session_control.conf
+# Add a new argument for USE_AGENT (defaulting to 'agents/examples/default')
+ARG USE_AGENT=agents/examples/default
+
+WORKDIR /app
+
+COPY . .
+COPY agents/${SESSION_CONTROL_CONF} agents/session_control.conf
+
+# 使用阿里云镜像源加速下载 (Debian 12 Bookworm)
+RUN echo "deb https://mirrors.aliyun.com/debian/ bookworm main non-free contrib" > /etc/apt/sources.list && \
+  echo "deb-src https://mirrors.aliyun.com/debian/ bookworm main non-free contrib" >> /etc/apt/sources.list && \
+  echo "deb https://mirrors.aliyun.com/debian-security/ bookworm-security main" >> /etc/apt/sources.list && \
+  echo "deb-src https://mirrors.aliyun.com/debian-security/ bookworm-security main" >> /etc/apt/sources.list && \
+  echo "deb https://mirrors.aliyun.com/debian/ bookworm-updates main non-free contrib" >> /etc/apt/sources.list && \
+  echo "deb-src https://mirrors.aliyun.com/debian/ bookworm-updates main non-free contrib" >> /etc/apt/sources.list
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+  aptitude \
+  build-essential \
+  libx11-dev \
+  libxcomposite-dev \
+  libxext-dev \
+  libxfixes-dev \
+  libxdamage-dev \
+  cmake \
+  golang \
+  python3 \
+  python3-venv \
+  python3-pip \
+  python3-dev \
+  nodejs \
+  npm \
+  git \
+  jq \
+  ca-certificates \
+  curl \
+  vim \
+  libssl-dev \
+  tar \
+  unzip \
+  wget \
+  tree \
+  file \
+  && apt-get clean && rm -rf /var/lib/apt/lists/* && rm -rf /tmp/*
+
+# # 安装 Go 1.20.x，自动适配架构
+# RUN ARCH=$(uname -m) && \
+#   if [ "$ARCH" = "aarch64" ]; then \
+#   GO_TARBALL="go1.20.14.linux-arm64.tar.gz"; \
+#   else \
+#   GO_TARBALL="go1.20.14.linux-amd64.tar.gz"; \
+#   fi && \
+#   wget https://go.dev/dl/$GO_TARBALL && \
+#   tar -C /usr/local -xzf $GO_TARBALL && \
+#   rm $GO_TARBALL
+# ENV PATH="/usr/local/go/bin:${PATH}"
+
+# 安装 go-task (自动适配架构)
+RUN ARCH=$(uname -m) && \
+  if [ "$ARCH" = "aarch64" ]; then \
+  TASK_URL="https://github.com/go-task/task/releases/download/v3.37.2/task_linux_arm64.tar.gz"; \
+  else \
+  TASK_URL="https://github.com/go-task/task/releases/download/v3.37.2/task_linux_amd64.tar.gz"; \
+  fi && \
+  curl -L $TASK_URL | tar -xz -C /usr/local/bin task
+
+# 安装 tman (自动适配架构)
+RUN ARCH=$(uname -m) && \
+  if [ "$ARCH" = "aarch64" ]; then \
+  TARBALL="tman-linux-arm64-gcc-release.zip"; \
+  else \
+  TARBALL="tman-linux-release-x64.zip"; \
+  fi && \
+  wget https://github.com/TEN-framework/ten-framework/releases/download/0.10.25/$TARBALL && \
+  unzip $TARBALL && \
+  cp ten_manager/bin/tman /usr/local/bin/ && \
+  chmod +x /usr/local/bin/tman && \
+  rm -rf $TARBALL ten_manager
+
+# 安装tgn
+RUN wget https://github.com/TEN-framework/ten_gn/releases/download/0.1.1/ten_gn.zip \
+  && unzip ten_gn.zip \
+  && mv home/runner/work/ten_gn/ten_gn /usr/local/ten_gn \
+  && rm -rf ten_gn.zip home
+ENV PATH="/usr/local/ten_gn:${PATH}"
+
+# RUN task clean && task use AGENT=${USE_AGENT} && \
+#   cd agents && ./scripts/package.shz
