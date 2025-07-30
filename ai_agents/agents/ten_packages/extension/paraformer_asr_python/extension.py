@@ -27,6 +27,7 @@ class ParaformerASRExtension(AsyncASRBaseExtension):
         super().__init__(name)
 
         self.connected = False
+        self.stopped = False  # 添加停止状态跟踪
         self.config: ParaformerASRConfig
         self.recognition: Recognition
 
@@ -37,6 +38,17 @@ class ParaformerASRExtension(AsyncASRBaseExtension):
         self.config = await ParaformerASRConfig.create_async(ten_env=ten_env)
         ten_env.log_info(f"config: {self.config}")
 
+    async def _handle_reconnect(self):
+        # 检查是否已经在重连
+        if hasattr(self, '_reconnecting') and self._reconnecting:
+            self.ten_env.log_debug("Reconnection already in progress, skipping")
+            return
+
+        self._reconnecting = True
+        self.ten_env.log_info("Starting reconnection process")
+
+        await asyncio.sleep(0.2)  # Adjust the sleep time as needed
+
     async def on_cmd(self, ten_env: AsyncTenEnv, cmd: Cmd) -> None:
         cmd_json = cmd.to_json()
         ten_env.log_info(f"on_cmd json: {cmd_json}")
@@ -45,11 +57,21 @@ class ParaformerASRExtension(AsyncASRBaseExtension):
         cmd_result.set_property_string("detail", "success")
         await ten_env.return_result(cmd_result)
 
-    async def _handle_reconnect(self):
-        await asyncio.sleep(0.2)  # Adjust the sleep time as needed
+        try:
+            await self.stop_connection()
+        except Exception as e:
+            self.ten_env.log_warn(f"Error during stop_connection: {e}")
 
-        await self.stop_connection()
-        await self.start_connection()
+        try:
+            await self.start_connection()
+            self.ten_env.log_info("Reconnection successful")
+        except Exception as e:
+            self.ten_env.log_error(f"Error during start_connection: {e}")
+            # 如果重连失败，尝试再次重连
+            if not self.stopped:
+                asyncio.create_task(self._handle_reconnect())
+        finally:
+            self._reconnecting = False
 
     async def _send_sentence(self, text:str, is_final:bool, begin_time:int, end_time:int):
         if begin_time is None or end_time is None:
@@ -83,9 +105,13 @@ class ParaformerASRExtension(AsyncASRBaseExtension):
             class Callback(RecognitionCallback):
                 def on_open(self) -> None:
                     extension.ten_env.log_info('RecognitionCallback open.')
+                    extension.connected = True
 
                 def on_close(self) -> None:
                     extension.ten_env.log_info('RecognitionCallback close.')
+                    extension.connected = False
+                    # 只设置状态，不主动重连
+                    # 重连将在下次发送音频时进行
 
                 def on_event(self, result: RecognitionResult) -> None:
                     sentence = result.get_sentence()
@@ -120,20 +146,39 @@ class ParaformerASRExtension(AsyncASRBaseExtension):
                 await self._handle_reconnect()
 
     async def stop_connection(self) -> None:
-        if self.recognition:
-            await self.recognition.stop()
-            self.connected = False
+        self.stopped = True  # 标记为主动停止
+        if self.recognition and self.connected:
+            try:
+                await self.recognition.stop()
+                self.ten_env.log_info("Recognition stopped successfully")
+            except Exception as e:
+                self.ten_env.log_warn(f"Error stopping recognition: {e}")
+            finally:
+                self.connected = False
 
     async def send_audio(
         self, frame: AudioFrame, session_id: str | None
     ) -> bool:
         self.session_id = session_id
-        if self.recognition:
-            # self.ten_env.log_info(f"Paraformer ASR send_audio {len(frame.get_buf())}")
-            try:
-                self.recognition.send_audio_frame(frame.get_buf())
-            except Exception as e:
-                self.ten_env.log_error(f"Failed to Paraformer ASR send_audio : {e}")
+
+        # 检查连接状态
+        if not self.connected or not self.recognition:
+            self.ten_env.log_warn("Paraformer ASR not connected, attempting to reconnect")
+            # 尝试重连
+            if not self.stopped:
+                asyncio.create_task(self._handle_reconnect())
+            return False
+
+        try:
+            self.recognition.send_audio_frame(frame.get_buf())
+            return True
+        except Exception as e:
+            self.ten_env.log_error(f"Failed to Paraformer ASR send_audio : {e}")
+            # 连接可能已断开，设置状态并尝试重连
+            self.connected = False
+            if not self.stopped:
+                asyncio.create_task(self._handle_reconnect())
+            return False
 
     async def finalize(self, session_id: str | None) -> None:
         raise NotImplementedError(
