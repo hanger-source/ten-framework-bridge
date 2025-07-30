@@ -42,9 +42,13 @@
             {
               "type": "extension",
               "name": "interrupt_detector",
-              "addon": "interrupt_detector_python",
+              "addon": "ten_turn_detection",
               "extension_group": "default",
-              "property": {}
+              "property": {
+                "base_url": "${env:QWEN_OPENAI_API_BASE}",
+                "api_key": "${env:QWEN_OPENAI_API_KEY}",
+                "model": "${env:QWEN_OPENAI_MODEL}"
+              }
             },
             {
               "type": "extension",

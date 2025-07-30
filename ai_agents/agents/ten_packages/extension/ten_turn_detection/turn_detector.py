@@ -82,7 +82,15 @@ class TurnDetector:
     async def eval(self, text: str) -> TurnDetectorDecision:
         # prepare messages
         no_punc_text = remove_punctuation(text)
-        messages = [{"role": "user", "content": no_punc_text}]
+        messages = [{
+            "role": "system",
+            "content": """你是一个对话轮次检测器。根据用户的输入，判断用户是否说完了。
+                只输出以下三个词之一：
+                - unfinished: 用户还没说完，继续听
+                - wait: 用户停顿了，等待继续
+                - finished: 用户说完了，可以开始处理
+            """},
+        {"role": "user", "content": no_punc_text}]
 
         if self.pre_chat_hook:
             self.pre_chat_hook(messages)
@@ -109,7 +117,7 @@ class TurnDetector:
             messages.append(
                 {"role": "assistant", "content": content}
             )  # print only
-            self.ten_env.log_debug(
+            self.ten_env.log_info(
                 f"eval task {task.get_name()}, assistant content: {content}, memory: {messages}"
             )
 
@@ -122,7 +130,7 @@ class TurnDetector:
                 # decided to chat
                 decision = TurnDetectorDecision.Finished
 
-            self.ten_env.log_debug(
+            self.ten_env.log_info(
                 f"eval task {task.get_name()} decision made: {decision}"
             )
             return decision
@@ -155,7 +163,7 @@ class TurnDetector:
                 temperature=self.config.temperature,
                 top_p=self.config.top_p,
             )
-            self.ten_env.log_debug(f"got result: {chat_completion}")
+            self.ten_env.log_info(f"got result: {chat_completion}")
 
             content = chat_completion.choices[0].message.content
             self.ten_env.log_debug(f"got content: {content}")
