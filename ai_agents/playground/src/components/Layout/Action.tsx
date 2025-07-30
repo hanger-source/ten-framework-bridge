@@ -132,9 +132,9 @@ export default function Action(props: { className?: string }) {
       >
         {/* -- Description Part */}
         <div className="hidden md:block">
-          <span className="text-sm font-bold text-gray-800">Description</span>
+          {/* <span className="text-sm font-bold text-gray-800">描述</span> */}
           <span className="ml-2 text-xs text-gray-600 whitespace-nowrap">
-          实时对话式 AI Agent
+            实时对话式 AI Agent
           </span>
 
         </div>
