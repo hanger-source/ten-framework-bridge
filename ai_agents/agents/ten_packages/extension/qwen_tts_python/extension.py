@@ -43,30 +43,30 @@ class QwenTTSExtension(AsyncTTSBaseExtension):
 
     async def on_init(self, ten_env: AsyncTenEnv) -> None:
         await super().on_init(ten_env)
-        ten_env.log_debug("on_init")
+        # ten_env.log_debug("on_init")
 
         self.config = await QwenTTSTTSConfig.create_async(ten_env=ten_env)
 
     async def on_start(self, ten_env: AsyncTenEnv) -> None:
         await super().on_start(ten_env)
-        ten_env.log_debug("on_start")
+        # ten_env.log_debug("on_start")
 
         if not self.config.api_key:
             raise ValueError("api_key is required")
 
     async def on_stop(self, ten_env: AsyncTenEnv) -> None:
         await super().on_stop(ten_env)
-        ten_env.log_debug("on_stop")
+        # ten_env.log_debug("on_stop")
 
     async def on_deinit(self, ten_env: AsyncTenEnv) -> None:
         await super().on_deinit(ten_env)
-        ten_env.log_debug("on_deinit")
+        # ten_env.log_debug("on_deinit")
 
     # Direction: OUT
     async def _on_audio_delta(self, ten_env: AsyncTenEnv, audio_data: bytes) -> None:
-        ten_env.log_debug(
-            f"on_audio_delta audio_data len {len(audio_data)} samples {len(audio_data) // 2}"
-        )
+        # ten_env.log_debug(
+        #     f"on_audio_delta audio_data len {len(audio_data)} samples {len(audio_data) // 2}"
+        # )
 
         f = AudioFrame.create("pcm_frame")
         f.set_sample_rate(24000)
@@ -92,7 +92,7 @@ class QwenTTSExtension(AsyncTTSBaseExtension):
 
             clean_text = emoji.replace_emoji(t.text, replace='')
             clean_text=md_to_text(clean_text)
-            ten_env.log_debug(f"TTS text {t.text} {clean_text}")
+            # ten_env.log_debug(f"TTS text {t.text} {clean_text}")
 
             if not clean_text:
                 return
