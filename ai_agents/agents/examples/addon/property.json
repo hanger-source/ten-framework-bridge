@@ -57,9 +57,9 @@
               "addon": "ten_turn_detection",
               "extension_group": "default",
               "property": {
-                "base_url": "${env:QWEN_OPENAI_API_BASE}",
-                "api_key": "${env:QWEN_OPENAI_API_KEY}",
-                "model": "${env:QWEN_OPENAI_MODEL}"
+                "base_url": "${env:BAILIAN_DASHSCOPE_BASE_URL}",
+                "api_key": "${env:BAILIAN_DASHSCOPE_API_KEY}",
+                "model": "qwen-max-latest"
               }
             },
             {
