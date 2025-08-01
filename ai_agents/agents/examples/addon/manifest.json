@@ -187,37 +187,50 @@
       "type": "extension",
       "name": "speechmatics_asr_python",
       "version": "=0.1.0"
-    },{
+    },
+    {
       "type": "extension",
       "name": "go_bridge",
       "version": "0.0.1"
-    },{
+    },
+    {
       "type": "extension",
       "name": "node_ws_audio",
       "version": "0.0.1"
-    },{
+    },
+    {
       "type": "extension",
       "name": "qwen_omni_v2v_python",
       "version": "0.1.0"
-    },{
+    },
+    {
       "type": "extension",
       "name": "qwen_tts_python",
       "version": "0.1.0"
-    },{
+    },
+    {
       "type": "extension",
       "name": "qwen_llm_python",
       "version": "0.1.0"
-    },{
+    },
+    {
       "type": "extension",
       "name": "paraformer_asr_python",
       "version": "0.1.0"
-    },{
+    },
+    {
       "type": "extension",
       "name": "aliyun_avatar_python",
       "version": "0.1.0"
-    },{
+    },
+    {
       "type": "extension",
       "name": "ten_turn_detection",
+      "version": "0.1.0"
+    },
+    {
+      "type": "extension",
+      "name": "qwen_image_generate_tool",
       "version": "0.1.0"
     }
   ],

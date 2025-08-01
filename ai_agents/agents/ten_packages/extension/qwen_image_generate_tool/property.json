@@ -1,0 +1,6 @@
+{
+  "api_key": "${env:BAILIAN_DASHSCOPE_API_KEY}",
+  "model": "wan2.2-t2i-flash",
+  "size": "1024*1024",
+  "n": 1
+}

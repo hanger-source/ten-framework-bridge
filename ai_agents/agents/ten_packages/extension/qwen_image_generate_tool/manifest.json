@@ -1,0 +1,115 @@
+{
+  "type": "extension",
+  "name": "qwen_image_generate_tool",
+  "version": "0.1.0",
+  "dependencies": [
+    {
+      "type": "system",
+      "name": "ten_runtime_python",
+      "version": "0.10"
+    }
+  ],
+  "package": {
+    "include": [
+      "manifest.json",
+      "property.json",
+      "requirements.txt",
+      "**.tent",
+      "**.py",
+      "README.md"
+    ]
+  },
+  "api": {
+    "property": {
+      "properties": {
+        "api_key": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "size": {
+          "type": "string"
+        },
+        "n": {
+          "type": "int64"
+        },
+        "proxy_url": {
+          "type": "string"
+        }
+      }
+    },
+    "cmd_in": [
+      {
+        "name": "tool_call",
+        "property": {
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "arguments": {
+              "type": "object",
+              "properties": {}
+            }
+          },
+          "required": [
+            "name"
+          ]
+        }
+      }
+    ],
+    "cmd_out": [
+      {
+        "name": "tool_register",
+        "property": {
+          "properties": {
+            "tool": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "parameters": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {}
+                  }
+                }
+              },
+              "required": [
+                "name",
+                "description",
+                "parameters"
+              ]
+            }
+          }
+        },
+        "result": {
+          "property": {
+            "properties": {
+              "response": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    ],
+    "data_out": [
+      {
+        "name": "content_data",
+        "property": {
+          "properties": {
+            "text": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    ]
+  }
+}

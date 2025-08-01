@@ -2,7 +2,7 @@
 DATETIME=$(date +%Y%m%d_%H%M%S)
 
 # 启动 task run，并保存其 PID
-task run 2>&1 | tee /bridge_project/logs/task_run_${DATETIME}.log &
+task run 2>&1 | tee /app/addons/logs/task_run_${DATETIME}.log &
 pid=$!
 
 # 捕获 Ctrl+C（SIGINT），转发给 task run

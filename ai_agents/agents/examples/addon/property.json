@@ -41,6 +41,18 @@
             },
             {
               "type": "extension",
+              "name": "image_generate_tool",
+              "addon": "qwen_image_generate_tool",
+              "extension_group": "default",
+              "property": {
+                "api_key": "${env:BAILIAN_DASHSCOPE_API_KEY}",
+                "model": "wan2.2-t2i-flash",
+                "size": "1024*1024",
+                "n": 1
+              }
+            },
+            {
+              "type": "extension",
               "name": "interrupt_detector",
               "addon": "ten_turn_detection",
               "extension_group": "default",
@@ -149,6 +161,14 @@
                   "dest": [
                     {
                       "extension": "tts"
+                    }
+                  ]
+                },
+                {
+                  "name": "tool_call",
+                  "dest": [
+                    {
+                      "extension": "image_generate_tool"
                     }
                   ]
                 }
@@ -292,6 +312,28 @@
                   "dest": [
                     {
                       "extension": "stt"
+                    }
+                  ]
+                }
+              ]
+            },{
+              "extension": "image_generate_tool",
+              "cmd": [
+                {
+                  "name": "tool_register",
+                  "dest": [
+                    {
+                      "extension": "llm"
+                    }
+                  ]
+                }
+              ],
+              "data": [
+                {
+                  "name": "content_data",
+                  "dest": [
+                    {
+                      "extension": "message_collector"
                     }
                   ]
                 }

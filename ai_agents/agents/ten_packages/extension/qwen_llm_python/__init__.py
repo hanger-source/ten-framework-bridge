@@ -1,1 +1,1 @@
-from . import qwen_llm_addon
+from . import addon

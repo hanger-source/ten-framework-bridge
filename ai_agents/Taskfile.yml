@@ -25,6 +25,32 @@ tasks:
       - task: build-agent
       - task: build-server
 
+  build-addon:
+    desc: build
+    cmds:
+      - task: build-addon-server
+      - task: build-agent
+
+  build-addon-server:
+    desc: build addon server(java) - local build
+    dir: ./addons/server
+    cmds:
+      - mvn clean compile package -DskipTests
+
+  run-addon:
+    desc: run addon server(java)
+    dir: ./addons/server
+    cmds:
+      - java -jar target/ten-framework-server-1.0.0.jar
+
+  run-addon-debug:
+    desc: run addon server(java) with remote debug support
+    dir: ./addons/server
+    vars:
+      DEBUG_PORT: '{{.DEBUG_PORT | default "5005"}}'
+    cmds:
+      - java -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:{{.DEBUG_PORT}} -jar target/ten-framework-server-1.0.0.jar
+
   use:
     desc: use agent, default 'agents/examples/default'
     vars:

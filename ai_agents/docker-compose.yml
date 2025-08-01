@@ -1,44 +1,20 @@
 services:
-  ten_agent_dev:
-    image: docker.theten.ai/ten-framework/ten_agent_build:0.6.11
-    #image: ghcr.io/ten-framework/ten_agent_build:0.6.11
-    container_name: ten_agent_dev
-    platform: linux/amd64
-    tty: true
-    stdin_open: true
-    restart: always
-    ports:
-      - "${GRAPH_DESIGNER_SERVER_PORT}:${GRAPH_DESIGNER_SERVER_PORT}"
-      - "${SERVER_PORT}:${SERVER_PORT}"
-    volumes:
-      - ./:/app
-      - ../bridge_project:/bridge_project
-      - /etc/localtime:/etc/localtime:ro
-      - /etc/timezone:/etc/timezone:ro
-      - ${LOG_PATH}:${LOG_PATH}
-      - ../.vscode/:/app/.vscode
-      - ../tools/pylint/.pylintrc:/tools/pylint/.pylintrc
-      - ../tools/upgrade:/tools/upgrade
-    working_dir: /app
-    env_file:
-      - .env
-    networks:
-      - ten_agent_network
-  # my_ten_agent_build_env:
-  #   build:
-  #     context: .
-  #     dockerfile: Dockerfile.buildEnv
-  #   container_name: my_ten_agent_build_env
+  # ten_agent_dev_addon:
+  #   image: ten-framework-build-base-java:1.0
+  #   # image: ghcr.io/ten-framework/ten_agent_build:0.6.11
+  #   container_name: ten_agent_dev_addon
   #   platform: linux/amd64
   #   tty: true
   #   stdin_open: true
   #   restart: always
-  #   # ports:
-  #   #   - "${GRAPH_DESIGNER_SERVER_PORT}:${GRAPH_DESIGNER_SERVER_PORT}"
-  #   #   - "${SERVER_PORT}:${SERVER_PORT}"
+  #   mem_limit: 4g
+  #   mem_reservation: 2g
+  #   ports:
+  #     - "${GRAPH_DESIGNER_SERVER_PORT}:${GRAPH_DESIGNER_SERVER_PORT}"
+  #     - "${SERVER_PORT}:${SERVER_PORT}"
+  #     - "${DEBUG_PORT:-5005}:${DEBUG_PORT:-5005}"
   #   volumes:
   #     - ./:/app
-  #     - ../bridge_project:/bridge_project
   #     - /etc/localtime:/etc/localtime:ro
   #     - /etc/timezone:/etc/timezone:ro
   #     - ${LOG_PATH}:${LOG_PATH}
@@ -50,6 +26,33 @@ services:
   #     - .env
   #   networks:
   #     - ten_agent_network
+  ten_agent_dev:
+    image: docker.theten.ai/ten-framework/ten_agent_build:0.6.11
+    # image: ghcr.io/ten-framework/ten_agent_build:0.6.11
+    container_name: ten_agent_dev
+    platform: linux/amd64
+    tty: true
+    stdin_open: true
+    restart: always
+    mem_limit: 4g
+    mem_reservation: 2g
+    ports:
+      - "${GRAPH_DESIGNER_SERVER_PORT}:${GRAPH_DESIGNER_SERVER_PORT}"
+      - "${SERVER_PORT}:${SERVER_PORT}"
+      - "${DEBUG_PORT:-5005}:${DEBUG_PORT:-5005}"
+    volumes:
+      - ./:/app
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+      - ${LOG_PATH}:${LOG_PATH}
+      - ../.vscode/:/app/.vscode
+      - ../tools/pylint/.pylintrc:/tools/pylint/.pylintrc
+      - ../tools/upgrade:/tools/upgrade
+    working_dir: /app
+    env_file:
+      - .env
+    networks:
+      - ten_agent_network
   # ten_agent_playground:
   #   image: ghcr.io/ten-framework/ten_agent_playground:0.10.11-8-g94c71358
   #   container_name: ten_agent_playground
