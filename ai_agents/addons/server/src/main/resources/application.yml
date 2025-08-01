@@ -1,0 +1,44 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: ten-framework-server
+
+  # Multipart file upload configuration
+  servlet:
+    multipart:
+      max-file-size: 100MB
+      max-request-size: 100MB
+
+# TEN Framework Server Configuration
+ten:
+  server:
+    app-id: ${AGORA_APP_ID:}
+    app-certificate: ${AGORA_APP_CERTIFICATE:}
+    log-path: ${LOG_PATH:/tmp}
+    port: ${SERVER_PORT:8080}
+    workers-max: ${WORKERS_MAX:10}
+    worker-quit-timeout-seconds: ${WORKER_QUIT_TIMEOUT_SECONDES:60}
+    log2-stdout: ${LOG_STDOUT:false}
+
+# Logging configuration
+logging:
+  level:
+    com.agora.tenframework: INFO
+    org.springframework.web: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: ${LOG_PATH:/tmp}/ten-framework-server.log
+
+# Management endpoints
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
