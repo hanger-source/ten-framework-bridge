@@ -81,6 +81,8 @@ services:
     environment:
       - AGENT_SERVER_URL=http://ten-agent-dev-addon:8080
       - TEN_DEV_SERVER_URL=http://ten-agent-dev-addon:49483
+      # 图编辑模式关闭，直接拉取server的graph配置
+      - NEXT_PUBLIC_EDIT_GRAPH_MODE=false
   # my_ten_agent_playground:
   #   image: node:20-alpine
   #   container_name: my_ten_agent_playground

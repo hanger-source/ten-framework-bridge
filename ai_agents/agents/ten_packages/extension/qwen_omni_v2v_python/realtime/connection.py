@@ -122,7 +122,7 @@ class RealtimeApiConnection:
                 try:
                     if msg.type == aiohttp.WSMsgType.TEXT:
                         if self.verbose:
-                            self.ten_env.log_info(
+                            self.ten_env.log_debug(
                                 f"[WSMessage] type={msg.type} ({getattr(msg.type, 'name', msg.type)}), "
                                 f"data={repr(msg.data)}, extra={repr(msg.extra)}"
                             )

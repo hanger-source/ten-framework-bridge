@@ -65,7 +65,7 @@ class QwenImageGenerateToolExtension(AsyncLLMToolBaseExtension):
                     LLMToolMetadataParameter(
                         name="n",
                         type="integer",
-                        description="生成图片的数量。取值范围为1~4张，默认为4",
+                        description="生成图片的数量。取值范围为1~4张，默认为4；请甄别用户需求，注意该参数为图片张数，不是图片中的元素数量",
                         required=False,
                     ),
                     LLMToolMetadataParameter(
