@@ -46,6 +46,27 @@ CMD_IN_ON_USER_JOINED = "on_user_joined"
 CMD_IN_ON_USER_LEFT = "on_user_left"
 
 
+def is_punctuation(char):
+    if char in [",", "，", ".", "。", "?", "？", "!", "！"]:
+        return True
+    return False
+
+
+def parse_sentences(sentence_fragment, content):
+    sentences = []
+    current_sentence = sentence_fragment
+    for char in content:
+        current_sentence += char
+        if is_punctuation(char):
+            stripped_sentence = current_sentence
+            if any(c.isalnum() for c in stripped_sentence):
+                sentences.append(stripped_sentence)
+            current_sentence = ""
+
+    remain = current_sentence
+    return sentences, remain
+
+
 class QWenLLMExtension(AsyncLLMBaseExtension):
     def __init__(self, name: str):
         super().__init__(name)
@@ -55,7 +76,6 @@ class QWenLLMExtension(AsyncLLMBaseExtension):
         self.prompt = ""
         self.max_history = 10
         self.stopped = False
-        self.sentence_expr = re.compile(r".+?[,，.。!！?？:：]", re.DOTALL)
 
     def on_msg(self, role: str, content: str) -> None:
         self.history.append({"role": role, "content": content})
@@ -293,10 +313,8 @@ class QWenLLMExtension(AsyncLLMBaseExtension):
 
                     # 发送文本输出
                     if partial:
-                        m = self.sentence_expr.match(partial)
-                        if m is not None:
-                            sentence = m.group(0)
-                            partial = partial[m.end(0) :]
+                        sentences, partial = parse_sentences("", partial)
+                        for sentence in sentences:
                             self.send_text_output(ten, sentence, False)
                             # 让出控制权给事件循环
                             await asyncio.sleep(0.1)

@@ -178,13 +178,10 @@
                   "name": "text_data",
                   "dest": [
                     {
-                      "extension": "message_collector"
-                    },
-                    {
                       "extension": "tts"
                     },
                     {
-                      "extension": "go_bridge"
+                      "extension": "message_collector"
                     }
                   ]
                 },
@@ -193,9 +190,6 @@
                   "dest": [
                     {
                       "extension": "message_collector"
-                    },
-                    {
-                      "extension": "go_bridge"
                     }
                   ]
                 }

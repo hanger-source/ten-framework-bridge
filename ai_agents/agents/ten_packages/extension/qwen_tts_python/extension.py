@@ -92,7 +92,7 @@ class QwenTTSExtension(AsyncTTSBaseExtension):
 
             clean_text = emoji.replace_emoji(t.text, replace='')
             clean_text=md_to_text(clean_text)
-            # ten_env.log_debug(f"TTS text {t.text} {clean_text}")
+            ten_env.log_debug(f"TTS text {t.text} {clean_text}")
 
             if not clean_text:
                 return

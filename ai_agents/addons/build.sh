@@ -1,0 +1,1 @@
+task use AGENT=agents/examples/addon
