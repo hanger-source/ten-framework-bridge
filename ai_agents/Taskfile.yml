@@ -27,7 +27,11 @@ tasks:
 
   build-addon:
     desc: build
+    vars:
+      AGENT: '{{.AGENT| default "agents/examples/addon"}}'
     cmds:
+      - ln -sf {{.USER_WORKING_DIR}}/{{.AGENT}}/manifest.json ./agents/
+      - ln -sf {{.USER_WORKING_DIR}}/{{.AGENT}}/property.json ./agents/
       - task: build-addon-server
       - task: build-agent
 
@@ -39,17 +43,15 @@ tasks:
 
   run-addon:
     desc: run addon server(java)
-    dir: ./addons/server
     cmds:
-      - java -jar target/ten-framework-server-1.0.0.jar
+      - source .env && java -Dfile.encoding=UTF-8 -jar /app/addons/server/target/ten-framework-server-1.0.0.jar
 
   run-addon-debug:
     desc: run addon server(java) with remote debug support
-    dir: ./addons/server
     vars:
       DEBUG_PORT: '{{.DEBUG_PORT | default "5005"}}'
     cmds:
-      - java -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:{{.DEBUG_PORT}} -jar target/ten-framework-server-1.0.0.jar
+      - source .env && java -Dfile.encoding=UTF-8 -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:{{.DEBUG_PORT}} -jar /app/addons/server/target/ten-framework-server-1.0.0.jar
 
   use:
     desc: use agent, default 'agents/examples/default'

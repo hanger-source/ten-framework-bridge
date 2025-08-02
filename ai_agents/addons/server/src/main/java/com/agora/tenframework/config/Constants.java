@@ -14,47 +14,47 @@ import java.util.Map;
  */
 public class Constants {
 
-    // Extension names
-    public static final String EXTENSION_NAME_AGORA_RTC = "agora_rtc";
-    public static final String EXTENSION_NAME_AGORA_RTM = "agora_rtm";
-    public static final String EXTENSION_NAME_HTTP_SERVER = "http_server";
+        // Extension names
+        public static final String EXTENSION_NAME_AGORA_RTC = "agora_rtc";
+        public static final String EXTENSION_NAME_AGORA_RTM = "agora_rtm";
+        public static final String EXTENSION_NAME_HTTP_SERVER = "http_server";
 
-    // Property json file
-    public static final String PROPERTY_JSON_FILE = "./agents/property.json";
+        // Property json file
+        public static final String PROPERTY_JSON_FILE = "./agents/property.json";
 
-    // Token expiration time
-    public static final int TOKEN_EXPIRATION_IN_SECONDS = 86400;
+        // Token expiration time
+        public static final int TOKEN_EXPIRATION_IN_SECONDS = 86400;
 
-    // Worker timeout infinity
-    public static final int WORKER_TIMEOUT_INFINITY = -1;
+        // Worker timeout infinity
+        public static final int WORKER_TIMEOUT_INFINITY = -1;
 
-    // Max Gemini worker count
-    public static final int MAX_GEMINI_WORKER_COUNT = 3;
+        // Max Gemini worker count
+        public static final int MAX_GEMINI_WORKER_COUNT = 3;
 
-    // Start property map - equivalent to Go's startPropMap
-    public static final Map<String, List<Prop>> START_PROP_MAP = new HashMap<>();
+        // Start property map - equivalent to Go's startPropMap
+        public static final Map<String, List<Prop>> START_PROP_MAP = new HashMap<>();
 
-    static {
-        // ChannelName mappings
-        START_PROP_MAP.put("ChannelName", Arrays.asList(
-                new Prop(EXTENSION_NAME_AGORA_RTC, "channel"),
-                new Prop(EXTENSION_NAME_AGORA_RTM, "channel")));
+        static {
+                // ChannelName mappings - 使用Java字段名
+                START_PROP_MAP.put("channelName", Arrays.asList(
+                                new Prop(EXTENSION_NAME_AGORA_RTC, "channel"),
+                                new Prop(EXTENSION_NAME_AGORA_RTM, "channel")));
 
-        // RemoteStreamId mappings
-        START_PROP_MAP.put("RemoteStreamId", Arrays.asList(
-                new Prop(EXTENSION_NAME_AGORA_RTC, "remote_stream_id")));
+                // RemoteStreamId mappings - 使用Java字段名
+                START_PROP_MAP.put("remoteStreamId", Arrays.asList(
+                                new Prop(EXTENSION_NAME_AGORA_RTC, "remote_stream_id")));
 
-        // BotStreamId mappings
-        START_PROP_MAP.put("BotStreamId", Arrays.asList(
-                new Prop(EXTENSION_NAME_AGORA_RTC, "stream_id")));
+                // BotStreamId mappings - 使用Java字段名
+                START_PROP_MAP.put("botStreamId", Arrays.asList(
+                                new Prop(EXTENSION_NAME_AGORA_RTC, "stream_id")));
 
-        // Token mappings
-        START_PROP_MAP.put("Token", Arrays.asList(
-                new Prop(EXTENSION_NAME_AGORA_RTC, "token"),
-                new Prop(EXTENSION_NAME_AGORA_RTM, "token")));
+                // Token mappings - 使用Java字段名
+                START_PROP_MAP.put("token", Arrays.asList(
+                                new Prop(EXTENSION_NAME_AGORA_RTC, "token"),
+                                new Prop(EXTENSION_NAME_AGORA_RTM, "token")));
 
-        // WorkerHttpServerPort mappings
-        START_PROP_MAP.put("WorkerHttpServerPort", Arrays.asList(
-                new Prop(EXTENSION_NAME_HTTP_SERVER, "listen_port")));
-    }
+                // WorkerHttpServerPort mappings - 使用Java字段名
+                START_PROP_MAP.put("workerHttpServerPort", Arrays.asList(
+                                new Prop(EXTENSION_NAME_HTTP_SERVER, "listen_port")));
+        }
 }

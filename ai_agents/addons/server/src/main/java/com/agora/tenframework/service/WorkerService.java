@@ -85,6 +85,22 @@ public class WorkerService {
     public Worker startWorker(StartRequest request) throws Exception {
         String channelName = request.getChannelName();
 
+        logger.info("handlerStart start - workersRunning: {}, requestId: {}", getWorkersSize(), request.getRequestId());
+
+        // 检查channel是否为空
+        if (channelName == null || channelName.isEmpty()) {
+            logger.error("handlerStart channel empty - channelName: {}, requestId: {}", channelName,
+                    request.getRequestId());
+            throw new RuntimeException("channel_name is mandatory");
+        }
+
+        // 检查是否已存在worker
+        if (containsWorker(channelName)) {
+            logger.error("handlerStart channel exists - channelName: {}, requestId: {}", channelName,
+                    request.getRequestId());
+            throw new RuntimeException("channel already exists: " + channelName);
+        }
+
         // Set worker HTTP server port - equivalent to Go's getHttpServerPort()
         request.setWorkerHttpServerPort(getNextHttpServerPort());
 
@@ -93,16 +109,22 @@ public class WorkerService {
         String propertyJsonFile = result[0];
         String logFile = result[1];
 
+        logger.info("Property processing completed - propertyFile: {}, logFile: {}", propertyJsonFile, logFile);
+
         // Create worker
         Worker worker = newWorker(channelName, logFile, serverConfig.isLog2Stdout(), propertyJsonFile);
         worker.setHttpServerPort(request.getWorkerHttpServerPort());
         worker.setGraphName(request.getGraphName());
 
-        if (request.getQuitTimeoutSeconds() > 0) {
+        // 模仿 Go 版本的处理逻辑：当值为 null 或 <= 0 时使用默认配置
+        if (request.getQuitTimeoutSeconds() != null && request.getQuitTimeoutSeconds() > 0) {
             worker.setQuitTimeoutSeconds(request.getQuitTimeoutSeconds());
         } else {
             worker.setQuitTimeoutSeconds(serverConfig.getWorkerQuitTimeoutSeconds());
         }
+
+        logger.info("Worker created - channelName: {}, httpPort: {}, graphName: {}",
+                channelName, worker.getHttpServerPort(), worker.getGraphName());
 
         // Start worker process - equivalent to Go's worker.start(&req)
         startWorkerProcess(worker, request);
@@ -114,8 +136,11 @@ public class WorkerService {
         workers.putIfAbsent(channelName, worker);
         worker.setUpdateTs(System.currentTimeMillis() / 1000);
 
-        logger.info("Started worker for channel - channelName: {}, pid: {}, port: {}", channelName, worker.getPid(),
-                worker.getHttpServerPort());
+        logger.info("Started worker for channel - channelName: {}, pid: {}, port: {}",
+                channelName, worker.getPid(), worker.getHttpServerPort());
+
+        logger.info("handlerStart end - workersRunning: {}, worker: {}, requestId: {}",
+                getWorkersSize(), worker, request.getRequestId());
 
         return worker;
     }
@@ -133,7 +158,7 @@ public class WorkerService {
         logger.info("Worker stop start - channelName: {}, requestId: {}, pid: {}", channelName, requestId,
                 worker.getPid());
 
-        // Kill process
+        // Kill process - 使用worker中存储的PID，这个PID是getProcessIdWithRetry返回的子进程PID
         if (worker.getPid() != null) {
             killProcess(worker.getPid());
         }
@@ -469,36 +494,54 @@ public class WorkerService {
 
         logger.info("Worker start - requestId: {}, shell: {}", request.getRequestId(), shell);
 
-        // Create process with proper setup - equivalent to Go's exec.Command with
-        // Setpgid
-        ProcessBuilder pb = new ProcessBuilder("sh", "-c", shell);
+        // 使用 setsid 创建新会话和进程组，相当于 Go 的 Setpgid: true
+        ProcessBuilder pb = new ProcessBuilder("setsid", "sh", "-c", shell);
 
-        // Set up output handling based on Log2Stdout setting - equivalent to Go's log
-        // file handling
+        // 设置正确的环境变量，确保子进程能正确处理中文字符
+        Map<String, String> env = pb.environment();
+        env.put("LANG", "zh_CN.UTF-8");
+        env.put("LC_ALL", "zh_CN.UTF-8");
+        env.put("LC_CTYPE", "zh_CN.UTF-8");
+        env.put("LC_MESSAGES", "zh_CN.UTF-8");
+        env.put("LC_MONETARY", "zh_CN.UTF-8");
+        env.put("LC_NUMERIC", "zh_CN.UTF-8");
+        env.put("LC_TIME", "zh_CN.UTF-8");
+        env.put("LC_COLLATE", "zh_CN.UTF-8");
+        logger.info("Set environment variables - LANG: {}, LC_ALL: {}, LC_CTYPE: {}",
+                env.get("LANG"), env.get("LC_ALL"), env.get("LC_CTYPE"));
+
+        // 设置输出处理
         File logFile = null;
         if (!worker.isLog2Stdout()) {
-            // Create log file with proper permissions - equivalent to Go's os.OpenFile
             logFile = new File(worker.getLogFile());
-            logFile.getParentFile().mkdirs(); // Ensure directory exists
+            logFile.getParentFile().mkdirs();
+            logger.info("Log file created: {}", logFile.getAbsolutePath());
+        } else {
+            logger.info("Log2Stdout is true, will output to console");
         }
 
-        // Start the process
+        // 启动进程
+        logger.info("About to start process with shell: {}", shell);
         Process process = pb.start();
+        logger.info("Process started with PID: {}", process.pid());
+        logger.info("Process is alive: {}", process.isAlive());
 
-        // Get process ID with retry logic - equivalent to Go's pgrep logic
+        // 获取进程ID
         int pid = getProcessIdWithRetry(process, request.getRequestId());
         worker.setPid(pid);
 
         logger.info("Worker started - pid: {}, channel: {}", pid, worker.getChannelName());
 
-        // Start output reader with initial prefix "-" - equivalent to Go's PrefixWriter
+        // 使用原来的日志输出处理方式
+        logger.info("Starting output reader threads for process: {}", process.pid());
         startOutputReaderWithPrefix(process, "-", logFile);
 
-        // Update the prefix with the actual channel name - equivalent to Go's prefix
-        // update
+        // 更新前缀为实际的channel名称
+        logger.info("Updating prefix to channel name: {}", worker.getChannelName());
         updateOutputReaderPrefix(process, worker.getChannelName());
 
-        // Monitor process in background thread - equivalent to Go's goroutine
+        // 监控进程
+        logger.info("Starting process monitor for PID: {}", process.pid());
         monitorProcess(process, worker, request.getRequestId(), logFile);
     }
 
@@ -544,8 +587,10 @@ public class WorkerService {
 
         // Create PrefixWriter instances for both stdout and stderr - equivalent to Go's
         // PrefixWriter
-        PrefixWriter stdoutPrefixWriter = new PrefixWriter(initialPrefix, new OutputStreamWriter(outputStream));
-        PrefixWriter stderrPrefixWriter = new PrefixWriter(initialPrefix, new OutputStreamWriter(outputStream));
+        PrefixWriter stdoutPrefixWriter = new PrefixWriter(initialPrefix,
+                new OutputStreamWriter(outputStream, java.nio.charset.StandardCharsets.UTF_8));
+        PrefixWriter stderrPrefixWriter = new PrefixWriter(initialPrefix,
+                new OutputStreamWriter(outputStream, java.nio.charset.StandardCharsets.UTF_8));
 
         // Store both PrefixWriters for this process
         Map<String, PrefixWriter> writers = new HashMap<>();
@@ -555,8 +600,10 @@ public class WorkerService {
 
         // Start stdout reader thread
         Thread stdoutReaderThread = new Thread(() -> {
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(process.getInputStream(), java.nio.charset.StandardCharsets.UTF_8))) {
                 String line;
+                logger.info("Starting stdout reader thread for process: {}", process.pid());
                 while ((line = reader.readLine()) != null) {
                     // Add prefix to each line - equivalent to Go's PrefixWriter
                     stdoutPrefixWriter.writeLine(line);
@@ -564,8 +611,9 @@ public class WorkerService {
                     // Also log to our logger for debugging
                     logger.debug("Worker stdout - prefix: {}, line: {}", stdoutPrefixWriter.prefix, line);
                 }
+                logger.info("Stdout reader thread ended for process: {}", process.pid());
             } catch (IOException e) {
-                logger.error("Error reading stdout for process", e);
+                logger.error("Error reading stdout for process: {}", process.pid(), e);
             }
         });
         stdoutReaderThread.setDaemon(true);
@@ -573,17 +621,26 @@ public class WorkerService {
 
         // Start stderr reader thread
         Thread stderrReaderThread = new Thread(() -> {
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getErrorStream()))) {
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(process.getErrorStream(), java.nio.charset.StandardCharsets.UTF_8))) {
                 String line;
+                logger.info("Starting stderr reader thread for process: {}", process.pid());
                 while ((line = reader.readLine()) != null) {
+                    // Add debug logging for character encoding issues
+                    logger.debug("Raw stderr line: {}", line);
+                    if (line.contains("????")) {
+                        logger.warn("Detected encoding issue in stderr: {}", line);
+                    }
+
                     // Add prefix to each line - equivalent to Go's PrefixWriter
                     stderrPrefixWriter.writeLine(line);
 
                     // Also log to our logger for debugging
                     logger.debug("Worker stderr - prefix: {}, line: {}", stderrPrefixWriter.prefix, line);
                 }
+                logger.info("Stderr reader thread ended for process: {}", process.pid());
             } catch (IOException e) {
-                logger.error("Error reading stderr for process", e);
+                logger.error("Error reading stderr for process: {}", process.pid(), e);
             } finally {
                 prefixWriters.remove(process);
             }
@@ -613,38 +670,55 @@ public class WorkerService {
     private int getProcessIdWithRetry(Process process, String requestId) {
         int pid = Math.toIntExact(process.pid());
 
-        // Ensure the process has fully started - equivalent to Go's pgrep logic
+        // 确保进程完全启动 - 相当于Go的pgrep逻辑
         String shell = String.format("pgrep -P %d", pid);
         logger.info("Worker get pid - requestId: {}, shell: {}", requestId, shell);
 
-        int subprocessPid = -1;
-        for (int i = 0; i < 10; i++) { // retry for 10 times like Go
+        // 与Go版本保持一致：存储父进程PID，在stop时用负号杀死整个进程组
+        // Go版本：w.Pid = pid (父进程PID)
+        // Go版本：syscall.Kill(-w.Pid, syscall.SIGKILL) (杀死整个进程组)
+
+        // 验证子进程存在
+        boolean subprocessFound = false;
+        for (int i = 0; i < 10; i++) { // 重试10次，与Go版本一致
             try {
                 Process pgrepProcess = Runtime.getRuntime().exec(new String[] { "sh", "-c", shell });
                 String output = new String(pgrepProcess.getInputStream().readAllBytes()).trim();
-                pgrepProcess.waitFor();
+                int pgrepExitCode = pgrepProcess.waitFor();
+
+                logger.debug("pgrep attempt {} - exitCode: {}, output: '{}'", i + 1, pgrepExitCode, output);
 
                 if (!output.isEmpty()) {
-                    subprocessPid = Integer.parseInt(output);
+                    int subprocessPid = Integer.parseInt(output);
                     if (subprocessPid > 0 && isInProcessGroup(subprocessPid, pid)) {
-                        break; // if pid is successfully obtained, exit loop
+                        logger.info("Successfully found subprocess PID: {} for parent PID: {}", subprocessPid, pid);
+                        subprocessFound = true;
+                        break; // 如果成功找到子进程，退出循环
                     }
                 }
             } catch (Exception e) {
-                // Ignore errors and continue retrying
+                logger.debug("pgrep attempt {} failed: {}", i + 1, e.getMessage());
+                // 忽略错误并继续重试
             }
 
-            logger.warn("Worker get pid failed, retrying... - attempt: {}, pid: {}, subpid: {}, requestId: {}",
-                    i + 1, pid, subprocessPid, requestId);
-            try {
-                Thread.sleep(1000); // wait for 1000ms like Go
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                return pid;
+            if (i < 9) { // 不是最后一次尝试
+                logger.warn("Worker get pid failed, retrying... - attempt: {}, pid: {}, requestId: {}",
+                        i + 1, pid, requestId);
+                try {
+                    Thread.sleep(1000); // 等待1000ms，与Go版本一致
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return pid;
+                }
             }
         }
 
-        return pid;
+        // 返回父进程PID，与Go版本保持一致
+        if (!subprocessFound) {
+            logger.warn("Could not find subprocess, but returning parent PID: {}", pid);
+        }
+
+        return pid; // 返回父进程PID
     }
 
     /**
@@ -653,7 +727,10 @@ public class WorkerService {
     private void monitorProcess(Process process, Worker worker, String requestId, File logFile) {
         Thread monitorThread = new Thread(() -> {
             try {
+                logger.info("Starting process monitor for PID: {}", process.pid());
                 int exitCode = process.waitFor();
+                logger.info("Process exited with code: {} for PID: {}", exitCode, process.pid());
+
                 if (exitCode != 0) {
                     logger.error("Worker process failed - requestId: {}, exitCode: {}", requestId, exitCode);
                 } else {
@@ -662,18 +739,16 @@ public class WorkerService {
             } catch (InterruptedException e) {
                 logger.error("Worker process monitoring interrupted - requestId: {}", requestId, e);
             } finally {
-                // Close the log file when the command finishes - equivalent to Go's
-                // logFile.Close()
+                // 清理资源
                 if (logFile != null) {
                     try {
-                        // Note: In Java, the file is automatically closed when the process ends
-                        // This is equivalent to Go's logFile.Close()
+                        // 日志文件会在进程结束时自动关闭
                     } catch (Exception e) {
                         logger.warn("Error closing log file - channelName: {}", worker.getChannelName(), e);
                     }
                 }
 
-                // Remove the worker from the map
+                // 从map中移除worker
                 workers.remove(worker.getChannelName());
                 logger.info("Worker removed from map - channelName: {}", worker.getChannelName());
             }
@@ -691,6 +766,8 @@ public class WorkerService {
         try {
             // Kill the entire process group (equivalent to Go's syscall.Kill(-w.Pid,
             // syscall.SIGKILL))
+            // Since we use setsid, the process group ID is the same as the process ID
+            // 使用负号杀死整个进程组，与Go版本保持一致
             Process process = Runtime.getRuntime().exec(new String[] { "sh", "-c", "kill -KILL -" + pid });
             process.waitFor();
             logger.info("Sent KILL signal to process group - pid: {}", pid);
@@ -730,6 +807,7 @@ public class WorkerService {
             field.setAccessible(true);
             return field.get(request);
         } catch (Exception e) {
+            logger.warn("Failed to get field value for: {}", fieldName, e);
             return null;
         }
     }

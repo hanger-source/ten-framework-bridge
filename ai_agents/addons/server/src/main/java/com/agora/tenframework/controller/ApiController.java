@@ -189,14 +189,14 @@ public class ApiController {
         if (request.getChannelName() == null || request.getChannelName().trim().isEmpty()) {
             logger.error("handlerPing channel empty - channelName: {}, requestId: {}", request.getChannelName(),
                     request.getRequestId());
-            return ResponseEntity.badRequest()
+            return ResponseEntity.ok()
                     .body(ApiResponse.error("10004", "channel empty", request.getRequestId()));
         }
 
         if (!workerService.containsWorker(request.getChannelName())) {
             logger.error("handlerPing channel not existed - channelName: {}, requestId: {}", request.getChannelName(),
                     request.getRequestId());
-            return ResponseEntity.badRequest()
+            return ResponseEntity.ok()
                     .body(ApiResponse.error("10002", "channel not existed", request.getRequestId()));
         }
 
@@ -220,7 +220,7 @@ public class ApiController {
         if (request.getChannelName() == null || request.getChannelName().trim().isEmpty()) {
             logger.error("handlerStart channel empty - channelName: {}, requestId: {}", request.getChannelName(),
                     request.getRequestId());
-            return ResponseEntity.badRequest()
+            return ResponseEntity.ok()
                     .body(ApiResponse.error("10004", "channel empty", request.getRequestId()));
         }
 
@@ -233,7 +233,7 @@ public class ApiController {
         if (workerService.containsWorker(request.getChannelName())) {
             logger.error("handlerStart channel existed - channelName: {}, requestId: {}", request.getChannelName(),
                     request.getRequestId());
-            return ResponseEntity.badRequest()
+            return ResponseEntity.ok()
                     .body(ApiResponse.error("10003", "channel existed", request.getRequestId()));
         }
 
@@ -278,14 +278,14 @@ public class ApiController {
         if (request.getChannelName() == null || request.getChannelName().trim().isEmpty()) {
             logger.error("handlerStop channel empty - channelName: {}, requestId: {}", request.getChannelName(),
                     request.getRequestId());
-            return ResponseEntity.badRequest()
+            return ResponseEntity.ok()
                     .body(ApiResponse.error("10004", "channel empty", request.getRequestId()));
         }
 
         if (!workerService.containsWorker(request.getChannelName())) {
             logger.error("handlerStop channel not existed - channelName: {}, requestId: {}", request.getChannelName(),
                     request.getRequestId());
-            return ResponseEntity.badRequest()
+            return ResponseEntity.ok()
                     .body(ApiResponse.error("10002", "channel not existed", request.getRequestId()));
         }
 
@@ -311,7 +311,7 @@ public class ApiController {
         if (request.getChannelName() == null || request.getChannelName().trim().isEmpty()) {
             logger.error("handlerGenerateToken channel empty - channelName: {}, requestId: {}",
                     request.getChannelName(), request.getRequestId());
-            return ResponseEntity.badRequest()
+            return ResponseEntity.ok()
                     .body(ApiResponse.error("10004", "channel empty", request.getRequestId()));
         }
 
@@ -336,7 +336,7 @@ public class ApiController {
             return ResponseEntity.ok(ApiResponse.success(response, request.getRequestId()));
         } catch (Exception e) {
             logger.error("handlerGenerateToken generate token failed - requestId: {}", request.getRequestId(), e);
-            return ResponseEntity.badRequest()
+            return ResponseEntity.ok()
                     .body(ApiResponse.error("10005", "generate token failed", request.getRequestId()));
         }
     }
@@ -355,7 +355,7 @@ public class ApiController {
                 presetList = objectMapper.readValue(vectorDocumentPresetList, List.class);
             } catch (Exception e) {
                 logger.error("handlerVectorDocumentPresetList parse json failed", e);
-                return ResponseEntity.badRequest().body(ApiResponse.error("10007", "parse json failed"));
+                return ResponseEntity.ok().body(ApiResponse.error("10007", "parse json failed"));
             }
         }
 
@@ -372,14 +372,14 @@ public class ApiController {
         if (request.getChannelName() == null || request.getChannelName().trim().isEmpty()) {
             logger.error("handlerVectorDocumentUpdate channel empty - channelName: {}, requestId: {}",
                     request.getChannelName(), request.getRequestId());
-            return ResponseEntity.badRequest()
+            return ResponseEntity.ok()
                     .body(ApiResponse.error("10004", "channel empty", request.getRequestId()));
         }
 
         if (!workerService.containsWorker(request.getChannelName())) {
             logger.error("handlerVectorDocumentUpdate channel not existed - channelName: {}, requestId: {}",
                     request.getChannelName(), request.getRequestId());
-            return ResponseEntity.badRequest()
+            return ResponseEntity.ok()
                     .body(ApiResponse.error("10002", "channel not existed", request.getRequestId()));
         }
 
@@ -414,7 +414,7 @@ public class ApiController {
                     "handlerVectorDocumentUpdate update worker failed - channelName: {}, Collection: {}, FileName: {}, requestId: {}",
                     request.getChannelName(), request.getCollection(), request.getFileName(), request.getRequestId(),
                     e);
-            return ResponseEntity.badRequest()
+            return ResponseEntity.ok()
                     .body(ApiResponse.error("10104", "update worker failed", request.getRequestId()));
         }
     }
@@ -431,13 +431,13 @@ public class ApiController {
         if (channelName == null || channelName.trim().isEmpty()) {
             logger.error("handlerVectorDocumentUpload channel empty - channelName: {}, requestId: {}", channelName,
                     requestId);
-            return ResponseEntity.badRequest().body(ApiResponse.error("10004", "channel empty", requestId));
+            return ResponseEntity.ok().body(ApiResponse.error("10004", "channel empty", requestId));
         }
 
         if (!workerService.containsWorker(channelName)) {
             logger.error("handlerVectorDocumentUpload channel not existed - channelName: {}, requestId: {}",
                     channelName, requestId);
-            return ResponseEntity.badRequest().body(ApiResponse.error("10002", "channel not existed", requestId));
+            return ResponseEntity.ok().body(ApiResponse.error("10002", "channel not existed", requestId));
         }
 
         logger.info("handlerVectorDocumentUpload start - channelName: {}, requestId: {}", channelName, requestId);
@@ -485,7 +485,7 @@ public class ApiController {
         } catch (Exception e) {
             logger.error("handlerVectorDocumentUpload save file failed - channelName: {}, requestId: {}", channelName,
                     requestId, e);
-            return ResponseEntity.badRequest().body(ApiResponse.error("10006", "save file failed", requestId));
+            return ResponseEntity.ok().body(ApiResponse.error("10006", "save file failed", requestId));
         }
     }
 
