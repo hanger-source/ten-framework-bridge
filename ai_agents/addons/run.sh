@@ -74,6 +74,33 @@ else
     fi
 fi
 
+# 创建日志目录
+LOG_DIR="$PROJECT_ROOT/logs"
+mkdir -p "$LOG_DIR"
+log_info "日志目录: $LOG_DIR"
+
+# 强制关闭已存在的服务
+log_info "检查并关闭已存在的服务..."
+cleanup_existing_services() {
+    # 关闭Java addon服务器
+    pkill -f "java.*ten-framework-server-1.0.0.jar" 2>/dev/null || true
+    log_info "已关闭已存在的Java addon服务器"
+
+    # 关闭Go后端服务器
+    pkill -f "api" 2>/dev/null || true
+    log_info "已关闭已存在的Go后端服务器"
+
+    # 关闭图设计器
+    pkill -f "tman designer" 2>/dev/null || true
+    log_info "已关闭已存在的图设计器"
+
+    # 等待进程完全关闭
+    sleep 1
+}
+
+# 执行清理
+cleanup_existing_services
+
 # 检查.env文件
 if [ ! -f "$PROJECT_ROOT/.env" ]; then
     log_error ".env文件不存在: $PROJECT_ROOT/.env"
@@ -139,32 +166,46 @@ esac
 run_addon_server() {
     log_info "启动addon服务器（Java）..."
     cd "$PROJECT_ROOT"
-    java -Dfile.encoding=UTF-8 -jar addons/server/target/ten-framework-server-1.0.0.jar &
+    java -Dfile.encoding=UTF-8 -jar addons/server/target/ten-framework-server-1.0.0.jar > "$LOG_DIR/addon_server.log" 2>&1 &
     ADDON_SERVER_PID=$!
     log_success "addon服务器已启动，PID: $ADDON_SERVER_PID"
+    log_info "日志文件: $LOG_DIR/addon_server.log"
 }
 
 run_backend_server() {
     log_info "启动后端HTTP服务器（Go）..."
     cd "$PROJECT_ROOT"
-    "$PROJECT_ROOT/server/bin/api" &
+    "$PROJECT_ROOT/server/bin/api" > "$LOG_DIR/backend_server.log" 2>&1 &
     BACKEND_SERVER_PID=$!
     log_success "后端服务器已启动，PID: $BACKEND_SERVER_PID"
+    log_info "日志文件: $LOG_DIR/backend_server.log"
 }
-
-
 
 run_graph_designer() {
     log_info "启动图设计器服务器..."
     cd "$PROJECT_ROOT/agents"
-    tman designer &
+    tman designer > "$LOG_DIR/designer.log" 2>&1 &
     DESIGNER_PID=$!
     log_success "图设计器服务器已启动，PID: $DESIGNER_PID"
+    log_info "日志文件: $LOG_DIR/designer.log"
 }
 
 # 信号处理函数
 cleanup() {
     log_info "正在停止所有服务..."
+
+    # 使用pkill强制关闭相关进程
+    pkill -f "java.*ten-framework-server-1.0.0.jar" 2>/dev/null || true
+    pkill -f "api" 2>/dev/null || true
+    pkill -f "tman designer" 2>/dev/null || true
+
+    # 等待进程关闭
+    sleep 2
+
+    # 如果进程仍在运行，强制杀死
+    pkill -9 -f "java.*ten-framework-server-1.0.0.jar" 2>/dev/null || true
+    pkill -9 -f "api" 2>/dev/null || true
+    pkill -9 -f "tman designer" 2>/dev/null || true
 
     if [ ! -z "$ADDON_SERVER_PID" ]; then
         kill $ADDON_SERVER_PID 2>/dev/null || true
@@ -198,6 +239,7 @@ case $RUN_TYPE in
         log_success "Java addon服务器已启动！"
         log_info "服务信息："
         log_info "- Java Addon服务器: PID $ADDON_SERVER_PID"
+        log_info "- 日志文件: $LOG_DIR/addon_server.log"
         ;;
     "go")
         log_info "启动Go server（包含designer）..."
@@ -207,12 +249,33 @@ case $RUN_TYPE in
         log_success "Go server已启动！"
         log_info "服务信息："
         log_info "- Go Server: PID $BACKEND_SERVER_PID"
+        log_info "- 日志文件: $LOG_DIR/backend_server.log"
         # log_info "- 图设计器: PID $DESIGNER_PID"
         ;;
 esac
 
 log_info ""
 log_info "按 Ctrl+C 停止所有服务"
+log_info "查看日志文件："
+log_info "- tail -f $LOG_DIR/addon_server.log"
+log_info "- tail -f $LOG_DIR/backend_server.log"
+log_info "- tail -f $LOG_DIR/designer.log"
 
-# 等待
-wait
+# 显示服务状态
+log_success "所有服务已启动并运行在后台"
+log_info "服务信息："
+case $RUN_TYPE in
+    "java")
+        log_info "- Java Addon服务器: PID $ADDON_SERVER_PID"
+        log_info "- 日志文件: $LOG_DIR/addon_server.log"
+        ;;
+    "go")
+        log_info "- Go Server: PID $BACKEND_SERVER_PID"
+        log_info "- 日志文件: $LOG_DIR/backend_server.log"
+        ;;
+esac
+
+log_info ""
+log_info "脚本已退出，服务继续在后台运行"
+log_info "使用以下命令查看日志："
+log_info "tail -f $LOG_DIR/*.log"

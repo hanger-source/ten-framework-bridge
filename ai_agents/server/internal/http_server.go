@@ -55,6 +55,7 @@ type StartReq struct {
 	Token                string                            `json:"token,omitempty"`
 	WorkerHttpServerPort int32                             `json:"worker_http_server_port,omitempty"`
 	Properties           map[string]map[string]interface{} `json:"properties,omitempty"`
+	EnvProperties        map[string]interface{}            `json:"env_properties,omitempty"`
 	QuitTimeoutSeconds   int                               `json:"timeout,omitempty"`
 }
 
@@ -365,11 +366,11 @@ func (s *HttpServer) handlerGenerateToken(c *gin.Context) {
 	}
 
 	token, err := rtctokenbuilder.BuildTokenWithRtm(s.config.AppId, s.config.AppCertificate, req.ChannelName, fmt.Sprintf("%d", req.Uid), rtctokenbuilder.RolePublisher, tokenExpirationInSeconds, tokenExpirationInSeconds)
-	if err != nil {
+		if err != nil {
 		slog.Error("handlerGenerateToken generate token failed", "err", err, "requestId", req.RequestId, logTag)
 		s.output(c, codeErrGenerateTokenFailed, http.StatusBadRequest)
-		return
-	}
+			return
+		}
 
 	slog.Info("handlerGenerateToken end", "requestId", req.RequestId, logTag)
 	s.output(c, codeSuccess, map[string]any{"appId": s.config.AppId, "token": token, "channel_name": req.ChannelName, "uid": req.Uid})
@@ -512,14 +513,24 @@ func (s *HttpServer) processProperty(req *StartReq) (propertyJsonFile string, lo
 		return
 	}
 
-	// Generate token
-	req.Token = s.config.AppId
-	if s.config.AppCertificate != "" {
-		//req.Token, err = rtctokenbuilder.BuildTokenWithUid(s.config.AppId, s.config.AppCertificate, req.ChannelName, 0, rtctokenbuilder.RoleSubscriber, tokenExpirationInSeconds, tokenExpirationInSeconds)
-		req.Token, err = rtctokenbuilder.BuildTokenWithRtm(s.config.AppId, s.config.AppCertificate, req.ChannelName, fmt.Sprintf("%d", 0), rtctokenbuilder.RolePublisher, tokenExpirationInSeconds, tokenExpirationInSeconds)
-		if err != nil {
-			slog.Error("handlerStart generate token failed", "err", err, "requestId", req.RequestId, logTag)
-			return
+	// Handle token logic
+	// If token is provided in request, use it directly; otherwise generate token
+	if req.Token != "" {
+		// Use provided token
+		slog.Info("Using provided token", "requestId", req.RequestId, logTag)
+	} else {
+		// Generate token only if not provided
+		appId := s.config.AppId
+		appCertificate := s.config.AppCertificate
+
+		req.Token = appId
+		if appCertificate != "" {
+			var tokenErr error
+			req.Token, tokenErr = rtctokenbuilder.BuildTokenWithRtm(appId, appCertificate, req.ChannelName, fmt.Sprintf("%d", 0), rtctokenbuilder.RolePublisher, tokenExpirationInSeconds, tokenExpirationInSeconds)
+			if tokenErr != nil {
+				slog.Error("handlerStart generate token failed", "err", tokenErr, "requestId", req.RequestId, logTag)
+				return
+			}
 		}
 	}
 
@@ -547,8 +558,7 @@ func (s *HttpServer) processProperty(req *StartReq) (propertyJsonFile string, lo
 
 	if len(newGraphs) == 0 {
 		slog.Error("handlerStart graph not found", "graph", graphName, "requestId", req.RequestId, logTag)
-		err = fmt.Errorf("graph not found")
-		return
+		return "", "", fmt.Errorf("graph not found")
 	}
 
 	// Replace the predefined_graphs array with the filtered array
@@ -633,15 +643,33 @@ func (s *HttpServer) processProperty(req *StartReq) (propertyJsonFile string, lo
 				// 	slog.Info("No environment variable patterns found in property", "key", key, "value", strVal)
 				// }
 
-				for _, match := range matches {
+								for _, match := range matches {
 					if len(match) < 2 {
 						continue
 					}
 					variable := match[1]
-					exists := os.Getenv(variable) != ""
-					// slog.Info("Checking environment variable", "variable", variable, "exists", exists)
-					if !exists {
-						slog.Error("Environment variable not found", "variable", variable, "property", key, "requestId", req.RequestId, logTag)
+
+					// 优先从 EnvProperties 中查找
+					var envValue string
+					if req.EnvProperties != nil {
+						if value, ok := req.EnvProperties[variable]; ok {
+							envValue = fmt.Sprintf("%v", value)
+							slog.Info("Environment variable found in EnvProperties", "variable", variable, "value", envValue, "requestId", req.RequestId, logTag)
+							// 替换当前属性值中的占位符
+							newValue := strings.ReplaceAll(strVal, match[0], envValue)
+							properties[key] = newValue
+							slog.Info("Replaced environment variable in property", "variable", variable, "property", key, "original", strVal, "new", newValue, "requestId", req.RequestId, logTag)
+						}
+					}
+
+					// 如果 EnvProperties 中没有找到，再从系统环境变量获取
+					if envValue == "" {
+						envValue = os.Getenv(variable)
+						if envValue != "" {
+							slog.Info("Environment variable found in system env", "variable", variable, "value", envValue, "requestId", req.RequestId, logTag)
+						} else {
+							slog.Error("Environment variable not found in both EnvProperties and system env", "variable", variable, "property", key, "requestId", req.RequestId, logTag)
+						}
 					}
 				}
 			}

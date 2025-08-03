@@ -22,6 +22,10 @@ import { RemotePropertyCfgSheet } from "@/components/Chat/ChatCfgPropertySelect"
 import { RemoteGraphSelect } from "@/components/Chat/ChatCfgGraphSelect";
 import { RemoteModuleCfgSheet } from "@/components/Chat/ChatCfgModuleSelect";
 import { TrulienceCfgSheet } from "../Chat/ChatCfgTrulienceSetting";
+import { Button } from "@/components/ui/button";
+import { Settings } from "lucide-react";
+import SettingsDialog from "@/components/Settings/SettingsDialog";
+import { useAgentSettings } from "@/hooks/useAgentSettings";
 
 let intervalId: NodeJS.Timeout | null = null;
 
@@ -41,6 +45,8 @@ export default function Action(props: { className?: string }) {
     (state) => state.global.mobileActiveTab
   );
   const [loading, setLoading] = React.useState(false);
+  const [settingsOpen, setSettingsOpen] = React.useState(false);
+  const { agentSettings, saveSettings } = useAgentSettings();
 
   React.useEffect(() => {
     if (channel) {
@@ -75,12 +81,15 @@ export default function Action(props: { className?: string }) {
         return;
       }
 
+      const { token, env } = agentSettings;
       const res = await apiStartService({
         channel,
         userId,
         graphName: selectedGraph.name,
         language,
         voiceType,
+        token: token || undefined,
+        envProperties: env,
       });
       const { code, msg } = res || {};
       if (code != 0) {
@@ -134,7 +143,7 @@ export default function Action(props: { className?: string }) {
         <div className="hidden md:block">
           {/* <span className="text-sm font-bold text-gray-800">描述</span> */}
           <span className="ml-2 text-xs text-gray-600 whitespace-nowrap">
-            实时对话式 AI Agent
+            实时对话式 AI 智能体
           </span>
 
         </div>
@@ -168,6 +177,15 @@ export default function Action(props: { className?: string }) {
 
             {/* -- Action Button */}
             <div className="ml-auto flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setSettingsOpen(true)}
+                className="flex items-center gap-2"
+              >
+                <Settings className="h-4 w-4" />
+                <span className="hidden md:inline">设置</span>
+              </Button>
               <LoadingButton
                 onClick={onClickConnect}
                 variant={!agentConnected ? "default" : "destructive"}
@@ -187,6 +205,33 @@ export default function Action(props: { className?: string }) {
           </div>
         </div>
       </div>
+
+      {/* Settings Dialog */}
+      <SettingsDialog
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        defaultValues={{
+          greeting: agentSettings.greeting,
+          prompt: agentSettings.prompt,
+          token: agentSettings.token,
+          bailian_dashscope_api_key: agentSettings.env?.BAILIAN_DASHSCOPE_API_KEY || "",
+          agora_app_id: agentSettings.env?.AGORA_APP_ID || "",
+        }}
+        onSubmit={(values) => {
+          saveSettings({
+            greeting: values.greeting || "",
+            prompt: values.prompt || "",
+            token: values.token || "",
+            env: {
+              BAILIAN_DASHSCOPE_API_KEY: values.bailian_dashscope_api_key || "",
+              AGORA_APP_ID: values.agora_app_id || "",
+              GREETING: values.greeting || "",
+              CHAT_PROMPT: values.prompt || "",
+            },
+          });
+          toast.success("设置已保存");
+        }}
+      />
     </>
   );
 }

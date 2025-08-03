@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 export const genRandomString = (length: number = 10) => {
   let result = '';
-  const characters = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  const characters = '0123456789';
   const charactersLength = characters.length;
 
   for (let i = 0; i < length; i++) {
@@ -20,7 +20,7 @@ export const getRandomUserId = (): number => {
 }
 
 export const getRandomChannel = (number = 6) => {
-  return "agora_" + genRandomString(number)
+  return "smart_" + genRandomString(number)
 }
 
 
@@ -63,7 +63,7 @@ export const isMobile = () => {
 }
 
 export function useIsCompactLayout(): boolean {
-  
+
   const [isCompactLayout, setIsCompactLayout] = useState(false);
 
   useEffect(() => {

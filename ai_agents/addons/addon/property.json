@@ -36,7 +36,9 @@
               "property": {
                 "model": "qwen-turbo",
                 "api_key": "${env:BAILIAN_DASHSCOPE_API_KEY}",
-                "greeting": "你好!"
+                "greeting": "${env:GREETING}",
+                "prompt": "${env:CHAT_PROMPT}",
+                "max_memory_length": 10
               }
             },
             {
@@ -347,7 +349,7 @@
               "extension_group": "rtc",
               "property": {
                 "app_id": "${env:AGORA_APP_ID}",
-                "token": "",
+                "app_certificate": "${env:AGORA_APP_CERTIFICATE|}",
                 "channel": "ten_agent_test",
                 "stream_id": 1234,
                 "remote_stream_id": 123,
@@ -368,16 +370,18 @@
               "addon": "qwen_omni_v2v_python",
               "extension_group": "llm",
               "property": {
-                "api_key": "${env:QWEN_OMNI_REALTIME_API_KEY}",
+                "api_key": "${env:BAILIAN_DASHSCOPE_API_KEY}",
                 "base_uri": "${env:QWEN_OMNI_REALTIME_BASE_URL}",
                 "vendor": "${env:QWEN_OMNI_REALTIME_VENDOR}",
                 "vad_type": "server_vad",
                 "temperature": 0.9,
+                "prompt": "${env:CHAT_PROMPT}",
                 "model": "${env:QWEN_OMNI_REALTIME_MODEL}",
                 "max_tokens": 2048,
                 "voice": "Chelsie",
                 "language": "zh-CN",
                 "server_vad": true,
+                "greeting": "${env:GREETING}",
                 "dump": true,
                 "max_history": 10
               }

@@ -165,8 +165,7 @@ class QwenOmniRealtimeConfig(BaseConfig):
     path: str = "/v1/realtime"
     model: str = "qwen-omni-turbo-realtime"
     language: str = "zh-CN"
-    prompt: str = '''我们正在进行一场实时的视频对话。如果你收到了照片，请你将我提供的所有视觉输入都视为一个连续的视频流，
-    而不是孤立的静态图片。在你的回复中，请务必避免使用‘照片’、‘图片’或‘图像’这些词语来描述你所看到的内容。\n'''
+    prompt: str = ''
     temperature: float = 0.5
     max_tokens: int = 1024
     voice: str = "alloy"
@@ -225,6 +224,18 @@ class QwenOmniRealtimeExtension(AsyncLLMBaseExtension):
         self.input_end = time.time()
 
         self.image_queue = asyncio.Queue(maxsize=5)
+
+        self.system_prompt = '''You are a voice assistant who talks in a conversational way and can chat with me like my friends.
+        I will speak to you in English or Chinese, and you will answer in the corrected and improved version of my text with the language I use.
+        Don’t talk like a robot, instead I would like you to talk like a real human with emotions. I will use your answer for text-to-speech,
+        so don’t return me any meaningless characters. I want you to be helpful, when I’m asking you for advice,
+        give me precise, practical and useful advice instead of being vague. When giving me a list of options,
+        express the options in a narrative way instead of bullet points.
+
+        我们正在进行一场实时的视频对话。如果你收到了照片，请你将我提供的所有视觉输入都视为一个连续的视频流，
+        而不是孤立的静态图片。在你的回复中，请务必避免使用‘照片’、‘图片’或‘图像’这些词语来描述你所看到的内容。
+
+        请说中文\n'''
 
     async def on_init(self, ten_env: AsyncTenEnv) -> None:
         await super().on_init(ten_env)
@@ -733,7 +744,7 @@ class QwenOmniRealtimeExtension(AsyncLLMBaseExtension):
         )
         su = SessionUpdate(
             session=SessionUpdateParams(
-                instructions=prompt,
+                instructions=f"{self.system_prompt + prompt}",
                 model=self.config.model,
                 tool_choice="auto",
                 #   if self.available_tools else "none",
@@ -942,7 +953,7 @@ class QwenOmniRealtimeExtension(AsyncLLMBaseExtension):
             # )
             await self.conn.send_request(ResponseCreate(
                 response=ResponseCreateParams(
-                    instructions=f"{self.config.prompt + text}",
+                    instructions=f"{self.system_prompt + self.config.prompt + text}",
                     modalities=["text", "audio"]
                 )
             ))

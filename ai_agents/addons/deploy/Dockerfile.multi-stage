@@ -117,8 +117,17 @@ COPY addons /app/addons
 COPY server /app/server
 COPY agents /app/agents
 
-# 复制环境配置文件
-COPY .env /app/.env
+# 复制环境配置文件 - 优先选择 .env，如果没有则使用 .env.example
+COPY .env* /app/
+RUN if [ -f /app/.env ]; then \
+    echo "Using .env file"; \
+    elif [ -f /app/.env.example ]; then \
+    echo "Using .env.example file as .env"; \
+    cp /app/.env.example /app/.env; \
+    else \
+    echo "No .env or .env.example file found, creating empty .env"; \
+    touch /app/.env; \
+    fi
 
 # 编译Java addon server
 RUN cd /app/addons/server && mvn clean package -DskipTests

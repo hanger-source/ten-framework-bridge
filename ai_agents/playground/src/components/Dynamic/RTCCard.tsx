@@ -4,6 +4,7 @@ import * as React from "react"
 import { cn } from "@/lib/utils"
 import { ICameraVideoTrack, ILocalVideoTrack, IMicrophoneAudioTrack } from "agora-rtc-sdk-ng"
 import { useAppSelector, useAppDispatch, VOICE_OPTIONS, VideoSourceType, useIsCompactLayout } from "@/common"
+import { useAgentSettings } from "@/hooks/useAgentSettings"
 import { ITextItem, EMessageType, IChatItem } from "@/types"
 import { rtcManager, IUserTracks, IRtcUser } from "@/manager"
 import {
@@ -39,6 +40,7 @@ export default function RTCCard(props: { className?: string }) {
   const avatarInLargeWindow = trulienceSettings.avatarDesktopLargeWindow;
 
   const isCompactLayout = useIsCompactLayout();
+  const { agentSettings } = useAgentSettings();
 
   const DynamicChatCard = dynamic(() => import("@/components/Chat/ChatCard"), {
     ssr: false,
@@ -71,6 +73,7 @@ export default function RTCCard(props: { className?: string }) {
     await rtcManager.join({
       channel,
       userId,
+      agentSettings,
     })
     dispatch(
       setOptions({
@@ -102,7 +105,7 @@ export default function RTCCard(props: { className?: string }) {
     }
     if (user.audioTrack) {
       setRemoteUser(user)
-    } 
+    }
   }
 
   const onLocalTracksChanged = (tracks: IUserTracks) => {

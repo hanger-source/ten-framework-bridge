@@ -37,8 +37,9 @@ func main() {
 
 	// Check environment
 	agoraAppId := os.Getenv("AGORA_APP_ID")
-	if len(agoraAppId) != 32 {
-		slog.Error("environment AGORA_APP_ID invalid")
+	// 允许AGORA_APP_ID为空，在请求时动态验证
+	if agoraAppId != "" && len(agoraAppId) != 32 {
+		slog.Error("environment AGORA_APP_ID invalid - 必须是32位字符串")
 		os.Exit(1)
 	}
 

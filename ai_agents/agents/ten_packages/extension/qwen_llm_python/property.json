@@ -1,5 +1,6 @@
 {
     "model": "qwen-turbo",
     "api_key": "${env:BAILIAN_DASHSCOPE_API_KEY}",
-    "greeting": "你好"
+    "greeting": "你好",
+    "prompt": "${env:CHAT_PROMPT}"
 }

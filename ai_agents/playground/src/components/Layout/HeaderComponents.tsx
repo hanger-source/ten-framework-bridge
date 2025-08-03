@@ -13,11 +13,10 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
-import { InfoIcon, GitHubIcon, PaletteIcon } from "@/components/Icon"
+import { InfoIcon, PaletteIcon } from "@/components/Icon"
 import {
   useAppSelector,
   useAppDispatch,
-  GITHUB_URL,
   COLOR_LIST,
 } from "@/common"
 import { setThemeColor } from "@/store/reducers/global"
@@ -49,7 +48,7 @@ export function HeaderRoomInfo() {
           <TooltipTrigger className="flex items-center space-x-2 text-lg font-semibold">
             <InfoIcon className="h-4 w-4 md:h-5 md:w-5" />
             <span className="hidden text-sm md:inline-block">
-              房间名称:{" "}
+              频道名:{" "}
             </span>
             <span className="max-w-24 text-sm md:text-base">
               {channel}
@@ -100,10 +99,10 @@ export function HeaderRoomInfo() {
 export function HeaderActions() {
   return (
     <div className="flex space-x-2 md:space-x-4">
-      <NextLink href={GITHUB_URL} target="_blank">
+      {/* <NextLink href={GITHUB_URL} target="_blank">
         <GitHubIcon className="h-4 w-4 md:h-5 md:w-5" />
         <span className="sr-only">GitHub</span>
-      </NextLink>
+      </NextLink> */}
       <ThemePalettePopover />
       <NetworkIndicator />
     </div>

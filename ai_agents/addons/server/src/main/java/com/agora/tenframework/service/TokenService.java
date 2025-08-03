@@ -60,7 +60,8 @@ public class TokenService {
 
         logger.info("开始生成Token - channelName: {}, uid: {}", channelName, uid);
 
-        if (appId == null || appId.length() != 32) {
+        // 允许AGORA_APP_ID为空，在请求时动态验证
+        if (appId != null && appId.length() != 32) {
             logger.error("生成Token失败 - 无效的AGORA_APP_ID");
             throw new RuntimeException("无效的AGORA_APP_ID");
         }

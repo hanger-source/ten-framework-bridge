@@ -84,7 +84,7 @@ class TurnDetector:
         no_punc_text = remove_punctuation(text)
         messages = [{
             "role": "system",
-            "content": """你是一个对话轮次检测器。根据用户的输入，判断用户是否说完了。
+            "content": """你是一个对话轮次检测器。根据用户的输入，判断用户是否说完了。如果没有明显的断句，普遍断定为用户已说完，避免过多停顿导致回复过慢。
                 只输出以下三个词之一：
                 - unfinished: 用户还没说完，继续听
                 - wait: 用户停顿了，等待继续

@@ -1,5 +1,5 @@
 import { genUUID } from "./utils"
-import { Language } from "@/types"
+import { IAgentEnv, Language } from "@/types"
 import axios from "axios"
 import { AddonDef, Connection, Graph, GraphEditor, Node, ProtocolLabel } from "./graph"
 import { isEditModeOn } from "./constant"
@@ -10,6 +10,9 @@ interface StartRequestConfig {
   graphName: string,
   language: Language,
   voiceType: "male" | "female"
+  token?: string
+  properties?: any
+  envProperties?: IAgentEnv
 }
 
 interface GenAgoraDataConfig {
@@ -34,14 +37,26 @@ export const apiGenAgoraData = async (config: GenAgoraDataConfig) => {
 export const apiStartService = async (config: StartRequestConfig): Promise<any> => {
   // look at app/apis/route.tsx for the server-side implementation
   const url = `/api/agents/start`
-  const { channel, userId, graphName, language, voiceType } = config
+  const {
+    channel,
+    userId,
+    graphName,
+    language,
+    voiceType,
+    token,
+    properties,
+    envProperties
+  } = config
   const data = {
     request_id: genUUID(),
     channel_name: channel,
     user_uid: userId,
     graph_name: graphName,
     language,
-    voice_type: voiceType
+    voice_type: voiceType,
+    token: token ?? undefined,
+    properties: properties ?? undefined,
+    env_properties: envProperties ?? undefined,
   }
   let resp: any = await axios.post(url, data)
   resp = (resp.data) || {}
@@ -87,7 +102,7 @@ export const apiUpdateDocument = async (options: { channel: string, collection: 
 }
 
 
-// ping/pong 
+// ping/pong
 export const apiPing = async (channel: string) => {
   // the request will be rewrite at middleware.tsx to send to $AGENT_SERVER_URL
   const url = `/api/agents/ping`

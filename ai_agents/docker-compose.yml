@@ -14,6 +14,7 @@ services:
       - "${SERVER_PORT}:${SERVER_PORT}"
       - "${DEBUG_PORT:-5005}:${DEBUG_PORT:-5005}"
     volumes:
+      - ./:/app
       - /etc/localtime:/etc/localtime:ro
       - /etc/timezone:/etc/timezone:ro
       - ${LOG_PATH}:${LOG_PATH}

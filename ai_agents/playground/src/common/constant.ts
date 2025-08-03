@@ -15,6 +15,12 @@ export const DEFAULT_OPTIONS: IOptions = {
   appId: "",
   token: "",
 };
+
+export const DEFAULT_AGENT_SETTINGS = {
+  greeting: "",
+  prompt: "",
+}
+
 export const DESCRIPTION =
   "TEN Agent is an open-source multimodal AI agent that can speak, see, and access a knowledge base(RAG).";
 export const LANGUAGE_OPTIONS: LanguageOptionItem[] = [

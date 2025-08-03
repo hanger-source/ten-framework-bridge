@@ -24,6 +24,14 @@ from ten_runtime import (
 from ten_runtime.audio_frame import AudioFrameDataFmt
 from ten_ai_base.config import BaseConfig
 
+# 配置连接池
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+# 配置连接池参数
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
 def md_to_text(md):
     html = markdown.markdown(md)
     soup = BeautifulSoup(html, features='html.parser')
@@ -40,6 +48,7 @@ class QwenTTSExtension(AsyncTTSBaseExtension):
     def __init__(self, name: str):
         super().__init__(name)
         self.config: QwenTTSTTSConfig
+        self.session = None
 
     async def on_init(self, ten_env: AsyncTenEnv) -> None:
         await super().on_init(ten_env)
@@ -54,9 +63,29 @@ class QwenTTSExtension(AsyncTTSBaseExtension):
         if not self.config.api_key:
             raise ValueError("api_key is required")
 
+        # 配置连接池
+        self.session = requests.Session()
+        retry_strategy = Retry(
+            total=3,
+            backoff_factor=1,
+            status_forcelist=[429, 500, 502, 503, 504],
+        )
+        adapter = HTTPAdapter(
+            max_retries=retry_strategy,
+            pool_connections=10,
+            pool_maxsize=20
+        )
+        self.session.mount("http://", adapter)
+        self.session.mount("https://", adapter)
+
     async def on_stop(self, ten_env: AsyncTenEnv) -> None:
         await super().on_stop(ten_env)
         # ten_env.log_debug("on_stop")
+
+        # 清理连接池
+        if self.session:
+            self.session.close()
+            self.session = None
 
     async def on_deinit(self, ten_env: AsyncTenEnv) -> None:
         await super().on_deinit(ten_env)
@@ -120,7 +149,11 @@ class QwenTTSExtension(AsyncTTSBaseExtension):
                     ten_env.log_error("TTS responses is None, skip.")
                 else:
                     audio_url = responses["output"]["audio"]["url"]
-                    response = requests.get(audio_url)
+                    # 使用配置的 session 而不是直接使用 requests
+                    if self.session:
+                        response = self.session.get(audio_url, timeout=30)
+                    else:
+                        response = requests.get(audio_url, timeout=30)
                     response.raise_for_status()
                     wav_data_bytes = response.content
                     if wav_data_bytes:

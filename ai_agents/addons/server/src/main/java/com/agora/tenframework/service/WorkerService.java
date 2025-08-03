@@ -332,21 +332,31 @@ public class WorkerService {
             throw new RuntimeException("graph_name是必需的参数");
         }
 
-        // 生成令牌 - 相当于Go的token生成
-        String token = serverConfig.getAppId();
-        if (serverConfig.getAppCertificate() != null && !serverConfig.getAppCertificate().isEmpty()) {
-            try {
-                // 使用与Go的BuildTokenWithRtm相同的逻辑
-                GenerateTokenRequest tokenRequest = new GenerateTokenRequest();
-                tokenRequest.setChannelName(request.getChannelName());
-                tokenRequest.setUid(0L); // 使用0作为Worker的默认UID
-                token = tokenService.generateToken(tokenRequest);
-            } catch (Exception e) {
-                logger.error("启动Worker时生成令牌失败 - requestId: {}", request.getRequestId(), e);
-                throw new RuntimeException("生成令牌失败", e);
+        // 处理token逻辑 - 相当于Go的token处理逻辑
+        // 如果请求中提供了token，直接使用；否则生成token
+        if (request.getToken() != null && !request.getToken().isEmpty()) {
+            // 使用提供的token
+            logger.info("使用提供的token - requestId: {}", request.getRequestId());
+        } else {
+            // 只有在没有提供token时才生成token
+            String appId = serverConfig.getAppId();
+            String appCertificate = serverConfig.getAppCertificate();
+
+            request.setToken(appId);
+            if (appCertificate != null && !appCertificate.isEmpty()) {
+                try {
+                    // 使用与Go的BuildTokenWithRtm相同的逻辑
+                    GenerateTokenRequest tokenRequest = new GenerateTokenRequest();
+                    tokenRequest.setChannelName(request.getChannelName());
+                    tokenRequest.setUid(0L); // 使用0作为Worker的默认UID
+                    String generatedToken = tokenService.generateToken(tokenRequest);
+                    request.setToken(generatedToken);
+                } catch (Exception e) {
+                    logger.error("启动Worker时生成令牌失败 - requestId: {}", request.getRequestId(), e);
+                    throw new RuntimeException("生成令牌失败", e);
+                }
             }
         }
-        request.setToken(token);
 
         // 定位预定义图数组
         Map<String, Object> tenSection = (Map<String, Object>) propertyJson.get("ten");
@@ -415,7 +425,7 @@ public class WorkerService {
         setStartParameters(newGraphs, request);
 
         // 验证"nodes"部分中的环境变量
-        validateEnvironmentVariables(newGraphs);
+        validateEnvironmentVariables(newGraphs, request);
 
         // 将修改后的JSON序列化回字符串 - 使用格式化的JSON，类似Go的json.MarshalIndent
         String modifiedPropertyJson = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(propertyJson);
@@ -481,9 +491,10 @@ public class WorkerService {
     /**
      * 验证环境变量 - 相当于Go的环境变量验证
      *
-     * @param graphs 图列表
+     * @param graphs  图列表
+     * @param request 启动请求，包含EnvProperties
      */
-    private void validateEnvironmentVariables(List<Object> graphs) {
+    private void validateEnvironmentVariables(List<Object> graphs, StartRequest request) {
         Pattern envPattern = Pattern.compile("\\$\\{env:([^}|]+)\\}");
 
         for (Object graph : graphs) {
@@ -518,10 +529,30 @@ public class WorkerService {
                     while (matcher.find()) {
                         if (matcher.groupCount() >= 1) {
                             String variable = matcher.group(1);
-                            boolean exists = System.getenv(variable) != null;
-                            if (!exists) {
-                                logger.error("环境变量未找到 - 变量: {}, 属性: {}", variable,
-                                        key);
+                            String envValue = null;
+
+                            // 优先从 EnvProperties 中查找
+                            if (request.getEnvProperties() != null) {
+                                Object value = request.getEnvProperties().get(variable);
+                                if (value != null) {
+                                    envValue = String.valueOf(value);
+                                    logger.info("在EnvProperties中找到环境变量 - 变量: {}, 值: {}", variable, envValue);
+                                    // 替换当前属性值中的占位符
+                                    String newValue = strVal.replace(matcher.group(0), envValue);
+                                    properties.put(key, newValue);
+                                    logger.info("替换属性中的环境变量 - 变量: {}, 属性: {}, 原值: {}, 新值: {}",
+                                            variable, key, strVal, newValue);
+                                }
+                            }
+
+                            // 如果 EnvProperties 中没有找到，再从系统环境变量获取
+                            if (envValue == null) {
+                                envValue = System.getenv(variable);
+                                if (envValue != null && !envValue.isEmpty()) {
+                                    logger.info("在系统环境变量中找到环境变量 - 变量: {}, 值: {}", variable, envValue);
+                                } else {
+                                    logger.error("在EnvProperties和系统环境变量中都未找到环境变量 - 变量: {}, 属性: {}", variable, key);
+                                }
                             }
                         }
                     }

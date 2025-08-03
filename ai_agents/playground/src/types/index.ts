@@ -14,9 +14,20 @@ export interface IOptions {
   token: string;
 }
 
+export interface IAgentEnv {
+  BAILIAN_DASHSCOPE_API_KEY?: string;
+  AGORA_APP_ID?: string;
+  AGORA_APP_CERTIFICATE?: string;
+  GREETING?: string;
+  CHAT_PROMPT?: string;
+  [key: string]: string | undefined;
+}
+
 export interface IAgentSettings {
   prompt: string;
   greeting: string;
+  token: string;
+  env: IAgentEnv;
 }
 
 export interface ITrulienceSettings {

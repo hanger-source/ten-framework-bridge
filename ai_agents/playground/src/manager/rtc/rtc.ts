@@ -10,6 +10,7 @@ import { EMessageDataType, EMessageType, IChatItem, ITextItem } from "@/types";
 import { AGEventEmitter } from "../events";
 import { RtcEvents, IUserTracks } from "./types";
 import { apiGenAgoraData, VideoSourceType } from "@/common";
+import { getAgentSettings } from "@/hooks/useAgentSettings";
 
 const TIMEOUT_MS = 5000; // Timeout for incomplete messages
 
@@ -36,18 +37,36 @@ export class RtcManager extends AGEventEmitter<RtcEvents> {
     this._listenRtcEvents();
   }
 
-  async join({ channel, userId }: { channel: string; userId: number }) {
+  async join({ channel, userId, agentSettings }: { channel: string; userId: number; agentSettings?: any }) {
     if (!this._joined) {
-      const res = await apiGenAgoraData({ channel, userId });
-      const { code, data } = res;
-      if (code != 0) {
-        throw new Error("Failed to get Agora token");
+      let appId: string;
+      let finalToken: string;
+
+      if (agentSettings?.token) {
+        // 使用提供的临时token，不需要调用generate API
+        // 从 agentSettings 中获取 appId，如果没有则使用环境变量
+        appId = agentSettings?.env?.AGORA_APP_ID || process.env.NEXT_PUBLIC_AGORA_APP_ID || '';
+        finalToken = agentSettings.token;
+      } else {
+        // 没有token，调用generate API
+        const res = await apiGenAgoraData({ channel, userId });
+        const { code, data } = res;
+        if (code != 0) {
+          throw new Error("Failed to get Agora token");
+        }
+        appId = data.appId;
+        finalToken = data.token;
       }
-      const { appId, token } = data;
+
+      // 验证 App ID 不为空
+      if (!appId || appId.trim() === '') {
+        throw new Error("声网 App ID 不能为空，请在设置中配置声网 App ID");
+      }
+
       this.appId = appId;
-      this.token = token;
+      this.token = finalToken;
       this.userId = userId;
-      await this.client?.join(appId, channel, token, userId);
+      await this.client?.join(appId, channel, finalToken, userId);
       this._joined = true;
     }
   }

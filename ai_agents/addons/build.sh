@@ -18,17 +18,27 @@ while [[ $# -gt 0 ]]; do
             BUILD_TYPE="java"
             shift
             ;;
+        --java-server)
+            BUILD_TYPE="java_server"
+            shift
+            ;;
         --all)
             BUILD_TYPE="all"
+            shift
+            ;;
+        --go-server)
+            BUILD_TYPE="go_server"
             shift
             ;;
         -h|--help)
             echo "用法: $0 [选项]"
             echo "选项:"
-            echo "  --go     只构建Go项目 (agent + server)"
-            echo "  --java   构建Java addon服务器和agent"
-            echo "  --all    构建所有项目 (默认)"
-            echo "  -h, --help 显示此帮助信息"
+            echo "  --go        只构建Go项目 (agent + server)"
+            echo "  --java      构建Java addon服务器和agent"
+            echo "  --java-server 只构建Java addon服务器"
+            echo "  --all       构建所有项目 (默认)"
+            echo "  --go-server 只构建Go服务器"
+            echo "  -h, --help  显示此帮助信息"
             exit 0
             ;;
         *)
@@ -111,14 +121,14 @@ log_info "检查必要文件完成"
 
 # 检查构建环境
 log_info "检查构建环境..."
-if [ "$BUILD_TYPE" = "java" ] || [ "$BUILD_TYPE" = "all" ]; then
+if [ "$BUILD_TYPE" = "java" ] || [ "$BUILD_TYPE" = "java_server" ] || [ "$BUILD_TYPE" = "all" ]; then
     if ! command -v mvn &> /dev/null; then
         log_error "Maven未安装，无法构建Java项目"
         exit 1
     fi
 fi
 
-if [ "$BUILD_TYPE" = "go" ] || [ "$BUILD_TYPE" = "all" ]; then
+if [ "$BUILD_TYPE" = "go" ] || [ "$BUILD_TYPE" = "go_server" ] || [ "$BUILD_TYPE" = "all" ]; then
     if ! command -v go &> /dev/null; then
         log_error "Go未安装，无法构建Go项目"
         exit 1
@@ -208,6 +218,10 @@ case $BUILD_TYPE in
         build_java_addon
         build_go_agent
         ;;
+    "java_server")
+        log_info "只构建Java addon服务器..."
+        build_java_addon
+        ;;
     "go")
         log_info "只构建Go项目..."
         build_go_agent
@@ -217,6 +231,10 @@ case $BUILD_TYPE in
         log_info "构建所有项目..."
         build_java_addon
         build_go_agent
+        build_go_server
+        ;;
+    "go_server")
+        log_info "只构建Go服务器..."
         build_go_server
         ;;
     *)
@@ -237,6 +255,12 @@ case $BUILD_TYPE in
         log_info "- Java项目: $SCRIPT_DIR/server/ (addon服务器)"
         log_info "- Go Agent项目: $PROJECT_ROOT/agents/ (agent组件)"
         ;;
+    "java_server")
+        log_info "- Java Addon Server: $SCRIPT_DIR/server/target/ten-framework-server-1.0.0.jar"
+        log_info ""
+        log_info "项目位置说明："
+        log_info "- Java项目: $SCRIPT_DIR/server/ (addon服务器)"
+        ;;
     "go")
         log_info "- Go Agent: $PROJECT_ROOT/agents/bin/worker"
         log_info "- Go Server: $PROJECT_ROOT/server/bin/api"
@@ -253,6 +277,12 @@ case $BUILD_TYPE in
         log_info "项目位置说明："
         log_info "- Java项目: $SCRIPT_DIR/server/ (addon服务器)"
         log_info "- Go Agent项目: $PROJECT_ROOT/agents/ (agent组件)"
+        log_info "- Go Server项目: $PROJECT_ROOT/server/ (主服务器)"
+        ;;
+    "go_server")
+        log_info "- Go Server: $PROJECT_ROOT/server/bin/api"
+        log_info ""
+        log_info "项目位置说明："
         log_info "- Go Server项目: $PROJECT_ROOT/server/ (主服务器)"
         ;;
 esac

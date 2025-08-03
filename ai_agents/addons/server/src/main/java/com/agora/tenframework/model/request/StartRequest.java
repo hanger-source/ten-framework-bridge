@@ -114,6 +114,15 @@ public class StartRequest {
     @JsonProperty("properties")
     private Map<String, Map<String, Object>> properties;
 
+    /**
+     * 环境变量属性配置
+     * 用于传递环境变量到AI代理
+     * 优先于系统环境变量使用
+     * 对应Go版本：EnvProperties map[string]interface{}
+     */
+    @JsonProperty("env_properties")
+    private Map<String, Object> envProperties;
+
     // ==================== 超时配置 ====================
     /**
      * 退出超时时间（秒）
@@ -187,6 +196,14 @@ public class StartRequest {
 
     public void setProperties(Map<String, Map<String, Object>> properties) {
         this.properties = properties;
+    }
+
+    public Map<String, Object> getEnvProperties() {
+        return envProperties;
+    }
+
+    public void setEnvProperties(Map<String, Object> envProperties) {
+        this.envProperties = envProperties;
     }
 
     public Integer getQuitTimeoutSeconds() {

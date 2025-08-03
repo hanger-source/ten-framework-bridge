@@ -1,5 +1,6 @@
 package com.agora.tenframework.config;
 
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.beans.factory.InitializingBean;
@@ -154,17 +155,19 @@ public class ServerConfig implements InitializingBean {
      * 对应Go版本main.go中的环境变量验证逻辑
      *
      * 验证规则：
-     * 1. AGORA_APP_ID必须为32位字符串
-     * 2. WORKERS_MAX必须大于0
-     * 3. WORKER_QUIT_TIMEOUT_SECONDES必须大于0
-     * 4. LOG_PATH目录必须存在或可创建
+     * 1. AGORA_APP_ID可以为空，在请求时动态验证
+     * 2. 如果AGORA_APP_ID不为空，则必须为32位字符串
+     * 3. WORKERS_MAX必须大于0
+     * 4. WORKER_QUIT_TIMEOUT_SECONDES必须大于0
+     * 5. LOG_PATH目录必须存在或可创建
      *
      * @throws Exception 当配置验证失败时抛出异常
      */
     @Override
     public void afterPropertiesSet() throws Exception {
         // 验证AGORA_APP_ID - 对应Go版本的验证逻辑
-        if (appId == null || appId.length() != 32) {
+        // 允许AGORA_APP_ID为空，在请求时动态验证
+        if (StringUtils.isNoneBlank(appId) && appId.length() != 32) {
             logger.error("environment AGORA_APP_ID invalid - 必须是32位字符串");
             throw new RuntimeException("environment AGORA_APP_ID invalid - 必须是32位字符串");
         }
