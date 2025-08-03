@@ -38,7 +38,7 @@
                 "api_key": "${env:BAILIAN_DASHSCOPE_API_KEY}",
                 "greeting": "${env:GREETING}",
                 "prompt": "${env:CHAT_PROMPT}",
-                "max_memory_length": 10
+                "max_memory_length": 15
               }
             },
             {

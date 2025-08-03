@@ -74,11 +74,16 @@ class QWenLLMExtension(AsyncLLMBaseExtension):
         self.api_key = ""
         self.model = ""
         self.prompt = ""
-        self.max_history = 10
+        self.max_history = 20
         self.stopped = False
 
     def on_msg(self, role: str, content: str) -> None:
         self.history.append({"role": role, "content": content})
+        if len(self.history) > self.max_history:
+            self.history = self.history[1:]
+
+    def on_other_msg(self, other_msg: dict) -> None:
+        self.history.append(other_msg)
         if len(self.history) > self.max_history:
             self.history = self.history[1:]
 
@@ -164,7 +169,6 @@ class QWenLLMExtension(AsyncLLMBaseExtension):
 
         # 直接使用 _stream_chat_internal 生成回复，避免双重输出
         messages = self.get_messages()
-        messages.append({"role": "user", "content": input_text})
         ten.log_info(f"[qwen_llm] Calling _stream_chat_internal with {len(messages)}")
 
         # 等待流式处理完成
@@ -232,11 +236,9 @@ class QWenLLMExtension(AsyncLLMBaseExtension):
         ten.log_info(f"[qwen_llm] Tool calls completed: {len(tool_calls)}")
 
         # 添加助手消息，包含工具调用
-        messages.append({
-            "role": "assistant",
-            "content": None,
-            "tool_calls": tool_calls
-        })
+        assistant_msg = {"role": "assistant", "tool_calls": tool_calls}
+        messages.append(assistant_msg)
+        self.on_other_msg(assistant_msg)
 
         # 处理每个工具调用
         for tool_call in tool_calls:
@@ -245,11 +247,9 @@ class QWenLLMExtension(AsyncLLMBaseExtension):
             tool_result = await self.handle_tool_call(ten, tool_call, messages)
 
             # 将工具结果添加到消息历史
-            messages.append({
-                "role": "tool",
-                "content": tool_result,
-                "tool_call_id": tool_call["id"]
-            })
+            tool_msg = {"role": "tool", "content": tool_result, "tool_call_id": tool_call["id"]}
+            messages.append(tool_msg)
+            self.on_other_msg(tool_msg)
             # 移除详细的结果日志
             # ten.log_info(f"[qwen_llm] Tool result added: {tool_result[:50]}...")
 
@@ -280,7 +280,7 @@ class QWenLLMExtension(AsyncLLMBaseExtension):
         try:
             responses = dashscope.Generation.call(
                 self.model,
-                messages=[*messages],
+                messages=messages,
                 tools=tools,
                 result_format="message",
                 stream=True,
@@ -341,7 +341,9 @@ class QWenLLMExtension(AsyncLLMBaseExtension):
             if partial:
                 self.send_text_output(ten, partial, True)
 
-            # ten.log_info(f"[qwen_llm] stream_chat full_answer: {total}")
+            # 添加 assistant 消息到历史记录
+            if total:
+                self.on_msg("assistant", total)
             return total
         except Exception as e:
             ten.log_error(f"[qwen_llm] Error in _stream_chat_internal: {e}")
