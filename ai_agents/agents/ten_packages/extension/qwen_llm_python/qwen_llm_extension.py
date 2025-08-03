@@ -461,6 +461,7 @@ class QWenLLMExtension(AsyncLLMBaseExtension):
             greeting, _ = await ten.get_property_string("greeting")
             if greeting:
                 try:
+                    self.on_msg("assistant", greeting)
                     self.send_text_output(ten, greeting, True)
                     # ten.log_info(f"greeting [{greeting}] sent")
                 except Exception as e:
