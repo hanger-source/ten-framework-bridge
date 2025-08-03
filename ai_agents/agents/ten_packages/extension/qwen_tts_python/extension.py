@@ -139,16 +139,59 @@ class QwenTTSExtension(AsyncTTSBaseExtension):
                     if response is None:
                         ten_env.log_error("TTS response is None, skip.")
                         continue
-                    else:
-                        audio_string = response["output"]["audio"]["data"]
+
+                    # 检查response结构
+                    if not isinstance(response, dict):
+                        ten_env.log_error(f"TTS response is not dict: {type(response)}")
+                        continue
+
+                    # 安全地访问嵌套字典
+                    try:
+                        output = response.get("output")
+                        if output is None:
+                            ten_env.log_error("TTS response missing 'output' field")
+                            continue
+
+                        audio = output.get("audio")
+                        if audio is None:
+                            ten_env.log_error("TTS response missing 'audio' field")
+                            continue
+
+                        audio_string = audio.get("data")
                         if audio_string:
                             audio_data = base64.b64decode(audio_string.encode())
                             await self._on_audio_delta(ten_env, audio_data)
+                        else:
+                            ten_env.log_debug("TTS audio data is empty")
+                    except Exception as e:
+                        ten_env.log_error(f"Error processing TTS response: {e}")
+                        continue
             else:
                 if responses is None:
                     ten_env.log_error("TTS responses is None, skip.")
-                else:
-                    audio_url = responses["output"]["audio"]["url"]
+                    return
+
+                # 安全地访问非流式响应
+                try:
+                    if not isinstance(responses, dict):
+                        ten_env.log_error(f"TTS responses is not dict: {type(responses)}")
+                        return
+
+                    output = responses.get("output")
+                    if output is None:
+                        ten_env.log_error("TTS responses missing 'output' field")
+                        return
+
+                    audio = output.get("audio")
+                    if audio is None:
+                        ten_env.log_error("TTS responses missing 'audio' field")
+                        return
+
+                    audio_url = audio.get("url")
+                    if not audio_url:
+                        ten_env.log_error("TTS responses missing 'url' field")
+                        return
+
                     # 使用配置的 session 而不是直接使用 requests
                     if self.session:
                         response = self.session.get(audio_url, timeout=30)
@@ -158,6 +201,10 @@ class QwenTTSExtension(AsyncTTSBaseExtension):
                     wav_data_bytes = response.content
                     if wav_data_bytes:
                         await self._on_audio_delta(ten_env, wav_data_bytes)
+                    else:
+                        ten_env.log_error("Downloaded audio data is empty")
+                except Exception as e:
+                    ten_env.log_error(f"Error processing non-streaming TTS response: {e}")
 
         except Exception:
             ten_env.log_error(

@@ -77,15 +77,49 @@ class QWenLLMExtension(AsyncLLMBaseExtension):
         self.max_history = 20
         self.stopped = False
 
+    def _smart_truncate_history(self):
+        """智能截断历史记录，确保工具调用的一致性"""
+        if len(self.history) <= self.max_history:
+            return
+
+        # 需要删除的消息数量
+        to_remove = len(self.history) - self.max_history
+
+        # 从开头开始检查，找到需要删除的assistant消息
+        removed_assistant_tool_calls = set()
+
+        for i in range(to_remove):
+            if i < len(self.history):
+                msg = self.history[i]
+                if msg.get("role") == "assistant" and "tool_calls" in msg:
+                    # 收集这个assistant消息中的tool_call_ids
+                    tool_calls = msg.get("tool_calls", [])
+                    for tool_call in tool_calls:
+                        if isinstance(tool_call, dict) and "id" in tool_call:
+                            removed_assistant_tool_calls.add(tool_call["id"])
+
+        # 删除前to_remove个消息
+        self.history = self.history[to_remove:]
+
+        # 删除对应的tool消息
+        if removed_assistant_tool_calls:
+            filtered_history = []
+            for msg in self.history:
+                if msg.get("role") == "tool":
+                    tool_call_id = msg.get("tool_call_id")
+                    if tool_call_id in removed_assistant_tool_calls:
+                        # 跳过这个tool消息
+                        continue
+                filtered_history.append(msg)
+            self.history = filtered_history
+
     def on_msg(self, role: str, content: str) -> None:
         self.history.append({"role": role, "content": content})
-        if len(self.history) > self.max_history:
-            self.history = self.history[1:]
+        self._smart_truncate_history()
 
     def on_other_msg(self, other_msg: dict) -> None:
         self.history.append(other_msg)
-        if len(self.history) > self.max_history:
-            self.history = self.history[1:]
+        self._smart_truncate_history()
 
     def get_messages(self) -> List[Any]:
         messages = []
