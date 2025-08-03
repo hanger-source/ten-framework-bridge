@@ -1,2 +1,33 @@
 .git
-playground/
+
+# 后端构建产物
+addons/server/target
+agents/bin/worker
+server/bin/api
+
+# 前端构建产物
+playground/node_modules
+playground/.next
+playground/out
+
+# 日志和临时文件
+logs
+*.log
+tmp
+temp
+
+# 开发工具
+.vscode
+.idea
+*.swp
+*.swo
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 依赖目录
+node_modules
+__pycache__
+*.pyc
+*.pyo

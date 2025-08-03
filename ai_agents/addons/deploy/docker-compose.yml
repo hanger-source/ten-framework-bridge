@@ -1,0 +1,43 @@
+services:
+  ten_agent_deploy:
+    build:
+      context: ../..
+      dockerfile: addons/deploy/Dockerfile.multi-stage
+      target: runtime
+    image: ten-agent-deploy:1.0
+    container_name: ten-agent-deploy
+    platform: linux/amd64
+    tty: true
+    stdin_open: true
+    restart: always
+    mem_limit: 4g
+    mem_reservation: 2g
+    ports:
+      - "3000:3000" # Playground
+      - "8080:8080" # Java server
+      - "49483:49483" # Go server
+      - "5005:5005" # Debug port
+    volumes:
+      - ./logs:/app/logs
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+    working_dir: /app
+    environment:
+      # 服务配置
+      - AGENT_SERVER_URL=http://localhost:8080
+      - TEN_DEV_SERVER_URL=http://localhost:49483
+      - NEXT_PUBLIC_EDIT_GRAPH_MODE=false
+
+      # 启动配置
+      - DEFAULT_MODE=go # 默认启动模式: go|java
+      - AUTO_START=true # 自动启动服务
+
+      # 可选：其他配置
+      - LOG_LEVEL=info
+      - DEBUG=false
+    networks:
+      - ten_agent_network
+
+networks:
+  ten_agent_network:
+    driver: bridge

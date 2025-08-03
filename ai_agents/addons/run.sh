@@ -65,8 +65,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [ "$(basename "$SCRIPT_DIR")" = "addons" ]; then
     PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 else
-    # 如果在容器外运行，需要找到正确的项目根目录
-    PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+    # 如果在容器中运行，项目根目录是 /app
+    if [ "$SCRIPT_DIR" = "/app" ]; then
+        PROJECT_ROOT="/app"
+    else
+        # 如果在容器外运行，需要找到正确的项目根目录
+        PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+    fi
 fi
 
 # 检查.env文件
@@ -198,11 +203,11 @@ case $RUN_TYPE in
         log_info "启动Go server（包含designer）..."
         run_backend_server
         sleep 2
-        run_graph_designer
+        # run_graph_designer
         log_success "Go server已启动！"
         log_info "服务信息："
         log_info "- Go Server: PID $BACKEND_SERVER_PID"
-        log_info "- 图设计器: PID $DESIGNER_PID"
+        # log_info "- 图设计器: PID $DESIGNER_PID"
         ;;
 esac
 

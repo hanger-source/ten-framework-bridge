@@ -1,0 +1,226 @@
+# 多阶段构建 Dockerfile
+# 第一阶段：前端环境
+FROM ubuntu:22.04 AS frontend-env
+
+# 使用国内镜像源加速
+RUN sed -i 's/archive.ubuntu.com/mirrors.aliyun.com/g' /etc/apt/sources.list && \
+    sed -i 's/security.ubuntu.com/mirrors.aliyun.com/g' /etc/apt/sources.list
+
+# 安装基础工具
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    wget \
+    curl \
+    vim \
+    git \
+    ca-certificates \
+    unzip \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs \
+    && npm install -g npm@latest pm2 \
+    && curl -fsSL https://bun.sh/install | bash \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+ENV PATH="/root/.bun/bin:$PATH"
+
+WORKDIR /app
+
+# 复制前端代码
+COPY playground /app/playground
+
+# 构建前端
+RUN cd /app/playground && bun install && bun run build
+
+# 第二阶段：后端环境
+FROM ubuntu:22.04 AS backend-env
+
+# 使用国内镜像源加速
+RUN sed -i 's/archive.ubuntu.com/mirrors.aliyun.com/g' /etc/apt/sources.list && \
+    sed -i 's/security.ubuntu.com/mirrors.aliyun.com/g' /etc/apt/sources.list
+
+# 安装基础工具
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    wget \
+    curl \
+    vim \
+    git \
+    libssl-dev \
+    libcrypto++-dev \
+    zlib1g-dev \
+    openssl \
+    make \
+    jq \
+    zip unzip \
+    tree \
+    apt-utils software-properties-common \
+    ssh \
+    libasound2 \
+    libgstreamer1.0-dev \
+    libsamplerate-dev \
+    libunwind-dev \
+    libfmt-dev \
+    gcc \
+    g++ \
+    libc++1 \
+    gdb \
+    gpg-agent \
+    ca-certificates \
+    python3 python3-venv python3-pip python3-dev \
+    && apt-get clean && rm -rf /var/lib/apt/lists/* && rm -rf /tmp/*
+
+# 安装Python工具
+RUN pip3 install debugpy pytest pytest-cov pytest-mock cython pylint pylint-exit black pre-commit pyright
+
+# 安装Go
+RUN wget --no-check-certificate --progress=dot:mega https://go.dev/dl/go1.22.3.linux-amd64.tar.gz && \
+    rm -rf /usr/local/go && \
+    tar -C /usr/local -xvf go1.22.3.linux-amd64.tar.gz && \
+    rm go1.22.3.linux-amd64.tar.gz
+
+# 设置Go环境
+ENV PATH="/usr/local/go/bin:/usr/local/ten_gn:${PATH}"
+ENV GOPATH="/go"
+ENV GOCACHE="/go/cache"
+ENV CGO_ENABLED=1
+ENV GOOS=linux
+ENV GOARCH=amd64
+
+# 安装Java和Maven
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    openjdk-17-jdk \
+    maven \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# 安装Python包管理工具
+RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR="/usr/local/bin" sh
+
+# 安装Task
+RUN sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin v3.44.0
+
+# 安装ossutil
+RUN curl https://gosspublic.alicdn.com/ossutil/install.sh | bash
+
+# 安装tman
+RUN wget --no-check-certificate --progress=dot:mega https://github.com/TEN-framework/ten_framework/releases/download/0.10.21/tman-linux-release-x64.zip && \
+    unzip tman-linux-release-x64.zip && \
+    mv ten_manager/bin/tman /usr/local/bin/ && \
+    rm -rf tman-*.zip ten_manager
+
+# 安装ten_gn
+RUN git clone https://github.com/TEN-framework/ten_gn.git /usr/local/ten_gn && \
+    cd /usr/local/ten_gn && \
+    git checkout 0.1.0
+
+WORKDIR /app
+
+# 复制后端代码
+COPY addons /app/addons
+COPY server /app/server
+COPY agents /app/agents
+
+# 复制环境配置文件
+COPY .env /app/.env
+
+# 编译Java addon server
+RUN cd /app/addons/server && mvn clean package -DskipTests
+
+# 编译Go agent
+RUN cd /app/agents && ./scripts/install_deps_and_build.sh linux x64 && mv bin/main bin/worker
+
+# 编译Go server
+RUN cd /app/server && go mod tidy && go mod download && go build -o bin/api main.go
+
+# 第三阶段：运行时
+FROM ubuntu:22.04 AS runtime
+
+# 使用国内镜像源加速
+RUN sed -i 's/archive.ubuntu.com/mirrors.aliyun.com/g' /etc/apt/sources.list && \
+    sed -i 's/security.ubuntu.com/mirrors.aliyun.com/g' /etc/apt/sources.list
+
+# 安装运行时依赖
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libasound2 \
+    libgstreamer1.0-dev \
+    libunwind-dev \
+    libc++1 \
+    libssl-dev \
+    python3 \
+    python3-venv \
+    python3-pip \
+    python3-dev \
+    jq vim \
+    ca-certificates \
+    openjdk-17-jre \
+    curl \
+    && apt-get clean && rm -rf /var/lib/apt/lists/* && rm -rf /tmp/*
+
+# 安装Node.js 20
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get update && apt-get install -y nodejs && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# 从backend-env阶段复制编译好的文件
+COPY --from=backend-env /app/agents/bin ./agents/bin
+COPY --from=backend-env /app/agents/ten_packages ./agents/ten_packages
+COPY --from=backend-env /app/agents/manifest.json ./agents/manifest.json
+COPY --from=backend-env /app/agents/property.json ./agents/property.json
+
+COPY --from=backend-env /app/addons/server/target ./server/target
+COPY --from=backend-env /app/server/bin ./server/bin
+
+# 从frontend-env阶段复制前端文件
+COPY --from=frontend-env /app/playground/.next/standalone ./playground/
+COPY --from=frontend-env /app/playground/.next/static ./playground/.next/static
+COPY --from=frontend-env /app/playground/public ./playground/public
+
+# 复制addons目录（包含脚本和配置）
+COPY --from=backend-env /app/addons ./addons
+
+# 复制脚本
+COPY --from=backend-env /app/addons/build.sh ./build.sh
+COPY --from=backend-env /app/addons/run.sh ./run.sh
+COPY --from=backend-env /app/addons/debug.sh ./debug.sh
+
+# 复制环境配置文件
+COPY --from=backend-env /app/.env ./.env
+
+# 复制运行时库
+COPY --from=backend-env /usr/local/lib /usr/local/lib
+COPY --from=backend-env /usr/lib/python3 /usr/lib/python3
+
+# 创建简化的启动脚本
+RUN echo '#!/bin/bash\n\
+    \n\
+    # 杀死可能存在的进程\n\
+    echo "Killing existing processes..."\n\
+    pkill -f "node.*server.js" 2>/dev/null || true\n\
+    pkill -f "server/bin/api" 2>/dev/null || true\n\
+    pkill -f "java.*ten-framework-server" 2>/dev/null || true\n\
+    pkill -f "bin/worker" 2>/dev/null || true\n\
+    \n\
+    # 创建logs目录\n\
+    mkdir -p /app/logs\n\
+    \n\
+    # 启动前端服务（默认启动）\n\
+    echo "Starting Playground frontend..."\n\
+    cd /app/playground && HOSTNAME="0.0.0.0" node server.js > /app/logs/frontend.log 2>&1 &\n\
+    \n\
+    # 根据环境变量决定是否启动后端服务\n\
+    if [ "$AUTO_START" = "true" ]; then\n\
+    echo "Auto-starting backend services..."\n\
+    # 启动后端服务并输出到日志\n\
+    cd /app && ./run.sh --${DEFAULT_MODE:-go} > /app/logs/backend.log 2>&1 &\n\
+    echo "All services started. Keeping container alive..."\n\
+    tail -f /dev/null\n\
+    else\n\
+    echo "Backend services not auto-started. Use ./run.sh manually."\n\
+    echo "Frontend service is running. Keeping container alive..."\n\
+    tail -f /dev/null\n\
+    fi' > /app/start.sh && chmod +x /app/start.sh
+
+# 暴露端口
+EXPOSE 3000 8080 49483 5005
+
+# 启动命令
+CMD ["/app/start.sh"]
