@@ -3,3 +3,4 @@ requests
 emoji
 markdown>=3.8.2
 beautifulsoup4
+urllib3
