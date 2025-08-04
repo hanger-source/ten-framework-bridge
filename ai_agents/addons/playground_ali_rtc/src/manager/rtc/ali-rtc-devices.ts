@@ -301,16 +301,25 @@ export class AliRtcDeviceManager {
 
     // 关闭所有轨道
     closeAllTracks(): void {
-        if (this.localTracks.videoTrack) {
-            this.localTracks.videoTrack.close();
-            this.localTracks.videoTrack = undefined;
-        }
+        // 不关闭摄像头轨道，保持预览框工作
+        // if (this.localTracks.videoTrack) {
+        //     this.localTracks.videoTrack.close();
+        //     this.localTracks.videoTrack = undefined;
+        // }
+
         // 不关闭音频轨道，保持音轨图工作
+        // if (this.localTracks.audioTrack) {
+        //     this.localTracks.audioTrack.close();
+        //     this.localTracks.audioTrack = undefined;
+        // }
+
+        // 只关闭屏幕共享轨道
         if (this.localTracks.screenTrack) {
             this.localTracks.screenTrack.close();
             this.localTracks.screenTrack = undefined;
         }
-        toast.success("所有设备轨道已关闭");
+
+        console.log("设备轨道已关闭（摄像头和音频轨道保持活跃）");
     }
 
     // 获取本地轨道

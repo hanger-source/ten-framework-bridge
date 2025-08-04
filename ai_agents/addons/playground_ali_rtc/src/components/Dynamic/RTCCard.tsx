@@ -45,8 +45,8 @@ export default function RTCCard(props: { className?: string }) {
   const { agentSettings } = useAgentSettings();
 
   React.useEffect(() => {
-    // 在组件挂载时创建音轨，这样音轨图就能正常工作
-    const initAudioTrack = async () => {
+    // 在组件挂载时创建音轨和摄像头轨道，这样音轨图和预览框就能正常工作
+    const initTracks = async () => {
       try {
         // 先设置事件监听器，确保不会错过事件
         aliRtcManager.on("localTracksChanged", onLocalTracksChanged)
@@ -57,18 +57,21 @@ export default function RTCCard(props: { className?: string }) {
           await aliRtcManager.createMicrophoneAudioTrack()
         }
         setAudioTrackCreated(true)
+
+        // 创建摄像头轨道，让预览框立即显示
+        await aliRtcManager.createCameraTracks()
       } catch (error) {
-        console.error("[rtc] Failed to create audio track on mount:", error)
+        console.error("[rtc] Failed to create tracks on mount:", error)
       }
     }
 
-    initAudioTrack()
+    initTracks()
 
     // 清理函数
     return () => {
       aliRtcManager.off("localTracksChanged", onLocalTracksChanged)
     }
-  }, []) // 移除 options.channel 依赖，确保音频轨道始终创建
+  }, []) // 移除 options.channel 依赖，确保轨道始终创建
 
   const init = async () => {
     if (isConnecting || isConnected) {
@@ -92,7 +95,8 @@ export default function RTCCard(props: { className?: string }) {
         setAudioTrackCreated(true)
       }
 
-      await aliRtcManager.createCameraTracks()
+      // 摄像头轨道已经在组件挂载时创建，这里不需要重复创建
+      // await aliRtcManager.createCameraTracks()
 
       await aliRtcManager.join({
         channel,
@@ -162,6 +166,11 @@ export default function RTCCard(props: { className?: string }) {
 
   const onLocalTracksChanged = (tracks: IAliUserTracks) => {
     const { videoTrack, audioTrack, screenTrack } = tracks
+    console.log("[rtc] onLocalTracksChanged", {
+      hasVideoTrack: !!videoTrack,
+      hasAudioTrack: !!audioTrack,
+      hasScreenTrack: !!screenTrack
+    })
     setVideoTrack(videoTrack)
     setScreenTrack(screenTrack)
     if (audioTrack) {
@@ -256,7 +265,7 @@ export default function RTCCard(props: { className?: string }) {
           )
         ) : (
           // <AgentView  audioTrack={remoteuser?.audioTrack} />
-          <div style={{ height: 700, minHeight: 500 }} className="bg-white rounded-lg shadow-lg border border-gray-200">
+          <div style={{ height: 500, minHeight: 500 }} className="bg-white rounded-lg shadow-lg border border-gray-200">
             <TalkingheadBlock audioTrack={remoteuser?.audioTrack} />
           </div>
         )}

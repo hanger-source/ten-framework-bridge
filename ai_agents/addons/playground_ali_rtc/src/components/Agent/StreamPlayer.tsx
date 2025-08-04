@@ -26,16 +26,24 @@ export const LocalStreamPlayer = React.forwardRef(
 
     React.useLayoutEffect(() => {
       const config = { fit }
-      if (mute) {
-        videoTrack?.stop()
-      } else {
-        if (!videoTrack?.isPlaying) {
-          videoTrack?.play(vidDiv.current!, config)
+
+      if (videoTrack && vidDiv.current) {
+        if (mute) {
+          videoTrack.stop()
+        } else {
+          // 如果轨道没有在播放，则开始播放
+          if (!videoTrack.isPlaying) {
+            console.log("[LocalStreamPlayer] Starting video playback");
+            videoTrack.play(vidDiv.current!, config)
+          }
         }
       }
 
       return () => {
-        videoTrack?.stop()
+        if (videoTrack) {
+          console.log("[LocalStreamPlayer] Stopping video playback");
+          videoTrack.stop()
+        }
       }
     }, [videoTrack, fit, mute])
 

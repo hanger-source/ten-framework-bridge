@@ -28,12 +28,8 @@ export interface AliRtcEvents {
     remoteUserChanged: (user: IAliRtcUser) => void
     localTracksChanged: (tracks: IAliUserTracks) => void
     networkQuality: (quality: {
-        uplinkQuality: number;
-        downlinkQuality: number;
-        localAudio?: LocalAudioStates;
-        localVideo?: LocalVideoStates;
-        remoteAudios: RemoteAudioStates[];
-        remoteVideos: RemoteVideoStates[];
+        uplinkQuality: NetworkQuality;
+        downlinkQuality: NetworkQuality;
     }) => void
     textChanged: (text: IChatItem) => void
     error: (error: { code: string; message: string; originalError: DingRTCError; rtcType: 'ali' }) => void

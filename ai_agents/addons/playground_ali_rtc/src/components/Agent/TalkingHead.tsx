@@ -60,8 +60,8 @@ export default function Talkinghead({ audioTrack }: { audioTrack?: MicrophoneAud
 
     let app: Application;
     try {
-      const width = containerRef.current.offsetWidth || 600;
-      const height = containerRef.current.offsetHeight || 600;
+      const width = containerRef.current.offsetWidth || 500;
+      const height = containerRef.current.offsetHeight || 500;
 
       // 根据支持情况选择渲染器
       const rendererOptions = isWebGLAvailable()
@@ -111,7 +111,7 @@ export default function Talkinghead({ audioTrack }: { audioTrack?: MicrophoneAud
             // anchor(0.5, 0)，头部对齐顶部，y=20
             model.anchor.set(0.5, 0);
             model.x = width / 2;
-            model.y = 20;
+            model.y = -80;
           }
           fitModel();
           if (typeof window !== 'undefined') {

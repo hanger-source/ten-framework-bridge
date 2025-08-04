@@ -128,22 +128,63 @@ const DEFAULT_ITEM: SelectItem = {
 
 const CamSelect = (props: { videoTrack?: CameraVideoTrack }) => {
   const { videoTrack } = props
-  const [items, setItems] = React.useState<SelectItem[]>([DEFAULT_ITEM])
-  const [value, setValue] = React.useState("default")
+  const [items, setItems] = React.useState<SelectItem[]>([])
+  const [value, setValue] = React.useState("")
+
+  // 获取系统默认摄像头设备ID
+  const getSystemDefaultCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      const videoTrack = stream.getVideoTracks()[0];
+      const defaultDeviceId = videoTrack.getSettings().deviceId;
+
+      // 停止stream
+      stream.getTracks().forEach(track => track.stop());
+
+      return defaultDeviceId;
+    } catch (error) {
+      console.warn("Failed to get system default camera:", error);
+      return null;
+    }
+  };
 
   // 组件挂载时获取设备列表
   React.useEffect(() => {
     console.log("CamSelect: component mounted");
-    aliRtcManager.getCameras().then((arr) => {
 
-      const filteredArr = arr.filter(item => item.deviceId && item.deviceId.trim() !== "" && item.deviceId !== "default");
-      const newItems = [DEFAULT_ITEM, ...filteredArr.map((item) => ({
-        value: item.deviceId,
-        label: item.label,
-        deviceId: item.deviceId,
-      }))];
+    // 并行获取设备列表和系统默认设备
+    Promise.all([
+      aliRtcManager.getCameras(),
+      getSystemDefaultCamera()
+    ]).then(([arr, systemDefaultDeviceId]) => {
+      // 过滤掉空设备ID的设备
+      const filteredArr = arr.filter(item => item.deviceId && item.deviceId.trim() !== "");
+
+      // 构建设备列表，避免重复
+      const newItems: SelectItem[] = [];
+      const seenDeviceIds = new Set<string>();
+
+      // 先添加所有设备
+      filteredArr.forEach((item) => {
+        if (!seenDeviceIds.has(item.deviceId)) {
+          seenDeviceIds.add(item.deviceId);
+          newItems.push({
+            value: item.deviceId,
+            label: item.label,
+            deviceId: item.deviceId,
+          });
+        }
+      });
 
       setItems(newItems);
+
+      // 设置默认选中项为系统默认设备
+      if (newItems.length > 0) {
+        const defaultItem = newItems.find(item =>
+          systemDefaultDeviceId && item.deviceId === systemDefaultDeviceId
+        );
+        setValue(defaultItem ? defaultItem.value : newItems[0].value);
+      }
     }).catch((error) => {
       console.error("CamSelect: failed to get initial cameras", error);
     });
@@ -152,25 +193,11 @@ const CamSelect = (props: { videoTrack?: CameraVideoTrack }) => {
   // track 变化时设置选中项
   React.useEffect(() => {
     console.log("CamSelect: videoTrack changed", videoTrack);
-    if (videoTrack) {
-      // 尝试获取track的设备信息，如果失败则使用默认值
-      try {
-        // 检查是否有getTrackLabel方法（AgoraRTC风格）
-        if (typeof videoTrack.getTrackLabel === 'function') {
-          const label = videoTrack.getTrackLabel();
-          console.log("CamSelect: track label", label);
-          setValue(label);
-        } else {
-          // DingRTC可能没有这个方法，使用默认值
-          console.log("CamSelect: no getTrackLabel method, using default");
-          setValue("default");
-        }
-      } catch (error) {
-        console.warn("CamSelect: failed to get track label", error);
-        setValue("default");
-      }
+    if (videoTrack && items.length > 0) {
+      // 如果有设备列表，选中第一个设备（系统默认设备）
+      setValue(items[0]?.value || "");
     }
-  }, [videoTrack]);
+  }, [videoTrack, items]);
 
   const onChange = async (value: string) => {
     console.log("CamSelect: onChange", value);

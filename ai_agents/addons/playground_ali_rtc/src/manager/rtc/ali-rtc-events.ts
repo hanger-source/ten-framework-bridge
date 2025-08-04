@@ -1,4 +1,4 @@
-import { DingRTCClient } from "dingrtc";
+import { DingRTCClient, NetworkQuality } from "dingrtc";
 import { DingRTCError } from "@dingrtc/shared";
 import { AGEventEmitter } from "../events";
 import { AliRtcEvents } from "./ali-types";
@@ -40,13 +40,23 @@ export class AliRtcEventHandler {
             console.log("[Ali RTC] Connection state changed:", prevState, "->", curState);
 
             // 添加连接状态变化的浮层提示
-            if (curState === "CONNECTED" && prevState !== "CONNECTED") {
+            if (curState === "connected" && prevState !== "connected") {
                 toast.success("频道连接成功");
-            } else if (curState === "DISCONNECTED" && prevState !== "DISCONNECTED") {
+            } else if (curState === "disconnected" && prevState !== "disconnected") {
                 toast.error("频道连接断开");
-            } else if (curState === "CONNECTING") {
+            } else if (curState === "connecting") {
                 toast.info("正在连接频道...");
             }
+        });
+
+        // 监听 DingRTC 网络质量事件
+        this.client.on("network-quality", (quality: NetworkQuality) => {
+            const qualityText = this.getNetworkQualityText(quality);
+            console.log(`[Ali RTC] Network quality: ${quality} (${qualityText})`);
+            this.manager.emit("networkQuality", {
+                uplinkQuality: quality,
+                downlinkQuality: quality,
+            });
         });
 
         // 错误事件统一处理
@@ -54,5 +64,18 @@ export class AliRtcEventHandler {
             const unifiedError = ErrorAdapter.adaptError(error);
             this.manager.emit('error', unifiedError);
         });
+    }
+
+    private getNetworkQualityText(quality: NetworkQuality): string {
+        switch (quality) {
+            case 0: return "UNKNOWN";
+            case 1: return "EXCELLENT";
+            case 2: return "GOOD";
+            case 3: return "NORMAL";
+            case 4: return "POOR";
+            case 5: return "BAD";
+            case 6: return "DISCONNECTED";
+            default: return "UNKNOWN";
+        }
     }
 }

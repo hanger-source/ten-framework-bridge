@@ -209,7 +209,7 @@ export class AliRtcManager extends AGEventEmitter<AliRtcEvents> {
             await this.client.leave();
             this._joined = false;
             this._resetData();
-            toast.success("已退出频道（音频轨道保持活跃）");
+            toast.success("已退出频道（摄像头和音频轨道保持活跃）");
         } catch (err) {
             console.error("Failed to destroy RTC manager", err);
             toast.error("退出频道失败");
