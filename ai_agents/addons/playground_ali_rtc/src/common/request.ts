@@ -18,16 +18,18 @@ interface StartRequestConfig {
 interface GenAliDataConfig {
   userId: string | number
   channel: string
+  userName?: string
 }
 
 export const apiGenAliData = async (config: GenAliDataConfig) => {
   // Token 生成 API
   const url = `/api/token/generate`
-  const { userId, channel } = config
+  const { userId, channel, userName } = config
   const data = {
     request_id: genUUID(),
     uid: userId,
-    channel_name: channel
+    channel_name: channel,
+    user_name: userName || `user_${userId}`
   }
   let resp: any = await axios.post(url, data)
   resp = resp.data || {}

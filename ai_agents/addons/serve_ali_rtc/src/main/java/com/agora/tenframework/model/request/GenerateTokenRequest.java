@@ -11,6 +11,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  * 1. 请求标识管理 - 通过requestId跟踪请求状态
  * 2. 频道信息管理 - 指定要生成Token的频道名称
  * 3. 用户标识管理 - 指定用户的唯一标识符
+ * 4. 用户名称管理 - 指定用户的显示名称
  *
  * 使用场景：
  * - RTC Token生成 - 为实时音视频通话生成Token
@@ -47,6 +48,13 @@ public class GenerateTokenRequest {
     @JsonProperty("uid")
     private Long uid;
 
+    /**
+     * 用户名称
+     * 指定用户的显示名称，用于日志记录和调试
+     */
+    @JsonProperty("user_name")
+    private String userName;
+
     // ==================== Getter和Setter方法 ====================
     public String getRequestId() {
         return requestId;
@@ -70,5 +78,13 @@ public class GenerateTokenRequest {
 
     public void setUid(Long uid) {
         this.uid = uid;
+    }
+
+    public String getUserName() {
+        return userName;
+    }
+
+    public void setUserName(String userName) {
+        this.userName = userName;
     }
 }

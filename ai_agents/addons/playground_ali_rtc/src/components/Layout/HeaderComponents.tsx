@@ -13,7 +13,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
-import { InfoIcon, PaletteIcon } from "@/components/Icon"
+import { InfoIcon, PaletteIcon, NetworkIconByLevel } from "@/components/Icon"
 import {
   useAppSelector,
   useAppDispatch,
@@ -103,7 +103,7 @@ export function HeaderActions() {
         <span className="sr-only">GitHub</span>
       </NextLink> */}
       <ThemePalettePopover />
-      <Suspense fallback={<div>Loading...</div>}>
+      <Suspense fallback={<NetworkIconByLevel level={0} className="h-4 w-4 md:h-5 md:w-5" />}>
         <NetworkIndicator />
       </Suspense>
     </div>

@@ -84,19 +84,17 @@ export class AliRtcManager extends AGEventEmitter<AliRtcEvents> {
                 finalToken = agentSettings.token;
             } else {
                 // 没有token，调用generate API
-                try {
-                    const res = await apiGenAliData({ channel, userId });
-                    const { code, data } = res;
-                    if (code !== "0") {
-                        throw new Error("Failed to get Ali RTC token");
-                    }
-                    appId = data.appId;
-                    finalToken = data.token;
-                } catch (error: any) {
-                    console.error("Token generation failed:", error);
-                    toast.error("获取频道Token失败");
-                    throw new Error(`Token generation failed: ${error?.message || 'Unknown error'}`);
+                const data = await apiGenAliData({
+                    userId: userId,
+                    channel: channel,
+                    userName: `user_${userId}`
+                });
+                const { code, data: tokenData } = data;
+                if (code !== "0") {
+                    throw new Error("Failed to get Ali RTC token");
                 }
+                appId = tokenData.appId;
+                finalToken = tokenData.token;
             }
 
             // 验证 App ID 不为空
@@ -127,19 +125,46 @@ export class AliRtcManager extends AGEventEmitter<AliRtcEvents> {
             });
 
             try {
-                await this.client?.join({
+                const joinResult = await this.client?.join({
                     appId: appId,
                     token: finalToken,
                     uid: String(userId),
                     channel: channel,
                     userName: `user_${userId}`,
                 });
-                console.log("成功加入频道");
+                console.log("✅ 成功加入频道", {
+                    channel,
+                    userId,
+                    appId: appId.substring(0, 20) + "...",
+                    token: finalToken.substring(0, 50) + "...",
+                    tokenLength: finalToken.length,
+                    existingRemoteUsers: joinResult?.remoteUsers?.length || 0,
+                });
                 this._joined = true;
                 toast.success("成功加入频道");
 
                 // 启动网络质量监控
                 this.networkMonitor.startNetworkQualityMonitoring();
+
+                // 通知已有的远程用户
+                if (joinResult?.remoteUsers) {
+                    joinResult.remoteUsers.forEach(user => {
+                        console.log("[Ali RTC] Found existing remote user:", {
+                            userId: user.userId,
+                            hasAudio: !!user.audioTrack,
+                            hasVideo: !!user.videoTrack,
+                            audioTrackType: user.audioTrack?.constructor.name,
+                            videoTrackType: user.videoTrack?.constructor.name
+                        });
+
+                        this.emit("remoteUserChanged",
+                            user.userId,
+                            user.userName,
+                            user.audioTrack,
+                            user.videoTrack
+                        );
+                    });
+                }
             } catch (error: any) {
                 console.error("加入频道失败:", error);
                 console.error("错误详情:", {
@@ -271,6 +296,13 @@ export class AliRtcManager extends AGEventEmitter<AliRtcEvents> {
     getLocalTracks(): IAliUserTracks {
         return this.deviceManager.getLocalTracks();
     }
+
+    // 获取所有远程用户
+    getRemoteUsers() {
+        return this.client.remoteUsers;
+    }
+
+
 }
 
 // 懒加载单例模式，只在客户端执行

@@ -169,9 +169,9 @@ const CamSelect = (props: { videoTrack?: CameraVideoTrack }) => {
         if (!seenDeviceIds.has(item.deviceId)) {
           seenDeviceIds.add(item.deviceId);
           newItems.push({
-            value: item.deviceId,
-            label: item.label,
-            deviceId: item.deviceId,
+        value: item.deviceId,
+        label: item.label,
+        deviceId: item.deviceId,
           });
         }
       });

@@ -20,19 +20,20 @@ import { IChatItem } from "@/types"
 
 export interface IAliRtcUser {
     userId: string
+    userName?: string
     audioTrack?: RemoteAudioTrack
     videoTrack?: RemoteVideoTrack
 }
 
 export interface AliRtcEvents {
-    remoteUserChanged: (user: IAliRtcUser) => void
-    localTracksChanged: (tracks: IAliUserTracks) => void
+    localTracksChanged: (tracks: IAliUserTracks) => void;
+    remoteUserChanged: (userId: string, userName?: string, audioTrack?: RemoteAudioTrack, videoTrack?: RemoteVideoTrack) => void;
+    remoteUserLeft: (userId: string) => void;
     networkQuality: (quality: {
         uplinkQuality: NetworkQuality;
         downlinkQuality: NetworkQuality;
-    }) => void
-    textChanged: (text: IChatItem) => void
-    error: (error: { code: string; message: string; originalError: DingRTCError; rtcType: 'ali' }) => void
+    }) => void;
+    connectionStateChanged: (state: string) => void;
 }
 
 export interface IAliUserTracks {

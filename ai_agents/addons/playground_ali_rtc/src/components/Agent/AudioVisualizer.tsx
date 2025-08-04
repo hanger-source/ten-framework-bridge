@@ -1,4 +1,6 @@
 import * as React from "react"
+import { useMultibandTrackVolume } from "@/common/hooks"
+import { MicrophoneAudioTrack, RemoteAudioTrack } from "dingrtc"
 
 export interface AudioVisualizerProps {
   type: "agent" | "user"
@@ -51,6 +53,31 @@ export default function AudioVisualizer(props: AudioVisualizerProps) {
 
         return <span key={index} style={style} />
       })}
+    </div>
+  )
+}
+
+// 包装组件，接受 audioTrack 并生成频率数据
+export function AudioVisualizerWrapper({
+  audioTrack,
+  type = "user"
+}: {
+  audioTrack?: MicrophoneAudioTrack | RemoteAudioTrack
+  type?: "agent" | "user"
+}) {
+  const frequencies = useMultibandTrackVolume(audioTrack, 8, 100, 600)
+
+  return (
+    <div className="flex items-center justify-center h-full">
+      <AudioVisualizer
+        type={type}
+        frequencies={frequencies}
+        gap={2}
+        barWidth={4}
+        minBarHeight={2}
+        maxBarHeight={50}
+        borderRadius={2}
+      />
     </div>
   )
 }

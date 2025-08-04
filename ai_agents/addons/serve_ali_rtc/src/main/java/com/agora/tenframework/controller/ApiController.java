@@ -400,11 +400,11 @@ public class ApiController {
      */
     @PostMapping("/token/generate")
     public ResponseEntity<ApiResponse<Map<String, Object>>> generateToken(@RequestBody GenerateTokenRequest request) {
-        logger.info("生成Token请求开始 - 请求: {}", request);
+        logger.info("生成Token请求开始 - 请求: {}, userName: {}", request, request.getUserName());
 
         if (request.getChannelName() == null || request.getChannelName().trim().isEmpty()) {
-            logger.error("生成Token失败 - 频道名为空, channelName: {}, requestId: {}",
-                    request.getChannelName(), request.getRequestId());
+            logger.error("生成Token失败 - 频道名为空, channelName: {}, requestId: {}, userName: {}",
+                    request.getChannelName(), request.getRequestId(), request.getUserName());
             return ResponseEntity.ok()
                     .body(ApiResponse.error("10004", "频道名为空", request.getRequestId()));
         }
@@ -417,10 +417,11 @@ public class ApiController {
             response.put("channel_name", request.getChannelName());
             response.put("uid", request.getUid());
 
-            logger.info("生成Token请求完成 - requestId: {}", request.getRequestId());
+            logger.info("生成Token请求完成 - requestId: {}, userName: {}", request.getRequestId(), request.getUserName());
             return ResponseEntity.ok(ApiResponse.success(response, request.getRequestId()));
         } catch (Exception e) {
-            logger.error("生成Token失败 - requestId: {}, error: {}", request.getRequestId(), e.getMessage());
+            logger.error("生成Token失败 - requestId: {}, userName: {}, error: {}",
+                    request.getRequestId(), request.getUserName(), e.getMessage());
             return ResponseEntity.ok()
                     .body(ApiResponse.error("10005", "生成Token失败", request.getRequestId()));
         }

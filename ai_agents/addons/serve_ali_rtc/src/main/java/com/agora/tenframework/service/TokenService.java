@@ -45,8 +45,9 @@ public class TokenService {
         try {
             String channelId = request.getChannelName();
             Long userId = request.getUid() != null ? request.getUid() : 0L;
+            String userName = request.getUserName();
 
-            logger.info("开始生成Token - channelName: {}, uid: {}", channelId, userId);
+            logger.info("开始生成Token - channelName: {}, uid: {}, userName: {}", channelId, userId, userName);
 
             // 验证阿里云RTC配置
             if (appId == null || appId.isEmpty()) {
@@ -82,9 +83,9 @@ public class TokenService {
             final String appTokenStr = appToken.buildTokenString();
 
             logger.info(
-                    "Token生成成功 - \nappId: {} \nappKey: {} \nchannelId: {} \nuserId: {} \ntimestamp: {} \ntoken: {} \noptions: {}",
+                    "Token生成成功 - \nappId: {} \nappKey: {} \nchannelId: {} \nuserId: {} \nuserName: {} \ntimestamp: {} \ntoken: {} \noptions: {}",
                     appId, appKey,
-                    channelId, userId, expiredTs, appTokenStr, engineOptions);
+                    channelId, userId, userName, expiredTs, appTokenStr, engineOptions);
             return appTokenStr;
         } catch (Throwable e) {
             logger.error("Token生成失败 - error: {}", e.getMessage());
