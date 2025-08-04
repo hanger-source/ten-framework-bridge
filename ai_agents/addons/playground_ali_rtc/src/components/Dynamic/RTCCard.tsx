@@ -19,9 +19,7 @@ import Avatar from "@/components/Agent/AvatarTrulience"
 import MicrophoneBlock from "@/components/Agent/Microphone"
 import VideoBlock from "@/components/Agent/Camera"
 import ChatCard from "@/components/Chat/ChatCard"
-import TalkingheadBlock from "@/components/Agent/TalkingHead"
-import { RemoteStreamPlayer } from "@/components/Agent/StreamPlayer"
-import { AudioVisualizerWrapper } from "@/components/Agent/AudioVisualizer"
+import UserViewSelector from "@/components/Agent/UserViewSelector"
 import { useRTCUsers } from "@/hooks/useRTCUsers"
 
 let hasInit: boolean = false
@@ -38,8 +36,8 @@ export default function RTCCard(props: { className?: string }) {
   const [screenTrack, setScreenTrack] = React.useState<LocalVideoTrack>()
   const [videoSourceType, setVideoSourceType] = React.useState<VideoSourceType>(VideoSourceType.CAMERA)
   const [isConnecting, setIsConnecting] = React.useState<boolean>(false)
-    const [audioTrackCreated, setAudioTrackCreated] = React.useState<boolean>(false)
-  const useTrulienceAvatar = trulienceSettings.enabled
+  const [audioTrackCreated, setAudioTrackCreated] = React.useState<boolean>(false)
+      const useTrulienceAvatar = trulienceSettings.enabled
   const avatarInLargeWindow = trulienceSettings.avatarDesktopLargeWindow;
 
   // 使用 RTC 用户管理 Hook
@@ -279,7 +277,7 @@ export default function RTCCard(props: { className?: string }) {
       </div>
 
       {/* Scrollable top region (Remote Video or Avatar) */}
-      <div className="flex-1 min-h-0 z-10">
+      <div className="flex-1 min-h-0 z-10" style={{ maxHeight: 600 }}>
         {useTrulienceAvatar ? (
           !avatarInLargeWindow ? (
             <div className="h-60 w-full p-1">
@@ -293,71 +291,18 @@ export default function RTCCard(props: { className?: string }) {
           )
         ) : (
           // 根据是否有远程视频来决定显示内容
-          <div style={{ height: 500, minHeight: 500 }} className="bg-white rounded-lg shadow-lg border border-gray-200">
-            {/* 优先检查 remoteUsers 中是否有用户有视频轨道 */}
+          <div className="bg-white rounded-lg shadow-lg border border-gray-200 h-full">
+            {/* 查找第一个有视频轨道的远程用户，或者使用当前远程用户 */}
             {(() => {
-              console.log("[RTCCard] Video preview logic:", {
-                isConnected,
-                remoteUsersCount: remoteUsers.length,
-                remoteUsers: remoteUsers.map(u => ({
-                  userId: u.userId,
-                  hasVideo: !!u.videoTrack,
-                  hasAudio: !!u.audioTrack,
-                  videoTrackType: u.videoTrack?.constructor.name,
-                  audioTrackType: u.audioTrack?.constructor.name
-                })),
-                remoteuser: remoteuser ? {
-                  userId: remoteuser.userId,
-                  hasVideo: !!remoteuser.videoTrack,
-                  hasAudio: !!remoteuser.audioTrack
-                } : null
-              });
-
-              // 如果没有连接，显示空状态
-              if (!isConnected) {
-                console.log("[RTCCard] Not connected, showing AudioVisualizer");
-                return <AudioVisualizerWrapper audioTrack={undefined} type="user" />;
-              }
-
-              // 查找第一个有视频轨道的远程用户
               const userWithVideo = remoteUsers.find(user => user.videoTrack && user.videoTrack.isPlaying);
               const currentUser: IAliRtcUser | undefined = userWithVideo || remoteuser || remoteUsers[0];
 
-              if (currentUser) {
-                console.log("[RTCCard] Current user details:", {
-                  userId: currentUser.userId,
-                  startsWithAi: currentUser.userId?.startsWith('ai_'),
-                  hasVideoTrack: !!currentUser.videoTrack,
-                  hasAudioTrack: !!currentUser.audioTrack,
-                  videoTrackPlaying: currentUser.videoTrack?.isPlaying
-                });
-
-                // 检查用户名是否以 "ai_" 开头
-                if (currentUser.userId && currentUser.userId.startsWith('ai_')) {
-                  console.log("[RTCCard] AI user detected:", currentUser.userId, "showing Talkinghead");
-                  return <TalkingheadBlock audioTrack={currentUser.audioTrack || undefined} />;
-                } else {
-                  // 非AI用户，检查是否有视频
-                  if (currentUser.videoTrack && currentUser.videoTrack.isPlaying) {
-                    console.log("[RTCCard] Non-AI user with video:", currentUser.userId);
-                    return (
-                      <RemoteStreamPlayer
-                        videoTrack={currentUser.videoTrack}
-                        audioTrack={currentUser.audioTrack}
-                        fit="cover"
-                      />
-                    );
-                  } else {
-                    // 非AI用户但没有视频，显示音频可视化
-                    console.log("[RTCCard] Non-AI user without video:", currentUser.userId, "showing AudioVisualizer");
-                    return <AudioVisualizerWrapper audioTrack={currentUser.audioTrack || undefined} type="user" />;
-                  }
-                }
-              }
-
-              // 没有远程用户时显示空状态
-              console.log("[RTCCard] No remote users, showing AudioVisualizer");
-              return <AudioVisualizerWrapper audioTrack={undefined} type="user" />;
+              return (
+                <UserViewSelector
+                  currentUser={currentUser}
+                  isConnected={isConnected}
+                />
+              );
             })()}
           </div>
         )}
