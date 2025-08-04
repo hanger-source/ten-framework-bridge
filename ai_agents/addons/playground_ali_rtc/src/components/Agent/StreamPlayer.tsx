@@ -122,7 +122,7 @@ export const RemoteStreamPlayer = React.forwardRef(
 
     return (
       <div
-        className="relative h-full w-full overflow-hidden"
+        className="relative h-full w-full overflow-hidden bg-black"
         style={style}
         ref={vidDiv}
         onClick={onClick}

@@ -15,7 +15,9 @@ export function useRTCUsers(useTrulienceAvatar: boolean = false) {
             hasVideoTrack: !!videoTrack,
             hasAudioTrack: !!audioTrack,
             videoTrackType: videoTrack?.constructor.name,
-            audioTrackType: audioTrack?.constructor.name
+            audioTrackType: audioTrack?.constructor.name,
+            videoTrackPlaying: videoTrack?.isPlaying,
+            audioTrackPlaying: audioTrack?.isPlaying
         })
 
         // 处理 Trulience Avatar 逻辑
@@ -44,8 +46,8 @@ export function useRTCUsers(useTrulienceAvatar: boolean = false) {
             }
         })
 
-        // 保持向后兼容性，设置第一个有音频轨道的用户为当前远程用户
-        if (audioTrack) {
+        // 保持向后兼容性，设置第一个有音频或视频轨道的用户为当前远程用户
+        if (audioTrack || videoTrack) {
             setCurrentRemoteUser({ userId, userName, audioTrack, videoTrack })
         }
     }, [])

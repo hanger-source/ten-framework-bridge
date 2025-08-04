@@ -245,15 +245,7 @@ export default function RTCCard(props: { className?: string }) {
               频道: {channel} | 音频轨道: {audioTrackCreated ? '已创建' : '未创建'}
               <br />
               用户: {options.userName || 'Unknown'}({userId})
-              {remoteuser && (
-                <>
-                  <br />
-                  远程用户: {remoteuser.userName || 'Unknown'}({remoteuser.userId}) |
-                  视频: {remoteuser.videoTrack && remoteuser.videoTrack.isPlaying ? '有' : '无'} |
-                  音频: {remoteuser.audioTrack && remoteuser.audioTrack.isPlaying ? '有' : '无'}
-                </>
-              )}
-              {/* 支持显示多个远程用户 */}
+              {/* 显示远程用户列表 */}
               {remoteUsers && remoteUsers.length > 0 && (
                 <>
                   <br />
@@ -293,9 +285,27 @@ export default function RTCCard(props: { className?: string }) {
           // 根据是否有远程视频来决定显示内容
           <div className="bg-white rounded-lg shadow-lg border border-gray-200 h-full">
             {/* 查找第一个有视频轨道的远程用户，或者使用当前远程用户 */}
-            {(() => {
-              const userWithVideo = remoteUsers.find(user => user.videoTrack && user.videoTrack.isPlaying);
-              const currentUser: IAliRtcUser | undefined = userWithVideo || remoteuser || remoteUsers[0];
+                        {(() => {
+              // 优先选择有视频轨道的用户，然后是有音频轨道的用户
+              const userWithVideo = remoteUsers.find(user => user.videoTrack);
+              const userWithAudio = remoteUsers.find(user => user.audioTrack && user.audioTrack.isPlaying);
+              const currentUser: IAliRtcUser | undefined = userWithVideo || userWithAudio || remoteuser || remoteUsers[0];
+
+              console.log("[RTCCard] User selection:", {
+                remoteUsersCount: remoteUsers.length,
+                remoteUsers: remoteUsers.map(u => ({
+                  userName: u.userName,
+                  hasVideo: !!u.videoTrack,
+                  hasAudio: !!u.audioTrack,
+                  videoPlaying: u.videoTrack?.isPlaying,
+                  audioPlaying: u.audioTrack?.isPlaying
+                })),
+                userWithVideo: userWithVideo?.userName,
+                userWithAudio: userWithAudio?.userName,
+                selectedUser: currentUser?.userName,
+                selectedUserHasVideo: !!currentUser?.videoTrack,
+                selectedUserHasAudio: !!currentUser?.audioTrack
+              });
 
               return (
                 <UserViewSelector
