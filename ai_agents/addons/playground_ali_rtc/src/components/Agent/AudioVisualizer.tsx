@@ -67,6 +67,26 @@ export function AudioVisualizerWrapper({
 }) {
   const frequencies = useMultibandTrackVolume(audioTrack, 8, 100, 600)
 
+  // 检查是否有音频轨道
+  const hasAudioTrack = audioTrack && audioTrack.getMediaStreamTrack();
+
+  // 如果没有音频轨道，显示友好的空状态
+  if (!hasAudioTrack) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="flex flex-col items-center space-y-3 text-gray-400">
+          <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center">
+            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+            </svg>
+          </div>
+          <div className="text-sm font-medium">等待音频输入</div>
+          <div className="text-xs text-gray-300">连接用户后显示音频可视化</div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex items-center justify-center h-full">
       <AudioVisualizer
