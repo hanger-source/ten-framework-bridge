@@ -11,7 +11,7 @@ export function useRTCUsers(useTrulienceAvatar: boolean = false) {
     const onRemoteUserChanged = useCallback((userId: string, userName?: string, audioTrack?: RemoteAudioTrack, videoTrack?: RemoteVideoTrack) => {
         console.log("[useRTCUsers] onRemoteUserChanged", {
             userId,
-            userName,
+            userName: userName || 'Unknown',
             hasVideoTrack: !!videoTrack,
             hasAudioTrack: !!audioTrack,
             videoTrackType: videoTrack?.constructor.name,

@@ -15,9 +15,10 @@ export class AliRtcEventHandler {
     }
 
     setupEventListeners() {
-        this.client.on("user-joined", (user: { userId: string }) => {
+        this.client.on("user-joined", (user: { userId: string; userName?: string }) => {
             console.log("[Ali RTC] User joined channel:", user);
-            this.manager.emit("remoteUserChanged", user.userId, undefined, undefined, undefined);
+            // 用户加入时，发送事件表示用户在线，传递 userName 但轨道信息为 undefined
+            this.manager.emit("remoteUserChanged", user.userId, user.userName, undefined, undefined);
         });
 
         this.client.on("user-left", (user: { userId: string }) => {
