@@ -1,0 +1,48 @@
+server:
+  port: 7070
+
+spring:
+  application:
+    name: ten-framework-server
+
+  # Multipart file upload configuration
+  servlet:
+    multipart:
+      max-file-size: 100MB
+      max-request-size: 100MB
+
+# TEN Framework Server Configuration
+ten:
+  server:
+    log-path: ${LOG_PATH:/tmp}
+    port: ${SERVER_PORT:8080}
+    workers-max: ${WORKERS_MAX:10}
+    worker-quit-timeout-seconds: ${WORKER_QUIT_TIMEOUT_SECONDES:60}
+    log2-stdout: ${LOG_STDOUT:false}
+
+# 阿里云RTC配置
+ali:
+  app:
+    id: ${ALI_APP_ID:}
+    key: ${ALI_APP_KEY:}
+
+# Logging configuration
+logging:
+  level:
+    com.agora.tenframework: INFO
+    org.springframework.web: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: ${LOG_PATH:/tmp}/ten-framework-server.log
+
+# Management endpoints
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always

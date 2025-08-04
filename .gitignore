@@ -146,3 +146,5 @@ package-lock.json
 /ai_agents/server/core
 /rtc_demo/AliRTCSample/
 /rtc_demo/agora_rtc_sample/
+ai_agents/addons/playground_ali_rtc/node_modules
+ai_agents/addons/playground_ali_rtc/dist
