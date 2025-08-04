@@ -185,9 +185,13 @@ export class AliRtcManager extends AGEventEmitter<AliRtcEvents> {
     }
 
     async publish() {
-        const tracks = [this.deviceManager.getLocalTracks().videoTrack, this.deviceManager.getLocalTracks().audioTrack].filter(Boolean) as (CameraVideoTrack | MicrophoneAudioTrack)[];
+        const localTracks = this.deviceManager.getLocalTracks();
+        const tracks = [localTracks.videoTrack, localTracks.audioTrack].filter(Boolean) as (CameraVideoTrack | MicrophoneAudioTrack)[];
+
         if (tracks.length > 0) {
             await this.client.publish(tracks);
+        } else {
+            console.warn("[rtc] No tracks to publish");
         }
     }
 
@@ -196,13 +200,16 @@ export class AliRtcManager extends AGEventEmitter<AliRtcEvents> {
             // 停止网络监控
             this.networkMonitor.stopNetworkQualityMonitoring();
 
-            // 关闭所有设备轨道
+            // 关闭所有设备轨道（除了音频轨道）
             this.deviceManager.closeAllTracks();
+
+            // 触发轨道变化事件，通知组件轨道状态变化
+            this.emit("localTracksChanged", this.deviceManager.getLocalTracks());
 
             await this.client.leave();
             this._joined = false;
             this._resetData();
-            toast.success("已退出频道");
+            toast.success("已退出频道（音频轨道保持活跃）");
         } catch (err) {
             console.error("Failed to destroy RTC manager", err);
             toast.error("退出频道失败");
@@ -229,6 +236,7 @@ export class AliRtcManager extends AGEventEmitter<AliRtcEvents> {
         this.token = null;
         this.userId = null;
         this.messageHandler.clearCache();
+        // 不清除音频轨道，保持音轨图工作
     }
 
     // 设备管理方法 - 委托给设备管理器

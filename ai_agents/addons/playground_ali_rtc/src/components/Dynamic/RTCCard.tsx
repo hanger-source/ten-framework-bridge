@@ -37,6 +37,7 @@ export default function RTCCard(props: { className?: string }) {
   const [videoSourceType, setVideoSourceType] = React.useState<VideoSourceType>(VideoSourceType.CAMERA)
   const [isConnected, setIsConnected] = React.useState<boolean>(false)
   const [isConnecting, setIsConnecting] = React.useState<boolean>(false)
+  const [audioTrackCreated, setAudioTrackCreated] = React.useState<boolean>(false)
   const useTrulienceAvatar = trulienceSettings.enabled
   const avatarInLargeWindow = trulienceSettings.avatarDesktopLargeWindow;
 
@@ -44,20 +45,18 @@ export default function RTCCard(props: { className?: string }) {
   const { agentSettings } = useAgentSettings();
 
   React.useEffect(() => {
-    if (!options.channel) {
-      return
-    }
-    // 移除自动初始化，改为手动控制
-
-        // 在组件挂载时创建音轨，这样音轨图就能正常工作
+    // 在组件挂载时创建音轨，这样音轨图就能正常工作
     const initAudioTrack = async () => {
       try {
-        console.log("[rtc] Initializing audio track on component mount")
-
         // 先设置事件监听器，确保不会错过事件
         aliRtcManager.on("localTracksChanged", onLocalTracksChanged)
 
-        await aliRtcManager.createMicrophoneAudioTrack()
+        // 检查是否已有音频轨道
+        const localTracks = aliRtcManager.getLocalTracks();
+        if (!localTracks.audioTrack) {
+          await aliRtcManager.createMicrophoneAudioTrack()
+        }
+        setAudioTrackCreated(true)
       } catch (error) {
         console.error("[rtc] Failed to create audio track on mount:", error)
       }
@@ -69,7 +68,7 @@ export default function RTCCard(props: { className?: string }) {
     return () => {
       aliRtcManager.off("localTracksChanged", onLocalTracksChanged)
     }
-  }, [options.channel])
+  }, []) // 移除 options.channel 依赖，确保音频轨道始终创建
 
   const init = async () => {
     if (isConnecting || isConnected) {
@@ -83,13 +82,24 @@ export default function RTCCard(props: { className?: string }) {
       aliRtcManager.on("localTracksChanged", onLocalTracksChanged)
       aliRtcManager.on("textChanged", onTextChanged)
       aliRtcManager.on("remoteUserChanged", onRemoteUserChanged)
+
+      // 检查是否已有音频轨道，如果没有则创建
+      const localTracks = aliRtcManager.getLocalTracks();
+      if (!localTracks.audioTrack) {
+        await aliRtcManager.createMicrophoneAudioTrack()
+        setAudioTrackCreated(true)
+      } else {
+        setAudioTrackCreated(true)
+      }
+
       await aliRtcManager.createCameraTracks()
-      await aliRtcManager.createMicrophoneAudioTrack()
+
       await aliRtcManager.join({
         channel,
         userId,
         agentSettings,
       })
+
       dispatch(
         setOptions({
           ...options,
@@ -97,13 +107,15 @@ export default function RTCCard(props: { className?: string }) {
           token: aliRtcManager.token ?? "",
         }),
       )
+
       await aliRtcManager.publish()
+
       dispatch(setRoomConnected(true))
       setIsConnected(true)
       hasInit = true
-      console.log("[rtc] 成功加入房间")
+      console.log("[rtc] 成功加入频道")
     } catch (error) {
-      console.error("[rtc] 加入房间失败:", error)
+      console.error("[rtc] 加入频道失败:", error)
       setIsConnected(false)
       hasInit = false
     } finally {
@@ -121,13 +133,19 @@ export default function RTCCard(props: { className?: string }) {
       aliRtcManager.off("textChanged", onTextChanged)
       aliRtcManager.off("localTracksChanged", onLocalTracksChanged)
       aliRtcManager.off("remoteUserChanged", onRemoteUserChanged)
+
+      // 清理组件状态，但保持音频轨道用于音轨图
+      setVideoTrack(undefined)
+      setScreenTrack(undefined)
+      setRemoteUser(undefined)
+
       await aliRtcManager.destroy()
       dispatch(setRoomConnected(false))
       setIsConnected(false)
       hasInit = false
-      console.log("[rtc] 成功退出房间")
+      console.log("[rtc] 成功退出频道")
     } catch (error) {
-      console.error("[rtc] 退出房间失败:", error)
+      console.error("[rtc] 退出频道失败:", error)
     }
   }
 
@@ -143,13 +161,14 @@ export default function RTCCard(props: { className?: string }) {
   }
 
   const onLocalTracksChanged = (tracks: IAliUserTracks) => {
-    console.log("[rtc] onLocalTracksChanged", tracks)
     const { videoTrack, audioTrack, screenTrack } = tracks
     setVideoTrack(videoTrack)
     setScreenTrack(screenTrack)
     if (audioTrack) {
       setAudioTrack(audioTrack)
+      setAudioTrackCreated(true)
     }
+    // 不清除音频轨道，保持音轨图工作
   }
 
   const onTextChanged = (text: IChatItem) => {
@@ -168,13 +187,15 @@ export default function RTCCard(props: { className?: string }) {
     setVideoSourceType(value)
   }
 
+
+
   return (
     <div className={cn("flex h-full flex-col min-h-0 bg-gray-50", className)}>
-      {/* 房间控制按钮 */}
+      {/* 频道控制按钮 */}
       <div className="w-full px-2 py-2 bg-white rounded-lg shadow-sm border border-gray-200 mb-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
-            <span className="text-sm font-medium text-gray-700">房间状态:</span>
+            <span className="text-sm font-medium text-gray-700">频道状态:</span>
             <span className={`px-2 py-1 text-xs rounded-full ${
               isConnected
                 ? 'bg-green-100 text-green-800'
@@ -193,7 +214,7 @@ export default function RTCCard(props: { className?: string }) {
                 disabled={!channel || isConnecting}
                 className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-sm font-medium"
               >
-                加入房间
+                加入频道
               </button>
             ) : (
               <button
@@ -201,17 +222,23 @@ export default function RTCCard(props: { className?: string }) {
                 disabled={isConnecting}
                 className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-sm font-medium"
               >
-                退出房间
+                退出频道
               </button>
             )}
           </div>
         </div>
 
-        {channel && (
-          <div className="mt-2 text-xs text-gray-500">
-            频道: {channel} | 用户ID: {userId}
-          </div>
-        )}
+        <div className="mt-2 text-xs text-gray-500">
+          {channel ? (
+            <>
+              频道: {channel} | 用户ID: {userId} | 音频轨道: {audioTrackCreated ? '已创建' : '未创建'}
+            </>
+          ) : (
+            <>
+              音频轨道: {audioTrackCreated ? '已创建' : '未创建'}
+            </>
+          )}
+        </div>
       </div>
 
       {/* Scrollable top region (Avatar or ChatCard or Talkinghead) */}

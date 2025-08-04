@@ -26,6 +26,8 @@ export default function MicrophoneBlock(props: {
   React.useEffect(() => {
     if (audioTrack) {
       setMediaStreamTrack(audioTrack.getMediaStreamTrack())
+    } else {
+      setMediaStreamTrack(undefined)
     }
   }, [audioTrack])
 
@@ -36,6 +38,8 @@ export default function MicrophoneBlock(props: {
   }, [audioTrack, audioMute])
 
   const subscribedVolumes = useMultibandTrackVolume(mediaStreamTrack, 20)
+
+
 
   const onClickMute = () => {
     setAudioMute(!audioMute)

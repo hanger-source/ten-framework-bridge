@@ -305,10 +305,7 @@ export class AliRtcDeviceManager {
             this.localTracks.videoTrack.close();
             this.localTracks.videoTrack = undefined;
         }
-        if (this.localTracks.audioTrack) {
-            this.localTracks.audioTrack.close();
-            this.localTracks.audioTrack = undefined;
-        }
+        // 不关闭音频轨道，保持音轨图工作
         if (this.localTracks.screenTrack) {
             this.localTracks.screenTrack.close();
             this.localTracks.screenTrack = undefined;
