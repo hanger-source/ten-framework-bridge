@@ -148,3 +148,5 @@ package-lock.json
 /rtc_demo/agora_rtc_sample/
 ai_agents/addons/playground_ali_rtc/node_modules
 ai_agents/addons/playground_ali_rtc/dist
+rtc_demo/agora_rtc_demo/API-Examples-Web
+rtc_demo/ali_rtc_demo/AliRTCSample
