@@ -11,8 +11,8 @@
         <relativePath>../pom.xml</relativePath>
     </parent>
 
-    <artifactId>ten-agent-example</artifactId>
-    <name>TEN Agent Example</name>
+    <artifactId>ten-agent</artifactId>
+    <name>ten-agent</name>
     <description>Minimal runnable example for TEN Agent</description>
 
     <dependencies>

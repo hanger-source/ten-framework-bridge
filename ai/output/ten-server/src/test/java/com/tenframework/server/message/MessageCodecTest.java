@@ -65,7 +65,7 @@ public class MessageCodecTest {
 
         // 解码
         java.util.List<Object> decodedMessages = new java.util.ArrayList<>();
-        decoder.decode(null, new BinaryWebSocketFrame(encodedByteBuf.retain()), decodedMessages);
+        decoder.decode(null, encodedByteBuf.retain(), decodedMessages);
 
         assertFalse(decodedMessages.isEmpty(), "解码后的消息列表不应为空");
         assertEquals(1, decodedMessages.size(), "解码后应只包含一条消息");
@@ -113,7 +113,7 @@ public class MessageCodecTest {
 
         // 解码
         java.util.List<Object> decodedMessages = new java.util.ArrayList<>();
-        decoder.decode(null, new BinaryWebSocketFrame(encodedByteBuf.retain()), decodedMessages);
+        decoder.decode(null, encodedByteBuf.retain(), decodedMessages);
 
         assertFalse(decodedMessages.isEmpty(), "解码后的消息列表不应为空");
         assertEquals(1, decodedMessages.size(), "解码后应只包含一条消息");
@@ -160,7 +160,7 @@ public class MessageCodecTest {
 
         // 解码
         java.util.List<Object> decodedMessages = new java.util.ArrayList<>();
-        decoder.decode(null, new BinaryWebSocketFrame(encodedByteBuf.retain()), decodedMessages);
+        decoder.decode(null, encodedByteBuf.retain(), decodedMessages);
 
         assertFalse(decodedMessages.isEmpty(), "解码后的消息列表不应为空");
         assertEquals(1, decodedMessages.size(), "解码后应只包含一条消息");
@@ -218,7 +218,7 @@ public class MessageCodecTest {
 
         // 解码
         java.util.List<Object> decodedMessages = new java.util.ArrayList<>();
-        decoder.decode(null, new BinaryWebSocketFrame(encodedByteBuf.retain()), decodedMessages);
+        decoder.decode(null, encodedByteBuf.retain(), decodedMessages);
 
         assertFalse(decodedMessages.isEmpty(), "解码后的消息列表不应为空");
         assertEquals(1, decodedMessages.size(), "解码后应只包含一条消息");

@@ -64,8 +64,8 @@ public class NettyMessageServer {
                             // 在 WebSocket 握手成功后，上述处理器会从 pipeline 中移除 HTTP 相关的处理器
                             // 并在其位置添加 WebSocketFrameDecoder 和 WebSocketFrameEncoder。
                             // 接下来，我们将添加处理 WebSocket 帧的自定义处理器。
-                            ch.pipeline().addLast(new MessageEncoder()); // 消息编码器：Message -> WebSocket Binary Frame
                             ch.pipeline().addLast(new MessageDecoder()); // 消息解码器：WebSocket Binary Frame -> Message
+                            ch.pipeline().addLast(new MessageEncoder()); // 消息编码器：Message -> WebSocket Binary Frame
                             ch.pipeline().addLast(new WebSocketMessageFrameHandler(engine)); // 自定义 WebSocket 业务处理器
                         }
                     })

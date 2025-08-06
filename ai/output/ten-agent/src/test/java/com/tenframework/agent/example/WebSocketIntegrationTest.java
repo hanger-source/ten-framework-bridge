@@ -65,6 +65,8 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import java.util.HashMap;
 
 @Slf4j
 public class WebSocketIntegrationTest {
@@ -141,17 +143,48 @@ public class WebSocketIntegrationTest {
         String appUri = "test-app";
 
         // 1. 模拟发送 start_graph 命令来启动图实例
-        String graphJson = String.format(
-                "{\"graph_id\":\"%s\",\"nodes\":[{\"name\":\"SimpleEcho\",\"type\":\"com.tenframework.core.extension.SimpleEchoExtension\"},{\"name\":\"tcp-client-extension\",\"type\":\"com.tenframework.core.extension.BaseExtension\"}],\"connections\":[{\"source\":\"tcp-client-extension\",\"destinations\":[\"SimpleEcho\"]},{\"source\":\"SimpleEcho\",\"destinations\":[\"tcp-client-extension\"]}]}",
-                graphId);
+        // 构建图的JSON结构（作为ObjectNode）
+        ObjectNode graphJsonNode = objectMapper.createObjectNode();
+        graphJsonNode.put("graph_id", graphId);
+        // 定义节点
+        com.fasterxml.jackson.databind.node.ArrayNode nodesArray = objectMapper.createArrayNode(); // 更改为ArrayNode
+        nodesArray.add(objectMapper.createObjectNode()
+                .put("name", "SimpleEcho")
+                .put("type", "com.tenframework.core.extension.SimpleEchoExtension"));
+        nodesArray.add(objectMapper.createObjectNode()
+                .put("name", "tcp-client-extension")
+                .put("type", "com.tenframework.core.extension.SimpleEchoExtension"));
+        // ObjectNode nodes = objectMapper.createObjectNode(); // 原始的ObjectNode定义，注释掉或删除
+        // nodes.put("SimpleEcho", objectMapper.createObjectNode()
+        // .put("type", "com.tenframework.core.extension.SimpleEchoExtension")
+        // .put("name", "SimpleEcho"));
+        // nodes.put("tcp-client-extension", objectMapper.createObjectNode()
+        // .put("type", "com.tenframework.core.extension.SimpleEchoExtension")
+        // .put("name", "tcp-client-extension"));
+        graphJsonNode.set("nodes", nodesArray); // 将 ArrayNode 设置为 nodes
+
+        // 定义连接
+        com.fasterxml.jackson.databind.node.ArrayNode connections = objectMapper.createArrayNode();
+        // tcp-client-extension -> SimpleEcho
+        connections.add(objectMapper.createObjectNode()
+                .put("source", "tcp-client-extension")
+                .set("destinations", objectMapper.createArrayNode().add("SimpleEcho")));
+        // SimpleEcho -> tcp-client-extension (回显)
+        connections.add(objectMapper.createObjectNode()
+                .put("source", "SimpleEcho")
+                .set("destinations", objectMapper.createArrayNode().add("tcp-client-extension")));
+        graphJsonNode.set("connections", connections);
 
         Command startGraphCommand = Command.builder()
                 .name("start_graph")
                 .commandId(UUID.randomUUID().toString())
-                .properties(Map.of(
-                        "graph_id", graphId,
-                        "app_uri", appUri,
-                        "graph_json", graphJson))
+                .properties(new HashMap<>() {
+                    { // 使用HashMap来构建properties
+                        put("graph_id", graphId);
+                        put("app_uri", appUri);
+                        put("graph_json", graphJsonNode.toString()); // 将ObjectNode转换为String
+                    }
+                })
                 .sourceLocation(new Location("test://client", graphId, "client"))
                 .destinationLocations(List.of(new Location(appUri, graphId, "engine")))
                 .build();
@@ -183,7 +216,12 @@ public class WebSocketIntegrationTest {
         Command stopGraphCommand = Command.builder()
                 .name("stop_graph")
                 .commandId(UUID.randomUUID().toString())
-                .properties(Map.of("graph_id", graphId, "app_uri", appUri))
+                .properties(new HashMap<>() {
+                    { // 使用HashMap构建properties
+                        put("graph_id", graphId);
+                        put("app_uri", appUri);
+                    }
+                })
                 .sourceLocation(new Location("test://client", graphId, "client"))
                 .destinationLocations(List.of(new Location(appUri, graphId, "engine")))
                 .build();
@@ -298,7 +336,7 @@ public class WebSocketIntegrationTest {
                 } else if (frame instanceof BinaryWebSocketFrame) {
                     BinaryWebSocketFrame binaryFrame = (BinaryWebSocketFrame) frame;
                     List<Object> decodedMsgs = new java.util.ArrayList<>();
-                    messageDecoder.decode(ctx, binaryFrame, decodedMsgs);
+                    messageDecoder.decode(ctx, binaryFrame.content().retain(), decodedMsgs);
 
                     if (!decodedMsgs.isEmpty() && decodedMsgs.get(0) instanceof Message) {
                         Message decodedMsg = (Message) decodedMsgs.get(0);

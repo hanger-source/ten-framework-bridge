@@ -9,7 +9,7 @@
     <version>1.0.0-SNAPSHOT</version>
     <packaging>pom</packaging>
 
-    <name>TEN Framework Java</name>
+    <name>ten-framework-java</name>
     <description>Java implementation of TEN Framework real-time dialogue engine</description>
 
     <properties>
@@ -34,8 +34,8 @@
 
     <modules>
         <module>ten-core-api</module>
-        <module>ten-agent-example</module>
         <module>ten-server</module>
+        <module>ten-agent</module>
     </modules>
 
     <dependencyManagement>

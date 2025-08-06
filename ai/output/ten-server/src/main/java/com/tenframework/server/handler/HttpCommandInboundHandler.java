@@ -23,6 +23,7 @@ import java.util.Collections;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import com.tenframework.core.message.CommandResult;
+import com.fasterxml.jackson.core.type.TypeReference; // 新增导入
 
 import static io.netty.handler.codec.http.HttpResponseStatus.*;
 import static io.netty.handler.codec.http.HttpVersion.*;
@@ -65,38 +66,73 @@ public class HttpCommandInboundHandler extends SimpleChannelInboundHandler<FullH
     private void handleStartGraph(ChannelHandlerContext ctx, FullHttpRequest msg) {
         try {
             String requestBody = msg.content().toString(CharsetUtil.UTF_8);
-            JsonNode rootNode = objectMapper.readTree(requestBody);
+            JsonNode rootNode = objectMapper.readTree(requestBody); // rootNode 现在代表整个 Command JSON
 
-            String graphId = rootNode.path("graph_id").asText(UUID.randomUUID().toString());
-            String appUri = rootNode.path("app_uri").asText("default_app");
-            String extensionName = rootNode.path("extension_name").asText(); // 通常在 start_graph 命令中不会直接指定 extension_name
+            String commandId = rootNode.path("command_id").asText(UUID.randomUUID().toString());
+            String commandName = rootNode.path("name").asText();
 
-            // 提取 properties，用于传递给 Engine 和 Extension
-            Map<String, Object> properties = objectMapper.convertValue(rootNode.path("properties"), Map.class);
-            if (properties == null) {
-                properties = new HashMap<>();
+            // 从 rootNode 的 "properties" 字段中提取参数
+            JsonNode propertiesNode = rootNode.path("properties");
+            Map<String, Object> commandProperties = new HashMap<>();
+            if (propertiesNode.isObject()) {
+                propertiesNode.fields().forEachRemaining(entry -> {
+                    if (entry.getValue().isTextual()) {
+                        commandProperties.put(entry.getKey(), entry.getValue().asText());
+                    } else if (entry.getValue().isObject() || entry.getValue().isArray()) { // 处理嵌套对象和数组
+                        commandProperties.put(entry.getKey(), entry.getValue().toString()); // 将嵌套对象和数组转为字符串
+                    } else {
+                        commandProperties.put(entry.getKey(),
+                                objectMapper.convertValue(entry.getValue(), Object.class));
+                    }
+                });
             }
-            // 确保properties中包含graph_id和app_uri，虽然Location中也有
-            properties.put("graph_id", graphId);
-            properties.put("app_uri", appUri);
+
+            String graphId = commandProperties.getOrDefault("graph_id", UUID.randomUUID().toString()).toString();
+            String appUri = commandProperties.getOrDefault("app_uri", "default_app").toString();
+
+            // 提取 graph_json，并确保它是 String 类型
+            String graphJson = null;
+            Object tempGraphJson = commandProperties.get("graph_json");
+            if (tempGraphJson instanceof String) {
+                graphJson = (String) tempGraphJson;
+            } else if (tempGraphJson instanceof JsonNode) { // 如果是JsonNode，转为String
+                graphJson = tempGraphJson.toString();
+            } else if (tempGraphJson != null) { // 如果是其他类型，尝试转为String
+                graphJson = tempGraphJson.toString();
+            }
+
+            if (graphJson == null || graphJson.isEmpty()) {
+                log.warn("start_graph命令中graph_json属性缺失或无效");
+                sendErrorResponse(ctx, BAD_REQUEST, "start_graph命令缺少有效的 'graph_json' 属性");
+                return;
+            }
+
+            // 重新构建传递给 Engine 的 properties，确保其结构符合 Engine 的期望
+            Map<String, Object> engineCommandProperties = new HashMap<>();
+            engineCommandProperties.put("graph_id", graphId);
+            engineCommandProperties.put("app_uri", appUri);
+            engineCommandProperties.put("graph_json", graphJson); // 确保这里是String类型
+
+            // 复制其他原始properties，但注意不要覆盖已设置的graph_id, app_uri, graph_json
+            commandProperties.entrySet().stream()
+                    .filter(entry -> !entry.getKey().equals("graph_id") && !entry.getKey().equals("app_uri")
+                            && !entry.getKey().equals("graph_json"))
+                    .forEach(entry -> engineCommandProperties.put(entry.getKey(), entry.getValue()));
 
             // 添加CompletableFuture和channelId到properties中，以便Engine回传结果
             CompletableFuture<CommandResult> resultFuture = new CompletableFuture<>();
-            properties.put("__result_future__", resultFuture);
-            properties.put("__channel_id__", ctx.channel().id().asShortText());
+            engineCommandProperties.put("__result_future__", resultFuture);
+            engineCommandProperties.put("__channel_id__", ctx.channel().id().asShortText());
 
-            // 构建 Command 对象
             Command command = Command.builder()
-                    .commandId(UUID.randomUUID().toString())
-                    .properties(properties)
+                    .commandId(commandId)
+                    .name(commandName)
+                    .properties(engineCommandProperties) // 使用新的 engineCommandProperties
+                    .sourceLocation(
+                            Location.builder().appUri("http_client").graphId("N/A").extensionName("N/A").build())
+                    .destinationLocations(Collections.emptyList())
                     .build();
-            command.setName("start_graph"); // 在构建后设置name
-            command.setSourceLocation(
-                    Location.builder().appUri("http_client").graphId("N/A").extensionName("N/A").build());
-            command.setDestinationLocations(
-                    Collections.emptyList()); // start_graph 命令由Engine自身处理，不路由到Extension
 
-            // 提交命令到 Engine
             boolean submitted = engine.submitMessage(command, ctx.channel().id().asShortText());
             if (submitted) {
                 // 成功提交后，等待Engine返回CommandResult，并根据结果发送HTTP响应
@@ -113,8 +149,6 @@ public class HttpCommandInboundHandler extends SimpleChannelInboundHandler<FullH
                     log.error("等待start_graph命令结果超时或发生异常", e);
                     sendErrorResponse(ctx, GATEWAY_TIMEOUT, "处理命令超时或发生异常: " + e.getMessage());
                 }
-            } else {
-                sendErrorResponse(ctx, SERVICE_UNAVAILABLE, "Engine队列已满，无法处理请求");
             }
 
         } catch (Exception e) {
@@ -128,32 +162,55 @@ public class HttpCommandInboundHandler extends SimpleChannelInboundHandler<FullH
             String requestBody = msg.content().toString(CharsetUtil.UTF_8);
             JsonNode rootNode = objectMapper.readTree(requestBody);
 
-            String graphId = rootNode.path("graph_id").asText();
-            String appUri = rootNode.path("app_uri").asText("default_app");
+            String commandId = rootNode.path("command_id").asText(UUID.randomUUID().toString()); // 新增
+            String commandName = rootNode.path("name").asText("stop_graph"); // 新增
+
+            JsonNode propertiesNode = rootNode.path("properties"); // 新增
+            Map<String, Object> commandProperties = new HashMap<>(); // 新增
+            if (propertiesNode.isObject()) { // 新增
+                propertiesNode.fields().forEachRemaining(entry -> {
+                    if (entry.getValue().isTextual()) {
+                        commandProperties.put(entry.getKey(), entry.getValue().asText());
+                    } else if (entry.getValue().isObject() || entry.getValue().isArray()) { // 处理嵌套对象和数组
+                        commandProperties.put(entry.getKey(), entry.getValue().toString()); // 将嵌套对象和数组转为字符串
+                    } else {
+                        commandProperties.put(entry.getKey(),
+                                objectMapper.convertValue(entry.getValue(), Object.class));
+                    }
+                });
+            }
+
+            String graphId = commandProperties.getOrDefault("graph_id", "").toString(); // 从properties中获取
+            String appUri = commandProperties.getOrDefault("app_uri", "default_app").toString(); // 从properties中获取
 
             if (graphId.isEmpty()) {
                 sendErrorResponse(ctx, BAD_REQUEST, "停止图请求缺少 'graph_id'");
                 return;
             }
 
+            // 重新构建传递给 Engine 的 properties
+            Map<String, Object> engineCommandProperties = new HashMap<>();
+            engineCommandProperties.put("graph_id", graphId);
+            engineCommandProperties.put("app_uri", appUri);
+            // 复制其他原始properties
+            commandProperties.entrySet().stream()
+                    .filter(entry -> !entry.getKey().equals("graph_id") && !entry.getKey().equals("app_uri"))
+                    .forEach(entry -> engineCommandProperties.put(entry.getKey(), entry.getValue()));
+
             // 添加CompletableFuture和channelId到properties中，以便Engine回传结果
             CompletableFuture<CommandResult> resultFuture = new CompletableFuture<>();
-            Map<String, Object> properties = new HashMap<>();
-            properties.put("graph_id", graphId);
-            properties.put("app_uri", appUri);
-            properties.put("__result_future__", resultFuture);
-            properties.put("__channel_id__", ctx.channel().id().asShortText());
+            engineCommandProperties.put("__result_future__", resultFuture);
+            engineCommandProperties.put("__channel_id__", ctx.channel().id().asShortText());
 
             // 构建 stop_graph 命令
             Command command = Command.builder()
-                    .commandId(UUID.randomUUID().toString())
-                    .properties(properties)
+                    .commandId(commandId)
+                    .name(commandName)
+                    .properties(engineCommandProperties) // 使用新的 engineCommandProperties
+                    .sourceLocation(
+                            Location.builder().appUri("http_client").graphId("N/A").extensionName("N/A").build())
+                    .destinationLocations(Collections.emptyList())
                     .build();
-            command.setName("stop_graph"); // 在构建后设置name
-            command.setSourceLocation(
-                    Location.builder().appUri("http_client").graphId("N/A").extensionName("N/A").build());
-            command.setDestinationLocations(
-                    Collections.emptyList()); // stop_graph 命令由Engine自身处理，不路由到Extension
 
             boolean submitted = engine.submitMessage(command, ctx.channel().id().asShortText());
             if (submitted) {
@@ -171,8 +228,6 @@ public class HttpCommandInboundHandler extends SimpleChannelInboundHandler<FullH
                     log.error("等待stop_graph命令结果超时或发生异常", e);
                     sendErrorResponse(ctx, GATEWAY_TIMEOUT, "处理命令超时或发生异常: " + e.getMessage());
                 }
-            } else {
-                sendErrorResponse(ctx, SERVICE_UNAVAILABLE, "Engine队列已满，无法处理请求");
             }
 
         } catch (Exception e) {

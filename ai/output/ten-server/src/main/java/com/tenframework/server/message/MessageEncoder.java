@@ -11,6 +11,8 @@ import org.msgpack.jackson.dataformat.MessagePackFactory;
 import org.msgpack.core.MessagePack;
 import org.msgpack.core.ExtensionTypeHeader;
 import io.netty.handler.codec.http.websocketx.BinaryWebSocketFrame; // 新增导入
+import com.tenframework.core.message.Message; // 新增导入
+import com.tenframework.core.message.MessageUtils; // 新增导入
 
 import lombok.extern.slf4j.Slf4j;
 

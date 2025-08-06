@@ -95,7 +95,7 @@ TODO:
 2.3.3 为不同的消息类型和API路径配置不同的 Netty `ChannelPipeline`。
 2.3.4 实现消息到 HTTP/WebSocket 协议的自动转换和适配。
 2.4.1 设计和实现跨 `Engine` 实例的连接迁移机制（如果需要，模拟 `C` 语言 `TEN_CONNECTION_MIGRATION_STATE` 的语义）。
-2.4.2 实现会话状态持久化和恢复（例如，`LLM` 对话历史）。
+2.4.2 实现会话状态持久化和恢复（例如，`LLM` 对话历史）。【待定】
 2.4.3 管理客户端连接的生命周期，包括心跳检测和空闲连接关闭。
 2.5.1 引入 Circuit Breaker 模式，隔离故障 `Extension`。
 2.5.2 实现消息重试策略（除了 `Extension` 内置的，考虑 `Engine` 级别的）。
@@ -121,7 +121,7 @@ TODO:
 3.6.1 分析和优化 Extension 中虚拟线程的使用模式。
 3.6.2 监控虚拟线程的创建、调度和销毁，识别潜在 bottlenecks。
 3.6.3 调整虚拟线程池参数，以适配不同的 Extension 负载。
-4.1.1 集成服务发现框架（如 Spring Cloud Eureka, HashiCorp Consul 或 Kubernetes DNS）。
+4.1.1 集成服务发现框架（如 Spring Cloud Eureka, HashiCorp Consul 或 Kubernetes DNS）。【待定】
 4.1.2 实现 Engine 实例的自动注册和发现。
 4.1.3 设计和实现集群成员管理和健康状态同步机制。
 4.1.4 考虑引入集群协调服务（如 Apache ZooKeeper, etcd）。
@@ -133,8 +133,8 @@ TODO:
 4.3.3 配置 Grafana 仪表盘，可视化 Engine 和 Extension 的性能指标。
 4.3.4 设置关键指标的告警规则。
 4.3.5 收集 JVM 指标和系统资源使用情况。
-4.4.1 实现基于 Token 的身份认证机制（如 JWT）。
-4.4.2 实现基于角色的访问控制（RBAC）。
+4.4.1 实现基于 Token 的身份认证机制（如 JWT）。【待定】
+4.4.2 实现基于角色的访问控制（RBAC）。【待定】
 4.4.3 保护内部 API 和通信渠道。
 4.5.1 编写 Dockerfile，构建 Java Runtime 的 Docker 镜像。
 4.5.2 编写 Kubernetes 部署清单（Deployment, Service, Ingress）。

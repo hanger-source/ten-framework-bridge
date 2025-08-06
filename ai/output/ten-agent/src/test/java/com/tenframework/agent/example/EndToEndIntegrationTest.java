@@ -73,6 +73,7 @@ import java.util.List;
 import io.netty.handler.codec.http.websocketx.WebSocketFrame;
 import com.tenframework.core.message.MessageConstants;
 import com.tenframework.core.graph.GraphInstance;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 
 @Slf4j
 public class EndToEndIntegrationTest {
@@ -119,16 +120,48 @@ public class EndToEndIntegrationTest {
         // 1. 通过 HTTP 接口发送一个 start_graph 命令
         log.info("--- 测试 HTTP /start_graph 命令 ---");
         String graphId = UUID.randomUUID().toString();
-        Map<String, Object> startGraphPayload = new HashMap<>();
-        startGraphPayload.put("graph_id", graphId);
-        startGraphPayload.put("app_uri", "test-app");
-        startGraphPayload.put("properties", Map.of("initial_message", "Hello from HTTP start_graph!"));
 
-        // 添加 graph_json 属性，定义图的结构
-        String graphJson = String.format(
-                "{\"graph_id\":\"%s\",\"nodes\":[{\"name\":\"SimpleEcho\",\"type\":\"com.tenframework.core.extension.SimpleEchoExtension\"},{\"name\":\"tcp-client-extension\",\"type\":\"com.tenframework.core.extension.BaseExtension\"}],\"connections\":[{\"source\":\"tcp-client-extension\",\"destinations\":[\"SimpleEcho\"]},{\"source\":\"SimpleEcho\",\"destinations\":[\"tcp-client-extension\"]}]}",
-                graphId);
-        startGraphPayload.put("graph_json", graphJson);
+        // 构建 start_graph 命令的 properties
+        Map<String, Object> commandProperties = new HashMap<>();
+        commandProperties.put("graph_id", graphId);
+        commandProperties.put("app_uri", "test-app");
+
+        // 定义节点
+        com.fasterxml.jackson.databind.node.ArrayNode nodesArray = objectMapper.createArrayNode(); // 更改为ArrayNode
+        nodesArray.add(objectMapper.createObjectNode()
+                .put("name", "SimpleEcho")
+                .put("type", "com.tenframework.core.extension.SimpleEchoExtension"));
+        nodesArray.add(objectMapper.createObjectNode()
+                .put("name", "tcp-client-extension")
+                .put("type", "com.tenframework.core.extension.SimpleEchoExtension"));
+        // nodes.put("tcp-client-extension", objectMapper.createObjectNode()
+        // .put("type", "com.tenframework.core.extension.SimpleEchoExtension"));
+
+        // 定义连接
+        com.fasterxml.jackson.databind.node.ArrayNode connections = objectMapper.createArrayNode();
+        connections.add(objectMapper.createObjectNode()
+                .put("source", "tcp-client-extension")
+                .set("destinations", objectMapper.createArrayNode().add("SimpleEcho")));
+        connections.add(objectMapper.createObjectNode()
+                .put("source", "SimpleEcho")
+                .set("destinations", objectMapper.createArrayNode().add("tcp-client-extension")));
+
+        // 构建 graph_json ObjectNode，并转换为字符串
+        ObjectNode graphJsonNode = objectMapper.createObjectNode();
+        graphJsonNode.put("graph_id", graphId); // 这里的 graph_id 是冗余的，但保留以匹配原始结构
+        graphJsonNode.set("nodes", nodesArray); // 将 ArrayNode 设置为 nodes
+        graphJsonNode.set("connections", connections);
+
+        commandProperties.put("graph_json", graphJsonNode.toString()); // 将ObjectNode转换为String
+
+        // 构建整个 HTTP 请求的 payload (它将成为 Command 的参数)
+        Map<String, Object> startGraphPayload = new HashMap<>();
+        startGraphPayload.put("command_id", UUID.randomUUID().toString());
+        startGraphPayload.put("name", "start_graph");
+        startGraphPayload.put("properties", commandProperties); // 将构建好的properties放入payload
+        startGraphPayload.put("source_location",
+                Map.of("app_uri", "http_client", "graph_id", "N/A", "extension_name", "N/A"));
+        startGraphPayload.put("destination_locations", Collections.emptyList());
 
         String httpResponse = sendHttpRequest(HTTP_PORT, "/start_graph", "POST", startGraphPayload);
         assertTrue(httpResponse.contains("\"status\":\"success\""), "HTTP start_graph 响应应包含 'status:success'");
@@ -139,39 +172,6 @@ public class EndToEndIntegrationTest {
         GraphInstance graphInstance = engine.getGraphInstance(graphId)
                 .orElseThrow(() -> new IllegalStateException("未找到启动的图实例: " + graphId));
         log.info("成功获取到图实例: {}", graphInstance.getGraphId());
-
-        // 注册 SimpleEchoExtension
-        SimpleEchoExtension echoExtension = new SimpleEchoExtension();
-        Map<String, Object> echoConfig = Map.of("name", "SimpleEcho");
-        boolean registeredEcho = graphInstance.registerExtension("SimpleEcho", echoExtension, echoConfig);
-        assertTrue(registeredEcho, "SimpleEchoExtension should register successfully.");
-        log.info("SimpleEchoExtension registered successfully on GraphInstance.");
-
-        // 注册一个模拟的tcp-client-extension，以便Engine能够正确路由回显消息
-        BaseExtension tcpClientExtension = new BaseExtension() {
-            @Override
-            protected void handleCommand(com.tenframework.core.message.Command command, ExtensionContext context) {
-            }
-
-            @Override
-            protected void handleData(com.tenframework.core.message.Data data, ExtensionContext context) {
-            }
-
-            @Override
-            protected void handleAudioFrame(com.tenframework.core.message.AudioFrame audioFrame,
-                    ExtensionContext context) {
-            }
-
-            @Override
-            protected void handleVideoFrame(com.tenframework.core.message.VideoFrame videoFrame,
-                    ExtensionContext context) {
-            }
-        };
-        Map<String, Object> tcpClientConfig = Map.of("name", "tcp-client-extension");
-        boolean registeredTcpClient = graphInstance.registerExtension("tcp-client-extension", tcpClientExtension,
-                tcpClientConfig);
-        assertTrue(registeredTcpClient, "TCP Client Extension should register successfully on GraphInstance.");
-        log.info("TCP Client Extension registered successfully on GraphInstance.");
 
         // 2. 通过 WebSocket/MsgPack 接口发送一个 Data 消息给 SimpleEchoExtension
         log.info("--- 测试 WebSocket/MsgPack Data 消息回显 ---");
@@ -199,7 +199,15 @@ public class EndToEndIntegrationTest {
 
         // 3. 通过 HTTP 接口发送 stop_graph 命令
         log.info("--- 测试 HTTP /stop_graph 命令 ---");
-        Map<String, Object> stopGraphPayload = Map.of("graph_id", graphId, "app_uri", "test-app");
+        Map<String, Object> stopGraphPayload = new HashMap<>();
+        Map<String, Object> stopGraphProperties = Map.of("graph_id", graphId, "app_uri", "test-app");
+        stopGraphPayload.put("command_id", UUID.randomUUID().toString());
+        stopGraphPayload.put("name", "stop_graph");
+        stopGraphPayload.put("properties", stopGraphProperties);
+        stopGraphPayload.put("source_location",
+                Map.of("app_uri", "http_client", "graph_id", "N/A", "extension_name", "N/A"));
+        stopGraphPayload.put("destination_locations", Collections.emptyList());
+
         String stopResponse = sendHttpRequest(HTTP_PORT, "/stop_graph", "POST", stopGraphPayload);
         assertTrue(stopResponse.contains("\"status\":\"success\""), "HTTP stop_graph 响应应包含 'status:success'");
         log.info("HTTP /stop_graph 响应: {}", stopResponse);
@@ -427,7 +435,7 @@ public class EndToEndIntegrationTest {
                     log.debug("WebSocket客户端收到二进制帧，大小: {} 字节", binaryFrame.content().readableBytes());
 
                     List<Object> decodedMsgs = new ArrayList<>();
-                    messageDecoder.decode(ctx, binaryFrame, decodedMsgs);
+                    messageDecoder.decode(ctx, binaryFrame.content().retain(), decodedMsgs);
 
                     if (!decodedMsgs.isEmpty() && decodedMsgs.get(0) instanceof Message) {
                         Message decodedMsg = (Message) decodedMsgs.get(0);

@@ -11,7 +11,7 @@
     </parent>
 
     <artifactId>ten-core-api</artifactId>
-    <name>TEN Framework Core API</name>
+    <name>ten-core-api</name>
     <description>核心API定义，包含消息系统、位置定位、基础接口等</description>
 
     <dependencies>
@@ -154,6 +154,13 @@
                     <source>21</source>
                     <target>21</target>
                     <forceJavacCompilerUse>true</forceJavacCompilerUse>
+                    <compilerArgs>
+                        <arg>--enable-preview</arg>
+                        <arg>--add-opens</arg>
+                        <arg>java.base/jdk.internal.misc=ALL-UNNAMED</arg>
+                        <arg>--add-opens</arg>
+                        <arg>java.base/java.util.zip=ALL-UNNAMED</arg>
+                    </compilerArgs>
                     <annotationProcessorPaths>
                         <path>
                             <groupId>org.projectlombok</groupId>

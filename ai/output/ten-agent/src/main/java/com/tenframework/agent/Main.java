@@ -34,7 +34,8 @@ public class Main {
                                 "graph_id", "test-graph",
                                 "echo_prefix", "Custom Echo: " // 示例配置
                 );
-                engine.registerExtension("echo-extension", echoExtension, extensionProperties, "main-app"); // 添加appUri
+                // engine.registerExtension("echo-extension", echoExtension,
+                // extensionProperties, "main-app"); // 删除此行或注释掉
                 System.out.println("SimpleEchoExtension registered.");
 
                 // 3. 启动 TenServer
@@ -57,8 +58,8 @@ public class Main {
                 startGraphArgs.put("graph_id", "test-graph");
                 ObjectNode nodes = objectMapper.createObjectNode();
                 nodes.put("echo-extension", objectMapper.createObjectNode()
-                                .put("addon", "SimpleEchoExtension")
-                                .put("app", "test-app"));
+                                .put("type", "com.tenframework.core.extension.SimpleEchoExtension") // 指定Extension的完整类名
+                                .put("properties", objectMapper.convertValue(extensionProperties, ObjectNode.class))); // 传递配置属性
                 startGraphArgs.set("nodes", nodes);
                 startGraphArgs.set("connections", objectMapper.createArrayNode()); // 暂时没有复杂的连接
                 startGraphCommandJson.set("args", startGraphArgs);
@@ -69,8 +70,9 @@ public class Main {
                                 null, // parentCommandId (仍然是 String)
                                 startGraphCommandJson.get("name").asText(),
                                 objectMapper.convertValue(startGraphArgs, Map.class),
-                                new Location("main-app", null, "http-client"), // sourceLocation
-                                Collections.singletonList(new Location("main-app", "test-graph", "engine")), // destinationLocations
+                                new Location("main-app", "test-graph", "http-client"), // sourceLocation: 添加graphId
+                                Collections.singletonList(new Location("main-app", "test-graph", "engine")), // destinationLocations:
+                                                                                                             // 添加graphId
                                 new HashMap<>(), // properties
                                 System.currentTimeMillis() // timestamp
                 );
@@ -81,8 +83,10 @@ public class Main {
 
                 // 5. 通过 TCP/MsgPack 接口发送一个 Data 消息给 SimpleEchoExtension
                 System.out.println("\n--- Sending Data message via TCP/MsgPack (simulated) ---");
-                Location dataSource = new Location("main-app", "test-graph", "tcp-client"); // appUri改为main-app
-                Location dataDest = new Location("main-app", "test-graph", "echo-extension"); // appUri改为main-app
+                Location dataSource = new Location("main-app", "test-graph", "tcp-client"); // appUri改为main-app,
+                                                                                            // 添加graphId
+                Location dataDest = new Location("main-app", "test-graph", "echo-extension"); // appUri改为main-app,
+                                                                                              // 添加graphId
                 Data testData = new Data(
                                 "test-data-message", // name
                                 Unpooled.wrappedBuffer("Hello from TCP Client!".getBytes()), // data (ByteBuf)
@@ -94,9 +98,8 @@ public class Main {
                                 new HashMap<>(), // properties
                                 System.currentTimeMillis() // timestamp
                 );
-
                 // 模拟 TCP 客户端发送消息
-                System.out.println("Submitting Data message to Engine: " + testData.getProperties().get("text"));
+                System.out.println("Submitting Data message to Engine: " + new String(testData.getDataBytes())); // 从ByteBuf读取内容
                 engine.submitMessage(testData);
                 TimeUnit.SECONDS.sleep(1); // 等待回显消息处理
 
@@ -113,7 +116,7 @@ public class Main {
                                 null,
                                 stopGraphCommandJson.get("name").asText(),
                                 objectMapper.convertValue(stopGraphArgs, Map.class),
-                                new Location("main-app", null, "http-client"), // appUri改为main-app
+                                new Location("main-app", "test-graph", "http-client"), // appUri改为main-app, 添加graphId
                                 Collections.singletonList(new Location("main-app", "test-graph", "engine")),
                                 new HashMap<>(), // properties
                                 System.currentTimeMillis() // timestamp
