@@ -1,4 +1,4 @@
-package com.tenframework.core.example;
+package com.tenframework.agent.example;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tenframework.core.engine.Engine;
@@ -138,7 +138,7 @@ public class EndToEndIntegrationTest {
         // 获取并验证 GraphInstance，然后注册 Extension
         GraphInstance graphInstance = engine.getGraphInstance(graphId)
                 .orElseThrow(() -> new IllegalStateException("未找到启动的图实例: " + graphId));
-        log.info("成功获取到图实例: {}", actualGraphInstance.getGraphId());
+        log.info("成功获取到图实例: {}", graphInstance.getGraphId());
 
         // 注册 SimpleEchoExtension
         SimpleEchoExtension echoExtension = new SimpleEchoExtension();
@@ -176,7 +176,7 @@ public class EndToEndIntegrationTest {
         // 2. 通过 WebSocket/MsgPack 接口发送一个 Data 消息给 SimpleEchoExtension
         log.info("--- 测试 WebSocket/MsgPack Data 消息回显 ---");
         CompletableFuture<Message> wsEchoResponseFuture = new CompletableFuture<>();
-        URI websocketUri = new URI("ws://localhost:" + TCP_PORT + "/websocket"); // **端口修改为 TCP_PORT**
+        URI websocketUri = new URI("ws://localhost:" + TCP_PORT + "/websocket");
 
         sendWebSocketDataMessage(websocketUri, graphId, "echo_test_data", Map.of("content", "Hello WebSocket Echo!"),
                 wsEchoResponseFuture, clientGroup);

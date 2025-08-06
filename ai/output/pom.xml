@@ -34,7 +34,7 @@
 
     <modules>
         <module>ten-core-api</module>
-        <module>ten-agent</module>
+        <module>ten-agent-example</module>
         <module>ten-server</module>
     </modules>
 
