@@ -1,4 +1,0 @@
--------------------------------------------------------------------------------
-Test set: com.tenframework.core.engine.EngineTest
--------------------------------------------------------------------------------
-Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.492 s -- in com.tenframework.core.engine.EngineTest

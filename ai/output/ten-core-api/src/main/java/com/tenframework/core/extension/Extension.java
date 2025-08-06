@@ -96,4 +96,9 @@ public interface Extension {
     default void onVideoFrame(VideoFrame videoFrame, ExtensionContext context) {
         // 默认实现为空，Extension可以选择性实现
     }
+
+    /**
+     * 获取Extension的应用URI
+     */
+    String getAppUri();
 }

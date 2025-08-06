@@ -2,6 +2,7 @@ package com.tenframework.core;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import lombok.Builder; // 导入 Builder
 
 /**
  * 位置定位系统 - 标识消息在TEN框架中的精确位置
@@ -11,6 +12,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  * @param graphId       图ID，标识会话图实例，必须是UUID4字符串
  * @param extensionName 扩展名称，标识具体的Extension实例
  */
+@Builder // 为 record 添加 @Builder
 public record Location(
         @JsonProperty("app_uri") String appUri,
         @JsonProperty("graph_id") String graphId,

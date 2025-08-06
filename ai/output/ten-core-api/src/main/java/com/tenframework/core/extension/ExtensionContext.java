@@ -7,7 +7,7 @@ import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 
 /**
- * ExtensionContext接口
+ * ExtensionContext接口定义了Extension与Engine交互的抽象层。
  * 作为Extension与Engine交互的桥梁，提供Extension所需的核心功能
  * 对应C语言中ten_env_t的部分功能
  */
@@ -49,16 +49,27 @@ public interface ExtensionContext {
     ExecutorService getVirtualThreadExecutor();
 
     /**
-     * 获取Extension的名称
-     *
-     * @return Extension名称
+     * 获取Extension的唯一名称。
      */
     String getExtensionName();
 
     /**
-     * 获取Extension所属的Graph ID
+     * 获取Extension所属应用的URI。
+     */
+    String getAppUri();
+
+    /**
+     * 获取Extension所属的图ID。
      *
      * @return Graph ID
      */
     String getGraphId();
+
+    /**
+     * 获取Extension内部虚拟线程执行器中当前活跃的任务数量。
+     * 这代表了正在执行的非阻塞异步操作的数量。
+     *
+     * @return 活跃的虚拟线程任务数量
+     */
+    int getActiveVirtualThreadCount();
 }

@@ -2,6 +2,7 @@ package com.tenframework.core.path;
 
 import com.tenframework.core.Location;
 import com.tenframework.core.message.CommandResult;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -27,23 +28,31 @@ public class PathOut extends AbstractPath {
     private transient CompletableFuture<CommandResult> resultFuture;
 
     /**
+     * 与此PathOut关联的Netty Channel的唯一ID，用于将结果回传给特定客户端
+     */
+    private String channelId;
+
+    /**
      * 是否已收到最终的命令结果
      */
-    private boolean hasReceivedFinalCommandResult;
+    @Builder.Default
+    private boolean hasReceivedFinalCommandResult = false;
 
     /**
      * 缓存的命令结果，用于某些结果策略（例如FIRST_ERROR_OR_LAST_OK）
      */
-    private CommandResult cachedCommandResult;
+    @Builder.Default
+    private CommandResult cachedCommandResult = null;
 
     /**
      * 结果返回策略（对应TEN_RESULT_RETURN_POLICY）
      */
+    @Builder.Default
     private ResultReturnPolicy returnPolicy = ResultReturnPolicy.FIRST_ERROR_OR_LAST_OK;
 
     public PathOut(UUID commandId, UUID parentCommandId, String commandName, Location sourceLocation,
             Location destinationLocation, CompletableFuture<CommandResult> resultFuture,
-            ResultReturnPolicy returnPolicy) {
+            ResultReturnPolicy returnPolicy, String channelId) {
         super();
         this.commandId = commandId;
         this.parentCommandId = parentCommandId;
@@ -54,5 +63,6 @@ public class PathOut extends AbstractPath {
         this.resultFuture = resultFuture;
         this.returnPolicy = returnPolicy != null ? returnPolicy : ResultReturnPolicy.FIRST_ERROR_OR_LAST_OK;
         this.hasReceivedFinalCommandResult = false;
+        this.channelId = channelId;
     }
 }

@@ -2,6 +2,7 @@ package com.tenframework.core.message;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.extern.slf4j.Slf4j;
@@ -92,7 +93,7 @@ public final class CommandResult extends AbstractMessage {
     private CommandResult(CommandResult other) {
         super(other);
         this.commandId = other.commandId;
-        this.result = new HashMap<>(other.result);
+        this.result = MessageUtils.deepCopyMap(other.result);
         this.isFinal = other.isFinal;
         this.error = other.error;
         this.errorCode = other.errorCode;
@@ -174,6 +175,7 @@ public final class CommandResult extends AbstractMessage {
     /**
      * 检查是否为成功结果 - 使用现代Java特性
      */
+    @JsonIgnore
     public boolean isSuccess() {
         return Optional.ofNullable(error)
                 .map(String::trim)

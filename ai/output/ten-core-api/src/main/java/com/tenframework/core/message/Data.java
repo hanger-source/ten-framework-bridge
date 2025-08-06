@@ -6,9 +6,13 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 
 import lombok.EqualsAndHashCode;
+import lombok.Builder;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.Optional;
+import java.util.List;
+import java.util.Map;
+import com.tenframework.core.Location;
 
 /**
  * 数据消息类
@@ -24,7 +28,7 @@ public final class Data extends AbstractMessage {
     private ByteBuf data;
 
     @JsonProperty("is_eof")
-    private boolean isEof = false;
+    private boolean isEof;
 
     @JsonProperty("content_type")
     private String contentType;
@@ -33,49 +37,37 @@ public final class Data extends AbstractMessage {
     private String encoding;
 
     /**
-     * 默认构造函数
+     * 默认构造函数（用于Jackson反序列化，如果JsonCreator未完全覆盖所有场景）
+     * 内部使用，不推荐直接调用
      */
-    public Data() {
+    protected Data() {
         super();
         this.data = Unpooled.EMPTY_BUFFER;
+        this.isEof = false;
     }
 
     /**
-     * 创建数据消息的构造函数
+     * JSON反序列化和Builder使用的全参数构造函数
      */
-    public Data(String name) {
-        this();
-        setName(name);
-    }
-
-    /**
-     * 创建数据消息的构造函数，带数据
-     */
-    public Data(String name, ByteBuf data) {
-        this(name);
-        this.data = data != null ? data : Unpooled.EMPTY_BUFFER;
-    }
-
-    /**
-     * 创建数据消息的构造函数，带字节数组数据
-     */
-    public Data(String name, byte[] data) {
-        this(name);
-        this.data = data != null ? Unpooled.wrappedBuffer(data) : Unpooled.EMPTY_BUFFER;
-    }
-
-    /**
-     * JSON反序列化构造函数
-     */
+    @Builder
     @JsonCreator
     public Data(
             @JsonProperty("name") String name,
             @JsonProperty("data") ByteBuf data,
             @JsonProperty("is_eof") Boolean isEof,
             @JsonProperty("content_type") String contentType,
-            @JsonProperty("encoding") String encoding) {
-        super();
+            @JsonProperty("encoding") String encoding,
+            @JsonProperty("source_location") Location sourceLocation,
+            @JsonProperty("destination_locations") List<Location> destinationLocations,
+            @JsonProperty("properties") Map<String, Object> properties, // 继承自AbstractMessage
+            @JsonProperty("timestamp") Long timestamp // 继承自AbstractMessage
+    ) {
+        super(sourceLocation, destinationLocations);
         setName(name);
+        setProperties(properties);
+        if (timestamp != null) {
+            setTimestamp(timestamp);
+        }
         this.data = data != null ? data : Unpooled.EMPTY_BUFFER;
         this.isEof = isEof != null ? isEof : false;
         this.contentType = contentType;
@@ -151,44 +143,51 @@ public final class Data extends AbstractMessage {
      * 创建文本数据的静态工厂方法
      */
     public static com.tenframework.core.message.Data text(String name, String text) {
-        com.tenframework.core.message.Data data = new com.tenframework.core.message.Data(name);
+        DataBuilder builder = Data.builder()
+                .name(name)
+                .contentType("text/plain")
+                .encoding("UTF-8");
         if (text != null) {
-            data.setDataBytes(text.getBytes());
-            data.setContentType("text/plain");
-            data.setEncoding("UTF-8");
+            builder.data(Unpooled.wrappedBuffer(text.getBytes()));
         }
-        return data;
+        return builder.build();
     }
 
     /**
      * 创建JSON数据的静态工厂方法
      */
     public static com.tenframework.core.message.Data json(String name, String json) {
-        com.tenframework.core.message.Data data = new com.tenframework.core.message.Data(name);
+        DataBuilder builder = Data.builder()
+                .name(name)
+                .contentType("application/json")
+                .encoding("UTF-8");
         if (json != null) {
-            data.setDataBytes(json.getBytes());
-            data.setContentType("application/json");
-            data.setEncoding("UTF-8");
+            builder.data(Unpooled.wrappedBuffer(json.getBytes()));
         }
-        return data;
+        return builder.build();
     }
 
     /**
      * 创建二进制数据的静态工厂方法
      */
     public static com.tenframework.core.message.Data binary(String name, byte[] bytes) {
-        com.tenframework.core.message.Data data = new com.tenframework.core.message.Data(name, bytes);
-        data.setContentType("application/octet-stream");
-        return data;
+        DataBuilder builder = Data.builder()
+                .name(name)
+                .contentType("application/octet-stream");
+        if (bytes != null) {
+            builder.data(Unpooled.wrappedBuffer(bytes));
+        }
+        return builder.build();
     }
 
     /**
      * 创建EOF标记数据
      */
     public static com.tenframework.core.message.Data eof(String name) {
-        com.tenframework.core.message.Data data = new com.tenframework.core.message.Data(name);
-        data.setEof(true);
-        return data;
+        return Data.builder()
+                .name(name)
+                .isEof(true)
+                .build();
     }
 
     @Override

@@ -1,11 +1,13 @@
 package com.tenframework.core.path;
 
 import com.tenframework.core.message.CommandResult;
+import com.tenframework.core.Location;
 import lombok.extern.slf4j.Slf4j;
 import org.agrona.collections.Long2ObjectHashMap;
 
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * 路径表，用于管理命令的生命周期和结果回溯。
@@ -138,5 +140,27 @@ public class PathTable {
      */
     public int getOutPathCount() {
         return outPaths.size();
+    }
+
+    /**
+     * 创建并添加一个输出路径（当Engine发出命令时）
+     *
+     * @param commandId 命令ID
+     * @param parentCommandId 父命令ID
+     * @param commandName 命令名称
+     * @param sourceLocation 来源位置
+     * @param destinationLocation 目标位置
+     * @param resultFuture 结果Future
+     * @param returnPolicy 结果返回策略
+     * @param channelId 可选的Channel ID，用于将结果回传给特定客户端
+     * @return 新创建的PathOut对象
+     */
+    public PathOut createOutPath(UUID commandId, UUID parentCommandId, String commandName, Location sourceLocation,
+            Location destinationLocation, CompletableFuture<CommandResult> resultFuture,
+            ResultReturnPolicy returnPolicy, String channelId) {
+        PathOut pathOut = new PathOut(commandId, parentCommandId, commandName, sourceLocation,
+                destinationLocation, resultFuture, returnPolicy, channelId);
+        addOutPath(pathOut);
+        return pathOut;
     }
 }

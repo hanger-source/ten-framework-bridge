@@ -1,5 +1,7 @@
 package com.tenframework.core.message;
 
+import com.fasterxml.jackson.annotation.JsonSubTypes;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.tenframework.core.Location;
 import java.util.Map;
 import java.util.List;
@@ -9,6 +11,14 @@ import java.util.List;
  * 使用sealed interface确保类型安全和完整性
  * 对应C语言中的ten_msg_t结构
  */
+@JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "type")
+@JsonSubTypes({
+        @JsonSubTypes.Type(value = Command.class, name = "COMMAND"),
+        @JsonSubTypes.Type(value = CommandResult.class, name = "COMMAND_RESULT"),
+        @JsonSubTypes.Type(value = Data.class, name = "DATA"),
+        @JsonSubTypes.Type(value = AudioFrame.class, name = "AUDIO_FRAME"),
+        @JsonSubTypes.Type(value = VideoFrame.class, name = "VIDEO_FRAME")
+})
 public sealed interface Message
         permits AbstractMessage {
 

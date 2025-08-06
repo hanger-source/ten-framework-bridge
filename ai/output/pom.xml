@@ -34,6 +34,7 @@
 
     <modules>
         <module>ten-core-api</module>
+        <module>ten-agent</module>
     </modules>
 
     <dependencyManagement>

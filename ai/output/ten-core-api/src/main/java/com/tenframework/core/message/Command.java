@@ -2,12 +2,16 @@ package com.tenframework.core.message;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.Data;
+import lombok.Builder;
 import lombok.EqualsAndHashCode;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.*;
 import java.util.UUID;
+import java.util.List;
+import com.tenframework.core.Location;
 
 /**
  * 命令消息类
@@ -26,47 +30,41 @@ public final class Command extends AbstractMessage {
     private String parentCommandId;
 
     @JsonProperty("args")
-    private Map<String, Object> args = new HashMap<>();
+    private Map<String, Object> args;
 
     /**
-     * 默认构造函数
+     * 默认构造函数（用于Jackson反序列化，如果JsonCreator未完全覆盖所有场景）
+     * 内部使用，不推荐直接调用
      */
-    public Command() {
+    protected Command() {
         super();
         this.commandId = generateCommandId();
+        this.args = new HashMap<>();
     }
 
     /**
-     * 创建命令的构造函数
+     * JSON反序列化和Builder使用的全参数构造函数
      */
-    public Command(String name) {
-        this();
-        setName(name);
-    }
-
-    /**
-     * 创建命令的构造函数，带参数
-     */
-    public Command(String name, Map<String, Object> args) {
-        this(name);
-        if (args != null) {
-            this.args.putAll(args);
-        }
-    }
-
-    /**
-     * JSON反序列化构造函数
-     */
+    @Builder
     @JsonCreator
     public Command(
             @JsonProperty("cmd_id") String commandId,
             @JsonProperty("parent_cmd_id") String parentCommandId,
             @JsonProperty("name") String name,
-            @JsonProperty("args") Map<String, Object> args) {
-        super();
+            @JsonProperty("args") Map<String, Object> args,
+            @JsonProperty("source_location") Location sourceLocation,
+            @JsonProperty("destination_locations") List<Location> destinationLocations,
+            @JsonProperty("properties") Map<String, Object> properties, // 继承自AbstractMessage
+            @JsonProperty("timestamp") Long timestamp // 继承自AbstractMessage
+    ) {
+        super(sourceLocation, destinationLocations);
+        setName(name); // 设置从AbstractMessage继承的name
+        setProperties(properties); // 设置从AbstractMessage继承的properties
+        if (timestamp != null) {
+            setTimestamp(timestamp); // 设置从AbstractMessage继承的timestamp
+        }
         this.commandId = commandId != null ? commandId : generateCommandId();
         this.parentCommandId = parentCommandId;
-        setName(name);
         this.args = args != null ? new HashMap<>(args) : new HashMap<>();
     }
 
@@ -78,7 +76,7 @@ public final class Command extends AbstractMessage {
         // 注意：clone时会生成新的commandId，这符合TEN框架的语义
         this.commandId = generateCommandId();
         this.parentCommandId = other.parentCommandId;
-        this.args = new HashMap<>(other.args);
+        this.args = MessageUtils.deepCopyMap(other.args);
     }
 
     @Override
@@ -168,6 +166,26 @@ public final class Command extends AbstractMessage {
         if (commandId == null || commandId.trim().isEmpty()) {
             commandId = generateCommandId();
         }
+    }
+
+    /**
+     * 获取UUID格式的命令ID
+     *
+     * @return UUID格式的命令ID，如果无效则抛出IllegalArgumentException
+     */
+    @JsonIgnore
+    public UUID getCommandIdAsUUID() {
+        return UUID.fromString(commandId);
+    }
+
+    /**
+     * 获取UUID格式的父命令ID
+     *
+     * @return UUID格式的父命令ID，如果为空或无效则返回null或抛出IllegalArgumentException
+     */
+    @JsonIgnore
+    public UUID getParentCommandIdAsUUID() {
+        return parentCommandId != null && !parentCommandId.isEmpty() ? UUID.fromString(parentCommandId) : null;
     }
 
     @Override

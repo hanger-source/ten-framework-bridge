@@ -17,6 +17,12 @@ import java.util.stream.Collectors;
 public class MessageUtils {
 
     /**
+     * TEN框架自定义MsgPack扩展类型，用于封装内部Message对象
+     * 对应C语言中的TEN_MSGPACK_EXT_TYPE_MSG
+     */
+    public static final byte TEN_MSGPACK_EXT_TYPE_MSG = (byte) -1;
+
+    /**
      * 验证字符串字段是否有效（非null且非空）
      */
     public static boolean validateStringField(String field, String fieldName) {
@@ -73,29 +79,69 @@ public class MessageUtils {
     }
 
     /**
-     * 深拷贝Map，使用Stream API
+     * 深拷贝值，递归处理Map和List，并尝试克隆Cloneable对象
      */
-    public static <K, V> Map<K, V> deepCopyMap(Map<K, V> original, Function<V, V> valueCopier) {
-        return Optional.ofNullable(original)
-                .map(Map::entrySet)
-                .map(entries -> entries.stream()
-                        .collect(Collectors.toMap(
-                                Map.Entry::getKey,
-                                entry -> valueCopier.apply(entry.getValue()),
-                                (existing, replacement) -> replacement,
-                                LinkedHashMap::new)))
-                .orElse(new LinkedHashMap<>());
+    @SuppressWarnings("unchecked")
+    public static Object deepCopyValue(Object value) {
+        if (value == null) {
+            return null;
+        } else if (value instanceof Map<?, ?> map) {
+            return deepCopyMap((Map<String, Object>) map); // Assume String keys for deepCopyMap
+        } else if (value instanceof List<?> list) {
+            return deepCopyList((List<Object>) list); // Assume Object values for deepCopyList
+        } else if (value instanceof Message message) {
+            try {
+                return message.clone();
+            } catch (CloneNotSupportedException e) {
+                log.warn("Message对象无法克隆，返回原始引用: {}", e.getMessage());
+                return value;
+            }
+        } else if (value instanceof Cloneable) {
+            return tryClone(value).orElse(value);
+        } else {
+            return value; // 基本类型、String、不可变对象直接返回
+        }
     }
 
     /**
-     * 深拷贝List，使用Stream API
+     * 尝试克隆对象，返回Optional
      */
-    public static <T> List<T> deepCopyList(List<T> original, Function<T, T> itemCopier) {
-        return Optional.ofNullable(original)
-                .map(list -> list.stream()
-                        .map(itemCopier)
-                        .collect(Collectors.toList()))
-                .orElse(new ArrayList<>());
+    private static Optional<Object> tryClone(Object cloneable) {
+        try {
+            // 使用反射调用公共的clone方法
+            java.lang.reflect.Method cloneMethod = cloneable.getClass().getMethod("clone");
+            // 确保clone方法是public的，否则会抛出IllegalAccessException
+            if (!cloneMethod.trySetAccessible()) {
+                log.warn("无法访问对象的clone方法，请确保它是public的: {}", cloneable.getClass().getName());
+                return Optional.empty();
+            }
+            return Optional.of(cloneMethod.invoke(cloneable));
+        } catch (NoSuchMethodException e) {
+            log.debug("对象没有公共的clone方法: {}", cloneable.getClass().getName());
+            return Optional.empty(); // 没有公共的clone方法
+        } catch (Exception e) {
+            log.warn("无法克隆对象: {} - {}", cloneable.getClass().getName(), e.getMessage());
+            return Optional.empty();
+        }
+    }
+
+    /**
+     * 深拷贝Map - 使用Stream API
+     */
+    public static Map<String, Object> deepCopyMap(Map<String, Object> original) {
+        return original.entrySet().stream()
+                .collect(HashMap::new,
+                        (map, entry) -> map.put(entry.getKey(), deepCopyValue(entry.getValue())),
+                        HashMap::putAll);
+    }
+
+    /**
+     * 深拷贝List - 使用Stream API
+     */
+    public static List<Object> deepCopyList(List<Object> original) {
+        return original.stream()
+                .map(MessageUtils::deepCopyValue)
+                .collect(ArrayList::new, ArrayList::add, ArrayList::addAll);
     }
 
     /**

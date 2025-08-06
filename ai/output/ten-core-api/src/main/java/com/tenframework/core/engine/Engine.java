@@ -2,12 +2,14 @@ package com.tenframework.core.engine;
 
 import com.tenframework.core.Location;
 import com.tenframework.core.extension.EngineExtensionContext;
+import com.tenframework.core.extension.ExtensionMetrics;
 import com.tenframework.core.extension.Extension;
 import com.tenframework.core.message.AudioFrame;
 import com.tenframework.core.message.Command;
 import com.tenframework.core.message.CommandResult;
 import com.tenframework.core.message.Message;
 import com.tenframework.core.message.MessageType;
+import com.tenframework.core.message.Data; // 确保导入 Data
 import com.tenframework.core.message.VideoFrame;
 import com.tenframework.core.path.PathOut;
 import com.tenframework.core.path.PathTable;
@@ -27,6 +29,12 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelId; // 未使用，但可能之前有
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ConcurrentSkipListSet;
+import com.tenframework.core.server.ChannelDisconnectedException;
 
 /**
  * TEN框架的核心Engine实现
@@ -93,6 +101,21 @@ public final class Engine {
     private final Map<String, EngineExtensionContext> extensionContextRegistry;
 
     /**
+     * ExtensionMetrics实例注册表，与Extension一一对应
+     */
+    private final Map<String, ExtensionMetrics> extensionMetricsRegistry;
+
+    /**
+     * 管理活动的Netty Channel，用于消息回传
+     */
+    private final Map<String, Channel> channelMap;
+
+    /**
+     * 维护channelId到相关联的Command ID集合的映射，用于断开连接时清理PathOut
+     */
+    private final ConcurrentMap<String, ConcurrentSkipListSet<UUID>> channelToCommandIdsMap;
+
+    /**
      * 队列容量，默认64K条消息
      */
     private static final int DEFAULT_QUEUE_CAPACITY = 65536;
@@ -127,19 +150,19 @@ public final class Engine {
         // 初始化Extension注册表
         this.extensionRegistry = new ConcurrentHashMap<>();
         this.extensionContextRegistry = new ConcurrentHashMap<>();
+        this.extensionMetricsRegistry = new ConcurrentHashMap<>();
+        this.channelMap = new ConcurrentHashMap<>();
+        this.channelToCommandIdsMap = new ConcurrentHashMap<>();
 
         // 创建单线程ExecutorService，使用自定义ThreadFactory
-        this.engineThread = Executors.newSingleThreadExecutor(new ThreadFactory() {
-            @Override
-            public Thread newThread(Runnable r) {
-                Thread t = new Thread(r, "TEN-Engine-" + engineId);
-                t.setDaemon(false); // 非守护线程
-                t.setUncaughtExceptionHandler((thread, ex) -> {
-                    log.error("Engine核心线程发生未捕获异常", ex);
-                    state.set(EngineState.ERROR);
-                });
-                return t;
-            }
+        this.engineThread = Executors.newSingleThreadExecutor(r -> {
+            Thread t = new Thread(r, "TEN-Engine-" + engineId);
+            t.setDaemon(false); // 非守护线程
+            t.setUncaughtExceptionHandler((thread, ex) -> {
+                log.error("Engine核心线程发生未捕获异常", ex);
+                state.set(EngineState.ERROR);
+            });
+            return t;
         });
 
         log.info("Engine已创建: engineId={}, queueCapacity={}", engineId, capacity);
@@ -221,6 +244,18 @@ public final class Engine {
      * @return true如果成功提交，false如果队列已满
      */
     public boolean submitMessage(Message message) {
+        return submitMessage(message, null);
+    }
+
+    /**
+     * 向Engine提交消息（非阻塞）
+     * 由Netty线程或Extension虚拟线程调用
+     *
+     * @param message   要处理的消息
+     * @param channelId 可选的Channel ID，如果消息来自特定Channel
+     * @return true如果成功提交，false如果队列已满
+     */
+    public boolean submitMessage(Message message, String channelId) {
         if (state.get() != EngineState.RUNNING) {
             log.warn("Engine未在运行状态，拒绝消息: engineId={}, messageType={}",
                     engineId, message.getType());
@@ -233,6 +268,13 @@ public final class Engine {
         if (!success) {
             // 队列满了，根据消息类型决定处理策略
             handleQueueFullback(message);
+        } else if (channelId != null && message.getType() == MessageType.COMMAND) {
+            // 如果是来自客户端的Command消息，将其channelId关联到PathOut
+            // 注意：PathOut在processCommand中创建并关联channelId，这里仅处理队列满的情况
+            // 为Command添加一个临时属性，携带channelId，以便processCommand能够获取
+            if (message.getProperties() != null) {
+                message.getProperties().put("__channel_id__", channelId);
+            }
         }
 
         return success;
@@ -374,6 +416,24 @@ public final class Engine {
         Extension extension = extensionOpt.get();
         EngineExtensionContext context = contextOpt.get();
 
+        // 创建PathOut记录命令路径，以便后续结果回溯
+        String associatedChannelId = null;
+        if (command.getProperties() != null && command.getProperties().containsKey("__channel_id__")) {
+            associatedChannelId = (String) command.getProperties().get("__channel_id__");
+            // 移除临时属性，避免传递给Extension
+            command.getProperties().remove("__channel_id__");
+        }
+
+        pathTable.createOutPath(command.getCommandIdAsUUID(), command.getParentCommandIdAsUUID(),
+                command.getName(), command.getSourceLocation(), command.getDestinationLocations().get(0),
+                new CompletableFuture<>(), ResultReturnPolicy.FIRST_ERROR_OR_LAST_OK, associatedChannelId);
+
+        // 将Command ID与Channel ID关联，用于断开连接时清理
+        if (associatedChannelId != null) {
+            channelToCommandIdsMap.computeIfAbsent(associatedChannelId, k -> new ConcurrentSkipListSet<>())
+                    .add(command.getCommandIdAsUUID());
+        }
+
         // 3. 调用Extension的onCommand方法
         try {
             extension.onCommand(command, context);
@@ -430,6 +490,16 @@ public final class Engine {
             if (commandResult.isFinal()) {
                 completeCommandResult(pathOut, commandResult);
                 pathTable.removeOutPath(commandId);
+                // 从channelToCommandIdsMap中移除该commandId
+                if (pathOut.getChannelId() != null) {
+                    ConcurrentSkipListSet<UUID> commandIds = channelToCommandIdsMap.get(pathOut.getChannelId());
+                    if (commandIds != null) {
+                        commandIds.remove(commandId);
+                        if (commandIds.isEmpty()) {
+                            channelToCommandIdsMap.remove(pathOut.getChannelId());
+                        }
+                    }
+                }
             }
 
         } catch (CloneNotSupportedException e) {
@@ -441,6 +511,16 @@ public final class Engine {
                 pathOut.getResultFuture().completeExceptionally(e);
             }
             pathTable.removeOutPath(commandId);
+            // 从channelToCommandIdsMap中移除该commandId
+            if (pathOut.getChannelId() != null) {
+                ConcurrentSkipListSet<UUID> commandIds = channelToCommandIdsMap.get(pathOut.getChannelId());
+                if (commandIds != null) {
+                    commandIds.remove(commandId);
+                    if (commandIds.isEmpty()) {
+                        channelToCommandIdsMap.remove(pathOut.getChannelId());
+                    }
+                }
+            }
         } catch (Exception e) {
             log.error("处理命令结果时发生异常: engineId={}, commandId={}",
                     engineId, commandId, e);
@@ -450,6 +530,16 @@ public final class Engine {
                 pathOut.getResultFuture().completeExceptionally(e);
             }
             pathTable.removeOutPath(commandId);
+            // 从channelToCommandIdsMap中移除该commandId
+            if (pathOut.getChannelId() != null) {
+                ConcurrentSkipListSet<UUID> commandIds = channelToCommandIdsMap.get(pathOut.getChannelId());
+                if (commandIds != null) {
+                    commandIds.remove(commandId);
+                    if (commandIds.isEmpty()) {
+                        channelToCommandIdsMap.remove(pathOut.getChannelId());
+                    }
+                }
+            }
         }
     }
 
@@ -487,7 +577,7 @@ public final class Engine {
         try {
             switch (message.getType()) {
                 case DATA -> {
-                    if (message instanceof com.tenframework.core.message.Data data) {
+                    if (message instanceof Data data) { // 使用 Data 类
                         extension.onData(data, context);
                         log.debug("Extension处理数据完成: engineId={}, extensionName={}, messageName={}",
                                 engineId, targetExtensionName, data.getName());
@@ -584,6 +674,11 @@ public final class Engine {
         if (commandResult.isFinal()) {
             completeCommandResult(pathOut, commandResult);
         }
+
+        // 如果PathOut关联了channelId，则将结果回传给客户端
+        if (pathOut.getChannelId() != null) {
+            sendMessageToChannel(pathOut.getChannelId(), commandResult);
+        }
     }
 
     /**
@@ -612,7 +707,7 @@ public final class Engine {
             backtrackResult.setSourceLocation(pathOut.getDestinationLocation());
 
             // 重新提交到Engine的消息队列继续回溯
-            submitMessage(backtrackResult);
+            submitMessage(backtrackResult, pathOut.getChannelId()); // 回溯时保留channelId
 
             log.debug("命令结果已回溯: engineId={}, originalCommandId={}, parentCommandId={}",
                     engineId, commandResult.getCommandId(), pathOut.getParentCommandId());
@@ -646,6 +741,121 @@ public final class Engine {
         } else if (count < 0) {
             log.warn("Engine引用计数已为负数: engineId={}, count={}", engineId, count);
         }
+    }
+
+    /**
+     * 添加一个Netty Channel到Engine的Channel映射中
+     *
+     * @param channel 要添加的Channel实例
+     */
+    public void addChannel(Channel channel) {
+        if (channel == null || channel.id() == null) {
+            log.warn("尝试添加空的或无效的Channel到Engine");
+            return;
+        }
+        channelMap.put(channel.id().asShortText(), channel);
+        log.debug("Channel已添加: engineId={}, channelId={}", engineId, channel.id().asShortText());
+    }
+
+    /**
+     * 从Engine的Channel映射中移除一个Netty Channel
+     *
+     * @param channelId 要移除的Channel的ID
+     */
+    public void removeChannel(String channelId) {
+        if (channelId == null || channelId.isEmpty()) {
+            log.warn("尝试移除空的或无效的Channel ID从Engine");
+            return;
+        }
+        Channel removedChannel = channelMap.remove(channelId);
+        if (removedChannel != null) {
+            log.debug("Channel已移除: engineId={}, channelId={}", engineId, channelId);
+        } else {
+            log.warn("尝试移除不存在的Channel: engineId={}, channelId={}", engineId, channelId);
+        }
+    }
+
+    /**
+     * 获取Channel实例
+     *
+     * @param channelId Channel的ID
+     * @return Channel实例的Optional，如果不存在则为空
+     */
+    public Optional<Channel> getChannel(String channelId) {
+        return Optional.ofNullable(channelMap.get(channelId));
+    }
+
+    /**
+     * 向指定的Netty Channel发送消息
+     *
+     * @param channelId 目标Channel的ID
+     * @param message   要发送的消息
+     * @return true如果消息成功发送（或提交到Channel的写队列），false如果Channel不存在或写入失败
+     */
+    private boolean sendMessageToChannel(String channelId, Message message) {
+        if (channelId == null || message == null) {
+            log.warn("尝试向空Channel ID或发送空消息");
+            return false;
+        }
+
+        Optional<Channel> channelOpt = getChannel(channelId);
+        if (channelOpt.isEmpty()) {
+            log.warn("尝试向不存在的Channel发送消息: engineId={}, channelId={}", engineId, channelId);
+            return false;
+        }
+
+        Channel channel = channelOpt.get();
+        if (channel.isActive() && channel.isWritable()) {
+            // Netty的writeAndFlush是异步的
+            channel.writeAndFlush(message);
+            log.debug("消息已发送到Channel: engineId={}, channelId={}, messageType={}, messageName={}",
+                    engineId, channelId, message.getType(), message.getName());
+            return true;
+        } else {
+            log.warn("Channel不可用或不可写，无法发送消息: engineId={}, channelId={}", engineId, channelId);
+            return false;
+        }
+    }
+
+    /**
+     * 处理连接断开事件，清理与该Channel相关的PathOut
+     *
+     * @param channelId 断开连接的Channel ID
+     */
+    public void handleChannelDisconnected(String channelId) {
+        if (channelId == null || channelId.isEmpty()) {
+            log.warn("尝试处理空的或无效的Channel ID断开事件");
+            return;
+        }
+
+        log.info("处理Channel断开连接事件: engineId={}, channelId={}", engineId, channelId);
+
+        // 获取与此Channel相关的所有Command ID
+        ConcurrentSkipListSet<UUID> commandIdsToCleanup = channelToCommandIdsMap.remove(channelId);
+
+        if (commandIdsToCleanup != null && !commandIdsToCleanup.isEmpty()) {
+            log.debug("发现 {} 个与Channel {} 相关的命令需要清理", commandIdsToCleanup.size(), channelId);
+            for (UUID commandId : commandIdsToCleanup) {
+                Optional<PathOut> pathOutOpt = pathTable.getOutPath(commandId);
+                if (pathOutOpt.isPresent()) {
+                    PathOut pathOut = pathOutOpt.get();
+                    // 完成Future，表明连接已断开，命令无法返回结果
+                    if (pathOut.getResultFuture() != null && !pathOut.getResultFuture().isDone()) {
+                        pathOut.getResultFuture().completeExceptionally(new ChannelDisconnectedException(
+                                "Channel " + channelId + " disconnected. CommandResult cannot be returned."));
+                    }
+                    pathTable.removeOutPath(commandId);
+                    log.debug("清理与断开连接Channel相关的PathOut: commandId={}", commandId);
+                } else {
+                    log.warn("在断开连接清理时未找到PathOut，可能已被其他机制清理: commandId={}", commandId);
+                }
+            }
+        } else {
+            log.debug("没有发现与Channel {} 相关的命令需要清理", channelId);
+        }
+
+        // 从channelMap中移除，确保完全清理
+        channelMap.remove(channelId);
     }
 
     // Getter方法
@@ -706,11 +916,68 @@ public final class Engine {
         }
 
         // 创建ExtensionContext
-        EngineExtensionContext context = new EngineExtensionContext(extensionName, engineId, this, properties);
+        // 传入 extension 实例以便 EngineExtensionContext 可以获取其活跃任务数
+        EngineExtensionContext context = new EngineExtensionContext(extensionName, extension.getAppUri(), this,
+                properties, extension);
 
-        // 注册Extension和Context
+        // 创建Extension性能指标
+        ExtensionMetrics metrics = new ExtensionMetrics(extensionName);
+
+        // 注册Extension、Context和Metrics
         extensionRegistry.put(extensionName, extension);
         extensionContextRegistry.put(extensionName, context);
+        extensionMetricsRegistry.put(extensionName, metrics);
+
+        // 调用Extension生命周期方法
+        try {
+            // 1. 配置阶段
+            long startTime = System.currentTimeMillis();
+            extension.onConfigure(context);
+            long configureTime = System.currentTimeMillis() - startTime;
+            log.debug("Extension配置完成: engineId={}, extensionName={}, 耗时={}ms",
+                    engineId, extensionName, configureTime);
+
+            // 配置阶段超时检查（5秒）
+            if (configureTime > 5000) {
+                log.warn("Extension配置阶段耗时过长: engineId={}, extensionName={}, 耗时={}ms",
+                        engineId, extensionName, configureTime);
+            }
+
+            // 2. 初始化阶段
+            startTime = System.currentTimeMillis();
+            extension.onInit(context);
+            long initTime = System.currentTimeMillis() - startTime;
+            log.debug("Extension初始化完成: engineId={}, extensionName={}, 耗时={}ms",
+                    engineId, extensionName, initTime);
+
+            // 初始化阶段超时检查（10秒）
+            if (initTime > 10000) {
+                log.warn("Extension初始化阶段耗时过长: engineId={}, extensionName={}, 耗时={}ms",
+                        engineId, extensionName, initTime);
+            }
+
+            // 3. 启动阶段
+            startTime = System.currentTimeMillis();
+            extension.onStart(context);
+            long startTimeElapsed = System.currentTimeMillis() - startTime;
+            log.debug("Extension启动完成: engineId={}, extensionName={}, 耗时={}ms",
+                    engineId, extensionName, startTimeElapsed);
+
+            // 启动阶段超时检查（15秒）
+            if (startTimeElapsed > 15000) {
+                log.warn("Extension启动阶段耗时过长: engineId={}, extensionName={}, 耗时={}ms",
+                        engineId, extensionName, startTimeElapsed);
+            }
+
+        } catch (Exception e) {
+            log.error("Extension生命周期调用失败: engineId={}, extensionName={}, 阶段={}",
+                    engineId, extensionName, "onConfigure/onInit/onStart", e);
+            // 清理已注册的资源
+            extensionRegistry.remove(extensionName);
+            extensionContextRegistry.remove(extensionName);
+            context.close();
+            return false;
+        }
 
         log.info("Extension注册成功: engineId={}, extensionName={}", engineId, extensionName);
         return true;
@@ -730,10 +997,45 @@ public final class Engine {
 
         Extension extension = extensionRegistry.remove(extensionName);
         EngineExtensionContext context = extensionContextRegistry.remove(extensionName);
+        ExtensionMetrics metrics = extensionMetricsRegistry.remove(extensionName);
 
         if (extension == null) {
             log.warn("Extension不存在: engineId={}, extensionName={}", engineId, extensionName);
             return false;
+        }
+
+        // 调用Extension生命周期清理方法
+        try {
+            // 1. 停止阶段
+            long startTime = System.currentTimeMillis();
+            extension.onStop(context);
+            long stopTime = System.currentTimeMillis() - startTime;
+            log.debug("Extension停止完成: engineId={}, extensionName={}, 耗时={}ms",
+                    engineId, extensionName, stopTime);
+
+            // 停止阶段超时检查（10秒）
+            if (stopTime > 10000) {
+                log.warn("Extension停止阶段耗时过长: engineId={}, extensionName={}, 耗时={}ms",
+                        engineId, extensionName, stopTime);
+            }
+
+            // 2. 清理阶段
+            startTime = System.currentTimeMillis();
+            extension.onDeinit(context);
+            long deinitTime = System.currentTimeMillis() - startTime;
+            log.debug("Extension清理完成: engineId={}, extensionName={}, 耗时={}ms",
+                    engineId, extensionName, deinitTime);
+
+            // 清理阶段超时检查（5秒）
+            if (deinitTime > 5000) {
+                log.warn("Extension清理阶段耗时过长: engineId={}, extensionName={}, 耗时={}ms",
+                        engineId, extensionName, deinitTime);
+            }
+
+        } catch (Exception e) {
+            log.error("Extension生命周期清理失败: engineId={}, extensionName={}, 阶段={}",
+                    engineId, extensionName, "onStop/onDeinit", e);
+            // 即使清理失败，也要继续关闭Context
         }
 
         // 关闭ExtensionContext资源
@@ -779,16 +1081,18 @@ public final class Engine {
      * @return extensionName，如果没有有效的目标位置则返回null
      */
     private String extractExtensionName(Message message) {
-        if (message == null || message.getDestinationLocations() == null || message.getDestinationLocations().isEmpty()) {
+        if (message == null || message.getDestinationLocations() == null
+                || message.getDestinationLocations().isEmpty()) {
             return null;
         }
-        
+
         // 取第一个目标位置
         Location firstDestination = message.getDestinationLocations().get(0);
-        if (firstDestination == null || firstDestination.extensionName() == null || firstDestination.extensionName().isEmpty()) {
+        if (firstDestination == null || firstDestination.extensionName() == null
+                || firstDestination.extensionName().isEmpty()) {
             return null;
         }
-        
+
         return firstDestination.extensionName();
     }
 
@@ -810,6 +1114,7 @@ public final class Engine {
         // 清空注册表
         extensionRegistry.clear();
         extensionContextRegistry.clear();
+        extensionMetricsRegistry.clear();
 
         log.info("所有Extension资源清理完成: engineId={}", engineId);
     }
