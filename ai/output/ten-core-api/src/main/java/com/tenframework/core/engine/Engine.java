@@ -649,7 +649,7 @@ public final class Engine {
             // 假设 "test-client" 或 "http_client" 是客户端的appUri，或者根据实际情况判断
             // 并且消息中带有 __client_channel_id__ 属性
             if ("test-client".equals(firstDestination.appUri()) || "http_client".equals(firstDestination.appUri())) {
-                String clientChannelId = message.getProperty("__client_channel_id__", String.class).orElse(null);
+                String clientChannelId = message.getProperty("__client_channel_id__", String.class); // 直接获取
                 if (clientChannelId != null) {
                     if (sendMessageToChannel(clientChannelId, message)) {
                         log.debug("数据消息已成功回传到客户端Channel: engineId={}, messageType={}, messageName={}, channelId={}",
