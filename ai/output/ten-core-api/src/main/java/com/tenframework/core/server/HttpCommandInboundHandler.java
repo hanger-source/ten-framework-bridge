@@ -20,6 +20,9 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 import java.util.Collections;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import com.tenframework.core.message.CommandResult;
 
 import static io.netty.handler.codec.http.HttpResponseStatus.*;
 import static io.netty.handler.codec.http.HttpVersion.*;
@@ -77,6 +80,11 @@ public class HttpCommandInboundHandler extends SimpleChannelInboundHandler<FullH
             properties.put("graph_id", graphId);
             properties.put("app_uri", appUri);
 
+            // 添加CompletableFuture和channelId到properties中，以便Engine回传结果
+            CompletableFuture<CommandResult> resultFuture = new CompletableFuture<>();
+            properties.put("__result_future__", resultFuture);
+            properties.put("__channel_id__", ctx.channel().id().asShortText());
+
             // 构建 Command 对象
             Command command = Command.builder()
                     .commandId(UUID.randomUUID().toString())
@@ -86,17 +94,25 @@ public class HttpCommandInboundHandler extends SimpleChannelInboundHandler<FullH
             command.setSourceLocation(
                     Location.builder().appUri("http_client").graphId("N/A").extensionName("N/A").build());
             command.setDestinationLocations(
-                    Collections.singletonList(
-                            Location.builder().appUri(appUri).graphId(graphId).extensionName("engine").build())); // 目的地指向Engine
+                    Collections.emptyList()); // start_graph 命令由Engine自身处理，不路由到Extension
 
             // 提交命令到 Engine
-            boolean submitted = engine.submitMessage(command, ctx.channel().id().asShortText()); // 关联 channelId
+            boolean submitted = engine.submitMessage(command, ctx.channel().id().asShortText());
             if (submitted) {
-                // 成功提交后，等待Engine返回CommandResult，并在CommandResultHandler中处理响应
-                // TODO: 需要一个机制来映射 commandId 到
-                // ChannelHandlerContext，以便在CommandResult返回时找到正确的Channel进行响应
-                // 暂时发送一个同步的接受响应
-                sendJsonResponse(ctx, OK, Map.of("status", "accepted", "command_id", command.getCommandId()));
+                // 成功提交后，等待Engine返回CommandResult，并根据结果发送HTTP响应
+                try {
+                    CommandResult finalResult = resultFuture.get(10, TimeUnit.SECONDS); // 最多等待10秒
+                    if (finalResult.isSuccess()) {
+                        sendJsonResponse(ctx, OK, Map.of("status", "success", "command_id", finalResult.getCommandId(),
+                                "message", finalResult.getResult().getOrDefault("message", "")));
+                    } else {
+                        sendJsonResponse(ctx, INTERNAL_SERVER_ERROR, Map.of("status", "failed", "command_id",
+                                finalResult.getCommandId(), "error", finalResult.getError()));
+                    }
+                } catch (Exception e) {
+                    log.error("等待start_graph命令结果超时或发生异常", e);
+                    sendErrorResponse(ctx, GATEWAY_TIMEOUT, "处理命令超时或发生异常: " + e.getMessage());
+                }
             } else {
                 sendErrorResponse(ctx, SERVICE_UNAVAILABLE, "Engine队列已满，无法处理请求");
             }
@@ -120,21 +136,41 @@ public class HttpCommandInboundHandler extends SimpleChannelInboundHandler<FullH
                 return;
             }
 
+            // 添加CompletableFuture和channelId到properties中，以便Engine回传结果
+            CompletableFuture<CommandResult> resultFuture = new CompletableFuture<>();
+            Map<String, Object> properties = new HashMap<>();
+            properties.put("graph_id", graphId);
+            properties.put("app_uri", appUri);
+            properties.put("__result_future__", resultFuture);
+            properties.put("__channel_id__", ctx.channel().id().asShortText());
+
             // 构建 stop_graph 命令
             Command command = Command.builder()
                     .commandId(UUID.randomUUID().toString())
-                    .properties(Map.of("graph_id", graphId, "app_uri", appUri))
+                    .properties(properties)
                     .build();
             command.setName("stop_graph"); // 在构建后设置name
             command.setSourceLocation(
                     Location.builder().appUri("http_client").graphId("N/A").extensionName("N/A").build());
             command.setDestinationLocations(
-                    Collections.singletonList(
-                            Location.builder().appUri(appUri).graphId(graphId).extensionName("engine").build()));
+                    Collections.emptyList()); // stop_graph 命令由Engine自身处理，不路由到Extension
 
             boolean submitted = engine.submitMessage(command, ctx.channel().id().asShortText());
             if (submitted) {
-                sendJsonResponse(ctx, OK, Map.of("status", "accepted", "command_id", command.getCommandId()));
+                // 成功提交后，等待Engine返回CommandResult，并根据结果发送HTTP响应
+                try {
+                    CommandResult finalResult = resultFuture.get(10, TimeUnit.SECONDS); // 最多等待10秒
+                    if (finalResult.isSuccess()) {
+                        sendJsonResponse(ctx, OK, Map.of("status", "success", "command_id", finalResult.getCommandId(),
+                                "message", finalResult.getResult().getOrDefault("message", "")));
+                    } else {
+                        sendJsonResponse(ctx, INTERNAL_SERVER_ERROR, Map.of("status", "failed", "command_id",
+                                finalResult.getCommandId(), "error", finalResult.getError()));
+                    }
+                } catch (Exception e) {
+                    log.error("等待stop_graph命令结果超时或发生异常", e);
+                    sendErrorResponse(ctx, GATEWAY_TIMEOUT, "处理命令超时或发生异常: " + e.getMessage());
+                }
             } else {
                 sendErrorResponse(ctx, SERVICE_UNAVAILABLE, "Engine队列已满，无法处理请求");
             }

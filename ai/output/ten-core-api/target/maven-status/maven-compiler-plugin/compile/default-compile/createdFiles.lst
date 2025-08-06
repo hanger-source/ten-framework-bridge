@@ -49,6 +49,7 @@ com/tenframework/core/path/PathTable.class
 com/tenframework/core/path/PathIn$PathInBuilder.class
 com/tenframework/core/extension/SimpleEchoExtension.class
 com/tenframework/core/message/CommandResult.class
+com/tenframework/core/server/WebSocketMessageFrameHandler.class
 com/tenframework/core/extension/ExtensionMetrics.class
 com/tenframework/core/message/AbstractMessage.class
 com/tenframework/core/engine/Engine.class

@@ -39,7 +39,7 @@ class MessageSystemTest {
     @DisplayName("测试Command消息功能")
     void testCommandMessage() {
         // 创建命令
-        Command cmd = new Command("test_command");
+        Command cmd = Command.builder().name("test_command").build();
         cmd.setArg("param1", "value1");
         cmd.setArg("param2", 42);
 
@@ -126,12 +126,14 @@ class MessageSystemTest {
     void testAudioFrameMessage() {
         // 创建音频帧
         byte[] audioData = new byte[1024];
-        AudioFrame frame = new AudioFrame("audio_stream", audioData, 16000, 1, 16);
+        // 将 byte[] 转换为 ByteBuf
+        io.netty.buffer.ByteBuf audioBuf = Unpooled.wrappedBuffer(audioData);
+        AudioFrame frame = new AudioFrame("audio_stream", audioBuf, 16000, 1, 16);
 
         assertEquals(MessageType.AUDIO_FRAME, frame.getType());
         assertEquals(16000, frame.getSampleRate());
         assertEquals(1, frame.getChannels());
-        assertEquals(16, frame.getBitsPerSample());
+        assertEquals(16, frame.getBitsPerSample()); // 恢复 getBitsPerSample
         assertTrue(frame.hasData());
         assertTrue(frame.checkIntegrity());
 
@@ -140,7 +142,7 @@ class MessageSystemTest {
         assertEquals(32000, frame.getBytesPerSecond()); // 16000 * 1 * 2
 
         // 创建静音帧
-        AudioFrame silence = AudioFrame.silence("silence", 100, 8000, 2, 16);
+        AudioFrame silence = AudioFrame.silence("silence", 100, 8000, 2, 16); // 恢复 bitsPerSample 参数
         assertEquals(8000, silence.getSampleRate());
         assertEquals(2, silence.getChannels());
         assertTrue(silence.getDurationMs() >= 100);
@@ -151,12 +153,14 @@ class MessageSystemTest {
     void testVideoFrameMessage() {
         // 创建视频帧
         byte[] videoData = new byte[2048];
-        VideoFrame frame = new VideoFrame("video_stream", videoData, 1920, 1080, "YUV420P");
+        // 将 byte[] 转换为 ByteBuf
+        io.netty.buffer.ByteBuf videoBuf = Unpooled.wrappedBuffer(videoData);
+        VideoFrame frame = new VideoFrame("video_stream", videoBuf, 1920, 1080, "YUV420P"); // 恢复 pixelFormat
 
         assertEquals(MessageType.VIDEO_FRAME, frame.getType());
         assertEquals(1920, frame.getWidth());
         assertEquals(1080, frame.getHeight());
-        assertEquals("YUV420P", frame.getPixelFormat());
+        assertEquals("YUV420P", frame.getPixelFormat()); // 恢复 getPixelFormat
         assertTrue(frame.hasData());
         assertTrue(frame.checkIntegrity());
 
@@ -177,7 +181,7 @@ class MessageSystemTest {
     @DisplayName("测试消息克隆功能")
     void testMessageCloning() {
         // 测试Command克隆
-        Command original = new Command("test_cmd");
+        Command original = Command.builder().name("test_cmd").build();
         original.setArg("param", "value");
         original.setProperty("prop", "test");
 

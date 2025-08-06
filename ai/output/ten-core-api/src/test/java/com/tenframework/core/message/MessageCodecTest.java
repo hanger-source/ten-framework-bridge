@@ -5,12 +5,15 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import io.netty.handler.codec.http.websocketx.BinaryWebSocketFrame; // 新增导入
+import io.netty.channel.ChannelHandlerContext; // 新增导入，因为decode方法可能需要
 
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 public class MessageCodecTest {
 
@@ -37,20 +40,27 @@ public class MessageCodecTest {
                 .commandId(UUID.randomUUID().toString())
                 .parentCommandId(UUID.randomUUID().toString())
                 .sourceLocation(source)
-                .destinationLocation(destination)
-                .commandName("testCommand")
-                .params(params)
+                .destinationLocations(java.util.Collections.singletonList(destination)) // destinationLocation改为destinationLocations
+                .name("testCommand") // commandName改为name
+                .args(params) // params改为args
                 .build();
 
-        ByteBuf encoded = Unpooled.buffer();
-        encoder.encode(null, originalCommand, encoded);
+        // 编码
+        java.util.List<Object> encodedFrames = new java.util.ArrayList<>();
+        encoder.encode(null, originalCommand, encodedFrames); // encoder.encode现在将BinaryWebSocketFrame添加到列表中
 
-        // 创建一个新的ByteBuf，因为decode会读取并释放in参数
-        ByteBuf decodedBuf = Unpooled.wrappedBuffer(encoded.array()); // 使用encoded.array()来复制一份数据
+        assertFalse(encodedFrames.isEmpty(), "编码后的帧列表不应为空");
+        assertEquals(1, encodedFrames.size(), "编码后应只包含一个帧");
+        assertTrue(encodedFrames.get(0) instanceof BinaryWebSocketFrame, "编码后的对象应为BinaryWebSocketFrame类型");
 
-        // 解码器期望List<Object>作为输出
+        BinaryWebSocketFrame encodedFrame = (BinaryWebSocketFrame) encodedFrames.get(0);
+        ByteBuf encodedByteBuf = encodedFrame.content(); // 从WebSocket帧中提取ByteBuf
+
+        // 解码
         java.util.List<Object> decodedMessages = new java.util.ArrayList<>();
-        decoder.decode(null, decodedBuf, decodedMessages);
+        // decoder.decode现在期望BinaryWebSocketFrame作为输入
+        decoder.decode(null, new BinaryWebSocketFrame(encodedByteBuf.retain()), decodedMessages); // retain() 因为 decode
+                                                                                                  // 会释放
 
         assertFalse(decodedMessages.isEmpty(), "解码后的消息列表不应为空");
         assertEquals(1, decodedMessages.size(), "解码后应只包含一条消息");
@@ -61,9 +71,9 @@ public class MessageCodecTest {
         assertEquals(originalCommand.getCommandId(), decodedCommand.getCommandId());
         assertEquals(originalCommand.getParentCommandId(), decodedCommand.getParentCommandId());
         assertEquals(originalCommand.getSourceLocation(), decodedCommand.getSourceLocation());
-        assertEquals(originalCommand.getDestinationLocation(), decodedCommand.getDestinationLocation());
-        assertEquals(originalCommand.getCommandName(), decodedCommand.getCommandName());
-        assertEquals(originalCommand.getParams(), decodedCommand.getParams());
+        assertEquals(originalCommand.getDestinationLocations(), decodedCommand.getDestinationLocations()); // getDestinationLocation改为getDestinationLocations
+        assertEquals(originalCommand.getName(), decodedCommand.getName()); // getCommandName改为getName
+        assertEquals(originalCommand.getArgs(), decodedCommand.getArgs()); // getParams改为getArgs
         assertEquals(MessageType.COMMAND, decodedCommand.getType());
 
         // 验证integrity
@@ -79,22 +89,27 @@ public class MessageCodecTest {
         payload.put("dataKey1", "dataValue1");
         payload.put("dataKey2", 456);
 
-        Data originalData = Data.builder()
-                .commandId(UUID.randomUUID().toString())
-                .parentCommandId(UUID.randomUUID().toString())
-                .sourceLocation(source)
-                .destinationLocation(destination)
-                .name("testData")
-                .payload(payload)
-                .build();
+        // 使用 Data.json 工厂方法创建 Data 消息
+        String jsonPayload = new ObjectMapper().writeValueAsString(payload);
+        Data originalData = Data.json("testData", jsonPayload);
+        originalData.setSourceLocation(source);
+        originalData.setDestinationLocations(java.util.Collections.singletonList(destination));
 
-        ByteBuf encoded = Unpooled.buffer();
-        encoder.encode(null, originalData, encoded);
+        // 编码
+        java.util.List<Object> encodedFrames = new java.util.ArrayList<>();
+        encoder.encode(null, originalData, encodedFrames);
 
-        ByteBuf decodedBuf = Unpooled.wrappedBuffer(encoded.array());
+        assertFalse(encodedFrames.isEmpty(), "编码后的帧列表不应为空");
+        assertEquals(1, encodedFrames.size(), "编码后应只包含一个帧");
+        assertTrue(encodedFrames.get(0) instanceof BinaryWebSocketFrame, "编码后的对象应为BinaryWebSocketFrame类型");
 
+        BinaryWebSocketFrame encodedFrame = (BinaryWebSocketFrame) encodedFrames.get(0);
+        ByteBuf encodedByteBuf = encodedFrame.content();
+
+        // 解码
         java.util.List<Object> decodedMessages = new java.util.ArrayList<>();
-        decoder.decode(null, decodedBuf, decodedMessages);
+        decoder.decode(null, new BinaryWebSocketFrame(encodedByteBuf.retain()), decodedMessages); // retain() 因为 decode
+                                                                                                  // 会释放
 
         assertFalse(decodedMessages.isEmpty(), "解码后的消息列表不应为空");
         assertEquals(1, decodedMessages.size(), "解码后应只包含一条消息");
@@ -102,12 +117,19 @@ public class MessageCodecTest {
 
         Data decodedData = (Data) decodedMessages.get(0);
 
-        assertEquals(originalData.getCommandId(), decodedData.getCommandId());
-        assertEquals(originalData.getParentCommandId(), decodedData.getParentCommandId());
+        // Data类不再有commandId和parentCommandId，这些已移至Command
+        // assertEquals(originalData.getCommandId(), decodedData.getCommandId());
+        // assertEquals(originalData.getParentCommandId(),
+        // decodedData.getParentCommandId());
+
         assertEquals(originalData.getSourceLocation(), decodedData.getSourceLocation());
-        assertEquals(originalData.getDestinationLocation(), decodedData.getDestinationLocation());
+        assertEquals(originalData.getDestinationLocations(), decodedData.getDestinationLocations());
         assertEquals(originalData.getName(), decodedData.getName());
-        assertEquals(originalData.getPayload(), decodedData.getPayload());
+
+        // 验证 payload 内容，需要从 ByteBuf 中读取并解析
+        String decodedJson = decodedData.getData().toString(io.netty.util.CharsetUtil.UTF_8);
+        Map<String, Object> decodedPayload = new ObjectMapper().readValue(decodedJson, Map.class);
+        assertEquals(payload, decodedPayload);
         assertEquals(MessageType.DATA, decodedData.getType());
 
         assertTrue(decodedData.checkIntegrity(), "解码后的Data消息完整性检查应通过");
@@ -121,25 +143,27 @@ public class MessageCodecTest {
         byte[] audioBytes = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
         ByteBuf originalAudioData = Unpooled.wrappedBuffer(audioBytes);
 
-        AudioFrame originalAudioFrame = AudioFrame.builder()
-                .commandId(UUID.randomUUID().toString())
-                .parentCommandId(UUID.randomUUID().toString())
-                .sourceLocation(source)
-                .destinationLocation(destination)
-                .name("testAudioFrame")
-                .data(originalAudioData)
-                .sampleRate(44100)
-                .channels(2)
-                .sampleFormat("S16LE")
-                .build();
+        // 直接使用构造函数，因为 AudioFrame 没有 @Builder
+        AudioFrame originalAudioFrame = new AudioFrame("testAudioFrame", originalAudioData, 44100, 2, 16); // 添加
+                                                                                                           // bitsPerSample
+        originalAudioFrame.setSourceLocation(source);
+        originalAudioFrame.setDestinationLocations(java.util.Collections.singletonList(destination));
 
-        ByteBuf encoded = Unpooled.buffer();
-        encoder.encode(null, originalAudioFrame, encoded);
+        // 编码
+        java.util.List<Object> encodedFrames = new java.util.ArrayList<>();
+        encoder.encode(null, originalAudioFrame, encodedFrames);
 
-        ByteBuf decodedBuf = Unpooled.wrappedBuffer(encoded.array());
+        assertFalse(encodedFrames.isEmpty(), "编码后的帧列表不应为空");
+        assertEquals(1, encodedFrames.size(), "编码后应只包含一个帧");
+        assertTrue(encodedFrames.get(0) instanceof BinaryWebSocketFrame, "编码后的对象应为BinaryWebSocketFrame类型");
 
+        BinaryWebSocketFrame encodedFrame = (BinaryWebSocketFrame) encodedFrames.get(0);
+        ByteBuf encodedByteBuf = encodedFrame.content();
+
+        // 解码
         java.util.List<Object> decodedMessages = new java.util.ArrayList<>();
-        decoder.decode(null, decodedBuf, decodedMessages);
+        decoder.decode(null, new BinaryWebSocketFrame(encodedByteBuf.retain()), decodedMessages); // retain() 因为 decode
+                                                                                                  // 会释放
 
         assertFalse(decodedMessages.isEmpty(), "解码后的消息列表不应为空");
         assertEquals(1, decodedMessages.size(), "解码后应只包含一条消息");
@@ -147,14 +171,20 @@ public class MessageCodecTest {
 
         AudioFrame decodedAudioFrame = (AudioFrame) decodedMessages.get(0);
 
-        assertEquals(originalAudioFrame.getCommandId(), decodedAudioFrame.getCommandId());
-        assertEquals(originalAudioFrame.getParentCommandId(), decodedAudioFrame.getParentCommandId());
+        // 移除 commandId 和 parentCommandId 的断言
+        // assertEquals(originalAudioFrame.getCommandId(),
+        // decodedAudioFrame.getCommandId());
+        // assertEquals(originalAudioFrame.getParentCommandId(),
+        // decodedAudioFrame.getParentCommandId());
+
         assertEquals(originalAudioFrame.getSourceLocation(), decodedAudioFrame.getSourceLocation());
-        assertEquals(originalAudioFrame.getDestinationLocation(), decodedAudioFrame.getDestinationLocation());
+        assertEquals(originalAudioFrame.getDestinationLocations(), decodedAudioFrame.getDestinationLocations());
         assertEquals(originalAudioFrame.getName(), decodedAudioFrame.getName());
         assertEquals(originalAudioFrame.getSampleRate(), decodedAudioFrame.getSampleRate());
         assertEquals(originalAudioFrame.getChannels(), decodedAudioFrame.getChannels());
-        assertEquals(originalAudioFrame.getSampleFormat(), decodedAudioFrame.getSampleFormat());
+        assertEquals(originalAudioFrame.getBitsPerSample(), decodedAudioFrame.getBitsPerSample()); // 恢复
+                                                                                                   // getBitsPerSample
+        assertEquals(originalAudioFrame.getFormat(), decodedAudioFrame.getFormat()); // 使用 getFormat 代替 getSampleFormat
         assertEquals(MessageType.AUDIO_FRAME, decodedAudioFrame.getType());
 
         // 验证 ByteBuf 内容
@@ -180,25 +210,27 @@ public class MessageCodecTest {
         }
         ByteBuf originalVideoData = Unpooled.wrappedBuffer(videoBytes);
 
-        VideoFrame originalVideoFrame = VideoFrame.builder()
-                .commandId(UUID.randomUUID().toString())
-                .parentCommandId(UUID.randomUUID().toString())
-                .sourceLocation(source)
-                .destinationLocation(destination)
-                .name("testVideoFrame")
-                .data(originalVideoData)
-                .width(1920)
-                .height(1080)
-                .frameFormat("H264")
-                .build();
+        // 直接使用构造函数，因为 VideoFrame 没有 @Builder
+        VideoFrame originalVideoFrame = new VideoFrame("testVideoFrame", originalVideoData, 1920, 1080, "H264"); // 使用
+                                                                                                                 // pixelFormat
+        originalVideoFrame.setSourceLocation(source);
+        originalVideoFrame.setDestinationLocations(java.util.Collections.singletonList(destination));
 
-        ByteBuf encoded = Unpooled.buffer();
-        encoder.encode(null, originalVideoFrame, encoded);
+        // 编码
+        java.util.List<Object> encodedFrames = new java.util.ArrayList<>();
+        encoder.encode(null, originalVideoFrame, encodedFrames);
 
-        ByteBuf decodedBuf = Unpooled.wrappedBuffer(encoded.array());
+        assertFalse(encodedFrames.isEmpty(), "编码后的帧列表不应为空");
+        assertEquals(1, encodedFrames.size(), "编码后应只包含一个帧");
+        assertTrue(encodedFrames.get(0) instanceof BinaryWebSocketFrame, "编码后的对象应为BinaryWebSocketFrame类型");
 
+        BinaryWebSocketFrame encodedFrame = (BinaryWebSocketFrame) encodedFrames.get(0);
+        ByteBuf encodedByteBuf = encodedFrame.content();
+
+        // 解码
         java.util.List<Object> decodedMessages = new java.util.ArrayList<>();
-        decoder.decode(null, decodedBuf, decodedMessages);
+        decoder.decode(null, new BinaryWebSocketFrame(encodedByteBuf.retain()), decodedMessages); // retain() 因为 decode
+                                                                                                  // 会释放
 
         assertFalse(decodedMessages.isEmpty(), "解码后的消息列表不应为空");
         assertEquals(1, decodedMessages.size(), "解码后应只包含一条消息");
@@ -206,14 +238,18 @@ public class MessageCodecTest {
 
         VideoFrame decodedVideoFrame = (VideoFrame) decodedMessages.get(0);
 
-        assertEquals(originalVideoFrame.getCommandId(), decodedVideoFrame.getCommandId());
-        assertEquals(originalVideoFrame.getParentCommandId(), decodedVideoFrame.getParentCommandId());
+        // 移除 commandId 和 parentCommandId 的断言
+        // assertEquals(originalVideoFrame.getCommandId(),
+        // decodedVideoFrame.getCommandId());
+        // assertEquals(originalVideoFrame.getParentCommandId(),
+        // decodedVideoFrame.getParentCommandId());
+
         assertEquals(originalVideoFrame.getSourceLocation(), decodedVideoFrame.getSourceLocation());
-        assertEquals(originalVideoFrame.getDestinationLocation(), decodedVideoFrame.getDestinationLocation());
+        assertEquals(originalVideoFrame.getDestinationLocations(), decodedVideoFrame.getDestinationLocations());
         assertEquals(originalVideoFrame.getName(), decodedVideoFrame.getName());
         assertEquals(originalVideoFrame.getWidth(), decodedVideoFrame.getWidth());
         assertEquals(originalVideoFrame.getHeight(), decodedVideoFrame.getHeight());
-        assertEquals(originalVideoFrame.getFrameFormat(), decodedVideoFrame.getFrameFormat());
+        assertEquals(originalVideoFrame.getPixelFormat(), decodedVideoFrame.getPixelFormat()); // 恢复 getPixelFormat
         assertEquals(MessageType.VIDEO_FRAME, decodedVideoFrame.getType());
 
         // 验证 ByteBuf 内容

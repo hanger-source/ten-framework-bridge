@@ -1,5 +1,6 @@
 /Users/fuhangbo/ten-framework-bridge/ai/output/ten-core-api/src/test/java/com/tenframework/core/engine/EngineTest.java
 /Users/fuhangbo/ten-framework-bridge/ai/output/ten-core-api/src/test/java/com/tenframework/core/example/EndToEndIntegrationTest.java
+/Users/fuhangbo/ten-framework-bridge/ai/output/ten-core-api/src/test/java/com/tenframework/core/example/WebSocketIntegrationTest.java
 /Users/fuhangbo/ten-framework-bridge/ai/output/ten-core-api/src/test/java/com/tenframework/core/extension/BaseExtensionTest.java
 /Users/fuhangbo/ten-framework-bridge/ai/output/ten-core-api/src/test/java/com/tenframework/core/extension/EchoExtensionTest.java
 /Users/fuhangbo/ten-framework-bridge/ai/output/ten-core-api/src/test/java/com/tenframework/core/message/MessageCodecTest.java

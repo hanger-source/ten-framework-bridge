@@ -47,7 +47,7 @@ public class Main {
                                 "graph_id", "test-graph",
                                 "echo_prefix", "Custom Echo: " // 示例配置
                 );
-                engine.registerExtension("echo-extension", echoExtension, extensionProperties);
+                engine.registerExtension("echo-extension", echoExtension, extensionProperties, "main-app"); // 添加appUri
                 System.out.println("SimpleEchoExtension registered.");
 
                 // 3. 启动 Netty TCP Server 和简化的 HTTP Server
@@ -86,8 +86,8 @@ public class Main {
                                 null, // parentCommandId (仍然是 String)
                                 startGraphCommandJson.get("name").asText(),
                                 objectMapper.convertValue(startGraphArgs, Map.class),
-                                new Location("test-app", null, "http-client"), // sourceLocation
-                                Collections.singletonList(new Location("test-app", "test-graph", "engine")), // destinationLocations
+                                new Location("main-app", null, "http-client"), // sourceLocation
+                                Collections.singletonList(new Location("main-app", "test-graph", "engine")), // destinationLocations
                                 new HashMap<>(), // properties
                                 System.currentTimeMillis() // timestamp
                 );
@@ -98,8 +98,8 @@ public class Main {
 
                 // 5. 通过 TCP/MsgPack 接口发送一个 Data 消息给 SimpleEchoExtension
                 System.out.println("\n--- Sending Data message via TCP/MsgPack (simulated) ---");
-                Location dataSource = new Location("test-app", "test-graph", "tcp-client");
-                Location dataDest = new Location("test-app", "test-graph", "echo-extension");
+                Location dataSource = new Location("main-app", "test-graph", "tcp-client"); // appUri改为main-app
+                Location dataDest = new Location("main-app", "test-graph", "echo-extension"); // appUri改为main-app
                 Data testData = new Data(
                                 "test-data-message", // name
                                 Unpooled.wrappedBuffer("Hello from TCP Client!".getBytes()), // data (ByteBuf)
@@ -130,8 +130,8 @@ public class Main {
                                 null,
                                 stopGraphCommandJson.get("name").asText(),
                                 objectMapper.convertValue(stopGraphArgs, Map.class),
-                                new Location("test-app", null, "http-client"),
-                                Collections.singletonList(new Location("test-app", "test-graph", "engine")),
+                                new Location("main-app", null, "http-client"), // appUri改为main-app
+                                Collections.singletonList(new Location("main-app", "test-graph", "engine")),
                                 new HashMap<>(), // properties
                                 System.currentTimeMillis() // timestamp
                 );

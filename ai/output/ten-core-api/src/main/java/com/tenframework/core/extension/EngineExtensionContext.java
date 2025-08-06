@@ -66,7 +66,7 @@ public class EngineExtensionContext implements ExtensionContext {
 
         // 设置消息的源位置（如果未设置）
         if (message.getSourceLocation() == null) {
-            Location sourceLocation = new Location("", graphId, extensionName);
+            Location sourceLocation = new Location(this.appUri, graphId, extensionName);
             message.setSourceLocation(sourceLocation);
         }
 
@@ -105,7 +105,7 @@ public class EngineExtensionContext implements ExtensionContext {
 
         // 设置命令结果的源位置（如果未设置）
         if (result.getSourceLocation() == null) {
-            Location sourceLocation = new Location("", graphId, extensionName);
+            Location sourceLocation = new Location(this.appUri, graphId, extensionName);
             result.setSourceLocation(sourceLocation);
         }
 

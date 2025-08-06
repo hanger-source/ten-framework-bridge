@@ -125,7 +125,7 @@
   - **服务器端**: 启动 Netty 服务器，监听多种协议端口：
     - **HTTP/JSON RPC**: 用于外部控制平面（如 Go Orchestrator 或直接客户端）发送 `start`, `stop`, `ping`, `upload` 等 `Command`。`Netty` 的 HTTP 解码器配合自定义 `ChannelHandler`，将 HTTP 请求体中的 JSON 转换为内部 `Command` 消息，并将 `CommandResult` 转换为 HTTP 响应。
     - **WebSocket**: 用于 Web 客户端或移动客户端的实时互动。处理 WebSocket 文本帧（JSON RPC）和二进制帧（MsgPack 封装的音视频数据、Data 消息）。
-    - **MsgPack over TCP**: 用于 Java `TEN App` 实例之间的高效内部通信，或与其他非 HTTP/WebSocket 客户端通信。
+    - **MsgPack over Websocket/TCP（预留支持扩展）**: 用于 Java `TEN App` 实例之间的高效内部通信，或与其他非 HTTP/WebSocket 客户端通信。
   - **客户端端**: 启动 Netty 客户端，连接到外部服务：
     - 其他 `TEN App` 实例之间的高效 `MsgPack over TCP` 通信。
     - 集成其他第三方服务（如外部 LLM API、ASR/TTS 服务），虽然这些通常有自己的 SDK，但 Netty 也可以作为底层连接管理工具。

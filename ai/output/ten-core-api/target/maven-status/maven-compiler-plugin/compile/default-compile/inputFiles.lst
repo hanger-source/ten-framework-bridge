@@ -40,3 +40,4 @@
 /Users/fuhangbo/ten-framework-bridge/ai/output/ten-core-api/src/main/java/com/tenframework/core/server/HttpCommandResultOutboundHandler.java
 /Users/fuhangbo/ten-framework-bridge/ai/output/ten-core-api/src/main/java/com/tenframework/core/server/NettyHttpServer.java
 /Users/fuhangbo/ten-framework-bridge/ai/output/ten-core-api/src/main/java/com/tenframework/core/server/NettyMessageServer.java
+/Users/fuhangbo/ten-framework-bridge/ai/output/ten-core-api/src/main/java/com/tenframework/core/server/WebSocketMessageFrameHandler.java

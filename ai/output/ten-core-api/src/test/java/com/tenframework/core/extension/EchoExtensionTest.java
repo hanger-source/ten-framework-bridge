@@ -21,14 +21,14 @@ import static org.junit.jupiter.api.Assertions.*;
 class EchoExtensionTest {
 
     private Engine engine;
-    private EchoExtension echoExtension;
+    private SimpleEchoExtension echoExtension;
     private static final String ENGINE_ID = "test-engine";
     private static final String EXTENSION_NAME = "test-echo";
 
     @BeforeEach
     void setUp() {
         engine = new Engine(ENGINE_ID);
-        echoExtension = new EchoExtension();
+        echoExtension = new SimpleEchoExtension();
     }
 
     @Test
@@ -40,7 +40,7 @@ class EchoExtensionTest {
                 "test.property", "test_value");
 
         // 注册Extension
-        boolean success = engine.registerExtension(EXTENSION_NAME, echoExtension, properties);
+        boolean success = engine.registerExtension(EXTENSION_NAME, echoExtension, properties, "test://app"); // 添加appUri
         assertTrue(success, "Extension注册应该成功");
 
         // 验证Extension已注册
@@ -62,12 +62,12 @@ class EchoExtensionTest {
     @DisplayName("测试Extension重复注册")
     void testDuplicateExtensionRegistration() {
         // 第一次注册
-        boolean firstSuccess = engine.registerExtension(EXTENSION_NAME, echoExtension, Map.of());
+        boolean firstSuccess = engine.registerExtension(EXTENSION_NAME, echoExtension, Map.of(), "test://app"); // 添加appUri
         assertTrue(firstSuccess, "第一次注册应该成功");
 
         // 第二次注册相同名称
-        EchoExtension anotherExtension = new EchoExtension();
-        boolean secondSuccess = engine.registerExtension(EXTENSION_NAME, anotherExtension, Map.of());
+        SimpleEchoExtension anotherExtension = new SimpleEchoExtension();
+        boolean secondSuccess = engine.registerExtension(EXTENSION_NAME, anotherExtension, Map.of(), "test://app"); // 添加appUri
         assertFalse(secondSuccess, "重复注册应该失败");
 
         // 验证只有第一个Extension存在
@@ -86,7 +86,7 @@ class EchoExtensionTest {
     @DisplayName("测试Engine启动和停止")
     void testEngineStartAndStop() {
         // 注册Extension
-        engine.registerExtension(EXTENSION_NAME, echoExtension, Map.of());
+        engine.registerExtension(EXTENSION_NAME, echoExtension, Map.of(), "test://app"); // 添加appUri
 
         // 启动Engine
         engine.start();
@@ -111,7 +111,8 @@ class EchoExtensionTest {
 
         // 提交一些消息
         for (int i = 0; i < 10; i++) {
-            Data data = new Data("test-data-" + i, "test content".getBytes());
+            // 使用 Data 的工厂方法，例如 Data.text 或 Data.binary
+            Data data = Data.text("test-data-" + i, "test content");
             boolean success = engine.submitMessage(data);
             assertTrue(success, "消息提交应该成功");
         }
@@ -130,7 +131,7 @@ class EchoExtensionTest {
                 "int.property", 42,
                 "boolean.property", true);
 
-        engine.registerExtension(EXTENSION_NAME, echoExtension, properties);
+        engine.registerExtension(EXTENSION_NAME, echoExtension, properties, "test://app"); // 添加appUri
 
         var contextOpt = engine.getExtensionContext(EXTENSION_NAME);
         assertTrue(contextOpt.isPresent(), "ExtensionContext应该存在");

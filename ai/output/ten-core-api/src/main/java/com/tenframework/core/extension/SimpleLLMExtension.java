@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import com.tenframework.core.Location; // 导入Location类
 
 /**
  * 简单的LLM扩展示例
@@ -35,6 +36,11 @@ public class SimpleLLMExtension extends BaseExtension {
 
     // 工具管理
     private final Map<String, ToolMetadata> availableTools = new ConcurrentHashMap<>();
+
+    // 辅助方法：获取当前Extension的Location
+    private Location getCurrentLocation() {
+        return new Location(context.getAppUri(), context.getGraphId(), context.getExtensionName());
+    }
 
     @Override
     protected void handleCommand(Command command, ExtensionContext context) {
@@ -144,13 +150,17 @@ public class SimpleLLMExtension extends BaseExtension {
             availableTools.put(toolMetadata.getName(), toolMetadata);
 
             // 发送工具注册结果
-            sendResult(CommandResult.success(command.getCommandId(),
-                    Map.of("tool_name", toolMetadata.getName(), "status", "registered")));
+            CommandResult result = CommandResult.success(command.getCommandId(),
+                    Map.of("tool_name", toolMetadata.getName(), "status", "registered"));
+            result.setSourceLocation(getCurrentLocation()); // 设置sourceLocation
+            sendResult(result);
 
             log.info("工具注册成功: {}", toolMetadata.getName());
         } catch (Exception e) {
             log.error("工具注册失败", e);
-            sendResult(CommandResult.error(command.getCommandId(), "工具注册失败: " + e.getMessage()));
+            CommandResult errorResult = CommandResult.error(command.getCommandId(), "工具注册失败: " + e.getMessage());
+            errorResult.setSourceLocation(getCurrentLocation()); // 设置sourceLocation
+            sendResult(errorResult);
         }
     }
 
@@ -168,13 +178,18 @@ public class SimpleLLMExtension extends BaseExtension {
                     processChatCompletion(sessionId, userInput, context);
                 } catch (Exception e) {
                     log.error("聊天完成处理失败", e);
-                    sendResult(CommandResult.error(command.getCommandId(), "聊天完成处理失败: " + e.getMessage()));
+                    CommandResult errorResult = CommandResult.error(command.getCommandId(),
+                            "聊天完成处理失败: " + e.getMessage());
+                    errorResult.setSourceLocation(getCurrentLocation()); // 设置sourceLocation
+                    sendResult(errorResult);
                 }
             });
 
         } catch (Exception e) {
             log.error("聊天完成调用失败", e);
-            sendResult(CommandResult.error(command.getCommandId(), "聊天完成调用失败: " + e.getMessage()));
+            CommandResult errorResult = CommandResult.error(command.getCommandId(), "聊天完成调用失败: " + e.getMessage());
+            errorResult.setSourceLocation(getCurrentLocation()); // 设置sourceLocation
+            sendResult(errorResult);
         }
     }
 
@@ -189,13 +204,17 @@ public class SimpleLLMExtension extends BaseExtension {
             sessionHistory.remove(sessionId);
 
             // 发送刷新结果
-            sendResult(CommandResult.success(command.getCommandId(),
-                    Map.of("session_id", sessionId, "status", "flushed")));
+            CommandResult result = CommandResult.success(command.getCommandId(),
+                    Map.of("session_id", sessionId, "status", "flushed"));
+            result.setSourceLocation(getCurrentLocation()); // 设置sourceLocation
+            sendResult(result);
 
             log.info("会话刷新成功: {}", sessionId);
         } catch (Exception e) {
             log.error("会话刷新失败", e);
-            sendResult(CommandResult.error(command.getCommandId(), "会话刷新失败: " + e.getMessage()));
+            CommandResult errorResult = CommandResult.error(command.getCommandId(), "会话刷新失败: " + e.getMessage());
+            errorResult.setSourceLocation(getCurrentLocation()); // 设置sourceLocation
+            sendResult(errorResult);
         }
     }
 
@@ -229,8 +248,10 @@ public class SimpleLLMExtension extends BaseExtension {
         sendTextOutput("\n", true); // 结束标记
 
         // 发送完成结果
-        sendResult(CommandResult.success("chat_completion",
-                Map.of("session_id", sessionId, "response", response)));
+        CommandResult finalResult = CommandResult.success("chat_completion",
+                Map.of("session_id", sessionId, "response", response));
+        finalResult.setSourceLocation(getCurrentLocation()); // 设置sourceLocation
+        sendResult(finalResult);
     }
 
     /**
@@ -255,6 +276,7 @@ public class SimpleLLMExtension extends BaseExtension {
         textData.setProperties(Map.of(
                 "text", text,
                 "end_of_segment", isFinal));
+        textData.setSourceLocation(getCurrentLocation()); // 设置sourceLocation
         sendMessage(textData);
     }
 
@@ -262,7 +284,7 @@ public class SimpleLLMExtension extends BaseExtension {
      * 更新会话历史
      */
     private void updateSessionHistory(String sessionId, String role, String content) {
-        sessionHistory.computeIfAbsent(sessionId, k -> List.of())
+        sessionHistory.computeIfAbsent(sessionId, k -> new java.util.ArrayList<>()) // 使用ArrayList确保可变
                 .add(Map.of("role", role, "content", content));
 
         // 限制历史记录长度

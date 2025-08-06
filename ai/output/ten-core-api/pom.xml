@@ -49,11 +49,13 @@
         <dependency>
             <groupId>io.netty</groupId>
             <artifactId>netty-codec-http</artifactId>
+            <version>${netty.version}</version> <!-- 显式指定版本 -->
         </dependency>
         <!-- Netty handler for general handlers -->
         <dependency>
             <groupId>io.netty</groupId>
             <artifactId>netty-handler</artifactId>
+            <version>${netty.version}</version> <!-- 显式指定版本 -->
         </dependency>
 
         <!-- 日志 -->

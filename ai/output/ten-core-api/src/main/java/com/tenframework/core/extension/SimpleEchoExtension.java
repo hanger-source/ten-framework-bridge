@@ -8,6 +8,7 @@ import com.tenframework.core.message.VideoFrame;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.Map;
+import com.tenframework.core.Location; // 导入Location类
 
 /**
  * 简单的Echo Extension示例
@@ -43,8 +44,10 @@ public class SimpleEchoExtension extends BaseExtension {
         String echoMessage = echoPrefix + commandName;
 
         // 使用BaseExtension提供的便捷方法发送结果
-        sendResult(CommandResult.success(command.getCommandId(),
-                Map.of("echo_message", echoMessage, "count", ++messageCount)));
+        CommandResult result = CommandResult.success(command.getCommandId(),
+                Map.of("echo_message", echoMessage, "count", ++messageCount));
+        result.setSourceLocation(new Location(context.getAppUri(), context.getGraphId(), context.getExtensionName()));
+        sendResult(result);
     }
 
     @Override
@@ -52,7 +55,8 @@ public class SimpleEchoExtension extends BaseExtension {
         // 开发者只需关注业务逻辑
         String dataName = data.getName();
         String dataContent = new String(data.getDataBytes());
-        log.info("收到数据: {} = {}", dataName, dataContent);
+        log.info("SimpleEchoExtension收到数据: name={}, content={}, sourceLocation={}",
+                dataName, dataContent, data.getSourceLocation());
 
         // 简单的回显逻辑
         String echoContent = echoPrefix + dataContent;
@@ -60,7 +64,13 @@ public class SimpleEchoExtension extends BaseExtension {
         // 使用BaseExtension提供的便捷方法发送消息
         Data echoData = Data.binary("echo_data", echoContent.getBytes());
         echoData.setProperties(Map.of("original_name", dataName, "count", ++messageCount));
+        echoData.setSourceLocation(new Location(context.getAppUri(), context.getGraphId(), context.getExtensionName()));
+        // 将回显数据发送回EndToEndIntegrationTest中模拟的Engine目标
+        echoData.setDestinationLocations(
+                java.util.Collections.singletonList(data.getSourceLocation())); // 将硬编码的"engine"改为原始数据的源Location
         sendMessage(echoData);
+        log.info("SimpleEchoExtension发送回显数据: name={}, destinationLocations={}",
+                echoData.getName(), echoData.getDestinationLocations());
     }
 
     @Override

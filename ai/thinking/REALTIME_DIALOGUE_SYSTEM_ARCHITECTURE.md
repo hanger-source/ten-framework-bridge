@@ -129,9 +129,9 @@
 3.  **`App` 的职责**:
     - 持有一个 `AddonRegistry`，用于注册所有可用的 `Extension` 工厂（Addon）。
     - 它的 `startGraph(json)` 方法将：
-        a. 调用 `GraphBuilder` 解析 JSON 并创建一个 `Engine` 实例。
-        b. 将 `Engine` 实例存储起来进行管理。
-        c. 启动 `Engine` 的主循环。
+      a. 调用 `GraphBuilder` 解析 JSON 并创建一个 `Engine` 实例。
+      b. 将 `Engine` 实例存储起来进行管理。
+      c. 启动 `Engine` 的主循环。
 4.  **`Engine` 的职责**:
     - 在其构造函数或 `init` 方法中，接收 `GraphBuilder` 解析出的 `Extension` 实例列表和静态路由表。
     - 持有一个 `Map<String, Extension>` 用于实例名到实例的映射。
@@ -174,8 +174,8 @@
 4.  **下行数据流 (语音与文本输出)**:
     - `LLM_Extension` 在 RPC 回调中，收到了 `OpenAI_Extension` 返回的**流式**文本。
     - **并行处理**:
-        - **(a) 文本字幕**: `LLM_Extension` 将收到的每一段文本，包装成一个新的 `Data` 消息。然后，它调用 `set_dest`，将目的地设置为**源 `Remote_Client` 的 URI**。`Engine` 查表找到 `Remote_Client`，将文本消息通过 `Connection` 发回客户端。
-        - **(b) 语音合成**: 同时，`LLM_Extension` 将同样的文本 `Data` 消息，`set_dest` 到图中的 `TTS_Extension`。
+      - **(a) 文本字幕**: `LLM_Extension` 将收到的每一段文本，包装成一个新的 `Data` 消息。然后，它调用 `set_dest`，将目的地设置为**源 `Remote_Client` 的 URI**。`Engine` 查表找到 `Remote_Client`，将文本消息通过 `Connection` 发回客户端。
+      - **(b) 语音合成**: 同时，`LLM_Extension` 将同样的文本 `Data` 消息，`set_dest` 到图中的 `TTS_Extension`。
     - `TTS_Extension` 接收文本，合成出 `AudioFrame`。
     - `TTS_Extension` 也调用 `set_dest`，将这个 `AudioFrame` 的目的地也设置为**源 `Remote_Client` 的 URI**。
     - `Engine` 再次查表找到 `Remote_Client`，将合成的音频流通过 `Connection` 发回客户端。

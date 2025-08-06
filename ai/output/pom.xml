@@ -19,7 +19,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
         <!-- 版本管理 -->
-        <netty.version>4.1.115.Final</netty.version>
+        <netty.version>4.1.116.Final</netty.version> <!-- 升级版本 -->
         <agrona.version>2.2.4</agrona.version>
         <jackson.version>2.18.2</jackson.version>
         <spring.version>6.2.1</spring.version>
@@ -46,6 +46,13 @@
                 <version>${netty.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
+            </dependency>
+
+            <!-- 尝试引入netty-all以确保所有模块都可用 -->
+            <dependency>
+                <groupId>io.netty</groupId>
+                <artifactId>netty-all</artifactId>
+                <version>${netty.version}</version>
             </dependency>
 
             <!-- Agrona 高性能并发数据结构 -->
