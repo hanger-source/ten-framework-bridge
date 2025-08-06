@@ -13,6 +13,8 @@ import org.msgpack.core.ExtensionTypeHeader;
 import io.netty.handler.codec.http.websocketx.BinaryWebSocketFrame; // 新增导入
 import com.tenframework.core.message.Message; // 新增导入
 import com.tenframework.core.message.MessageUtils; // 新增导入
+import com.tenframework.server.message.TenMessagePackMapperProvider;
+import com.tenframework.core.message.Data; // 确保导入 Data 类
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -28,17 +30,8 @@ public class MessageEncoder extends MessageToMessageEncoder<Message> { // 修改
     private final ObjectMapper objectMapper;
 
     public MessageEncoder() {
-        // 使用MessagePackFactory创建ObjectMapper，用于MsgPack序列化
-        this.objectMapper = new ObjectMapper(new MessagePackFactory());
-
-        // 配置ObjectMapper忽略未知属性
-        this.objectMapper.configure(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES,
-                false);
-
-        // 注册自定义的ByteBuf序列化器
-        SimpleModule byteBufModule = new SimpleModule();
-        byteBufModule.addSerializer(ByteBuf.class, new ByteBufSerializer());
-        this.objectMapper.registerModule(byteBufModule);
+        // 使用TenMessagePackMapperProvider获取预配置的ObjectMapper实例
+        this.objectMapper = TenMessagePackMapperProvider.getObjectMapper();
     }
 
     @Override
@@ -55,8 +48,10 @@ public class MessageEncoder extends MessageToMessageEncoder<Message> { // 修改
 
         try {
             // 1. 将Message对象序列化为普通的MsgPack字节数组
+            // Jackson现在应该会根据@JsonTypeInfo和@JsonSubTypes自动添加"type"字段
             byte[] innerBytes = objectMapper.writeValueAsBytes(msg);
-            log.debug("MessageEncoder: 内部消息 '{}' 序列化为 {} 字节", msg.getName(), innerBytes.length);
+            log.debug("MessageEncoder: 内部消息 '{}' (type: {}) 序列化为 {} 字节", msg.getName(), msg.getType(),
+                    innerBytes.length);
 
             // 2. 将内部MsgPack字节数组封装为自定义的EXT类型
             ExtensionTypeHeader extHeader = new ExtensionTypeHeader(MessageUtils.TEN_MSGPACK_EXT_TYPE_MSG,

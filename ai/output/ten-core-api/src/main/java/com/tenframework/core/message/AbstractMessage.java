@@ -2,6 +2,7 @@ package com.tenframework.core.message;
 
 import com.tenframework.core.Location;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.extern.slf4j.Slf4j;
@@ -160,6 +161,15 @@ public abstract non-sealed class AbstractMessage implements Message {
      */
     @Override
     public abstract Message clone() throws CloneNotSupportedException;
+
+    @Override
+    @JsonIgnore
+    public abstract MessageType getType();
+
+    @Override
+    public void setName(String name) {
+        this.name = name;
+    }
 
     @Override
     public String toString() {

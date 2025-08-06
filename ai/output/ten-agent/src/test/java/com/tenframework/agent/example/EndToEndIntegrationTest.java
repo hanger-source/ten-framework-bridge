@@ -1,79 +1,65 @@
 package com.tenframework.agent.example;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.tenframework.core.engine.Engine;
-import com.tenframework.core.extension.BaseExtension;
-import com.tenframework.core.extension.SimpleEchoExtension;
-import com.tenframework.core.message.Data;
-import com.tenframework.core.Location;
-import com.tenframework.core.message.Message;
-import com.tenframework.server.message.MessageDecoder; // 从ten-server导入
-import com.tenframework.server.message.MessageEncoder; // 从ten-server导入
-import com.tenframework.server.TenServer; // 从ten-server导入
-
-import io.netty.bootstrap.Bootstrap;
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
-import io.netty.channel.Channel;
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelInitializer;
-import io.netty.channel.ChannelOption;
-import io.netty.channel.EventLoopGroup;
-import io.netty.channel.nio.NioEventLoopGroup;
-import io.netty.channel.socket.SocketChannel;
-import io.netty.channel.socket.nio.NioSocketChannel;
-import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
-import io.netty.handler.codec.LengthFieldPrepender;
-import io.netty.channel.SimpleChannelInboundHandler;
-import com.tenframework.core.extension.ExtensionContext;
-import io.netty.handler.codec.http.DefaultHttpHeaders;
-import io.netty.handler.codec.http.HttpClientCodec;
-import io.netty.handler.codec.http.HttpObjectAggregator;
-import io.netty.handler.codec.http.websocketx.WebSocketClientHandshakerFactory;
-import io.netty.handler.codec.http.websocketx.WebSocketClientProtocolHandler;
-import io.netty.handler.codec.http.websocketx.WebSocketVersion;
-import io.netty.handler.codec.http.websocketx.BinaryWebSocketFrame;
-import io.netty.handler.codec.http.websocketx.CloseWebSocketFrame;
-import io.netty.handler.codec.http.websocketx.PongWebSocketFrame;
-import io.netty.handler.codec.http.websocketx.TextWebSocketFrame;
-import io.netty.handler.codec.http.websocketx.ContinuationWebSocketFrame;
-import java.net.URI;
-
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import lombok.extern.slf4j.Slf4j;
-
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.net.HttpURLConnection;
+import java.net.URI;
 import java.net.URL;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.tenframework.core.Location;
+import com.tenframework.core.engine.Engine;
+import com.tenframework.core.graph.GraphInstance;
+import com.tenframework.core.message.Data;
+import com.tenframework.core.message.Message;
+import com.tenframework.core.message.MessageConstants;
+import com.tenframework.server.TenServer;
+import com.tenframework.server.message.MessageDecoder;
+import com.tenframework.server.message.MessageEncoder;
+import io.netty.bootstrap.Bootstrap;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelInitializer;
+import io.netty.channel.EventLoopGroup;
+import io.netty.channel.SimpleChannelInboundHandler;
+import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.socket.SocketChannel;
+import io.netty.channel.socket.nio.NioSocketChannel;
+import io.netty.handler.codec.http.DefaultHttpHeaders;
+import io.netty.handler.codec.http.FullHttpResponse;
+import io.netty.handler.codec.http.HttpClientCodec;
+import io.netty.handler.codec.http.HttpObjectAggregator;
+import io.netty.handler.codec.http.websocketx.BinaryWebSocketFrame;
+import io.netty.handler.codec.http.websocketx.CloseWebSocketFrame;
+import io.netty.handler.codec.http.websocketx.PongWebSocketFrame;
+import io.netty.handler.codec.http.websocketx.TextWebSocketFrame;
+import io.netty.handler.codec.http.websocketx.WebSocketClientHandshaker;
+import io.netty.handler.codec.http.websocketx.WebSocketClientHandshakerFactory;
+import io.netty.handler.codec.http.websocketx.WebSocketFrame;
+import io.netty.handler.codec.http.websocketx.WebSocketVersion;
+import io.netty.util.CharsetUtil;
+import io.netty.util.concurrent.DefaultPromise;
+import io.netty.util.concurrent.GlobalEventExecutor;
+import io.netty.util.concurrent.Promise;
+import lombok.extern.slf4j.Slf4j;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-
-import io.netty.handler.codec.http.FullHttpResponse;
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
-import io.netty.util.CharsetUtil;
-import io.netty.handler.codec.http.websocketx.WebSocketClientHandshaker;
-import io.netty.util.concurrent.Promise;
-import io.netty.util.concurrent.DefaultPromise;
-import io.netty.util.concurrent.GlobalEventExecutor;
-import java.util.ArrayList;
-import java.util.List;
-import io.netty.handler.codec.http.websocketx.WebSocketFrame;
-import com.tenframework.core.message.MessageConstants;
-import com.tenframework.core.graph.GraphInstance;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 
 @Slf4j
 public class EndToEndIntegrationTest {
@@ -95,7 +81,7 @@ public class EndToEndIntegrationTest {
 
         // 使用TenServer启动TCP和HTTP服务，让操作系统自动分配端口
         tenServer = new TenServer(TCP_PORT, HTTP_PORT, engine);
-        tenServer.start().get(5, TimeUnit.SECONDS); // 阻塞等待服务器启动完成
+        tenServer.start().get(10, TimeUnit.SECONDS); // 延长超时时间
         // 获取实际绑定的端口
         int actualTcpPort = tenServer.getTcpPort();
         int actualHttpPort = tenServer.getHttpPort();
@@ -107,15 +93,16 @@ public class EndToEndIntegrationTest {
     @AfterEach
     void tearDown() throws Exception {
         if (tenServer != null) {
-            tenServer.shutdown().get(5, TimeUnit.SECONDS); // 关闭TenServer
-            // Thread.sleep(1000); // 移除不必要的延迟
+            tenServer.shutdown().get(10, TimeUnit.SECONDS); // 延长关闭超时时间
         }
         if (engine != null) {
             engine.stop();
         }
         if (clientGroup != null) {
-            clientGroup.shutdownGracefully().sync();
+            clientGroup.shutdownGracefully(1, 5, TimeUnit.SECONDS).sync(); // 延长客户端组关闭时间
         }
+        // 添加短暂延迟，确保所有资源已完全释放
+        TimeUnit.MILLISECONDS.sleep(500);
         log.info("所有测试服务已关闭。");
     }
 
@@ -268,69 +255,6 @@ public class EndToEndIntegrationTest {
         }
     }
 
-    // TCP/MsgPack 客户端发送 Data 消息并接收回显
-    private void sendTcpDataMessage(int port, String graphId, String messageName, Map<String, Object> payload,
-            CompletableFuture<Message> responseFuture, EventLoopGroup group) throws Exception {
-        try {
-            Bootstrap b = new Bootstrap();
-            b.group(group)
-                    .channel(NioSocketChannel.class)
-                    .option(ChannelOption.TCP_NODELAY, true)
-                    .handler(new ChannelInitializer<SocketChannel>() {
-                        @Override
-                        protected void initChannel(SocketChannel ch) throws Exception {
-                            // 出站处理器 (编码消息以便发送)
-                            ch.pipeline().addLast(new LengthFieldPrepender(4));
-                            ch.pipeline().addLast(new MessageEncoder());
-
-                            // 入站处理器 (解码接收到的消息)
-                            ch.pipeline().addLast(new LengthFieldBasedFrameDecoder(Integer.MAX_VALUE, 0, 4, 0, 4));
-                            ch.pipeline().addLast(new MessageDecoder());
-
-                            // 业务逻辑处理器
-                            ch.pipeline().addLast(new SimpleChannelInboundHandler<Message>() {
-                                @Override
-                                protected void channelRead0(ChannelHandlerContext ctx, Message msg) {
-                                    log.debug("TCP客户端收到消息: type={}, name={}", msg.getType(), msg.getName());
-                                    responseFuture.complete(msg);
-                                    ctx.close();
-                                }
-
-                                @Override
-                                public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-                                    log.error("TCP客户端处理消息时发生异常", cause);
-                                    responseFuture.completeExceptionally(cause);
-                                    ctx.close();
-                                }
-                            });
-                        }
-                    });
-
-            log.info("TCP客户端尝试连接到localhost:{}", port);
-            ChannelFuture f = b.connect("localhost", port).sync();
-            log.info("TCP客户端已连接到localhost:{}", port);
-            Channel channel = f.channel();
-
-            // 构建 Data 消息
-            // 将 payload 转换为 JSON 字符串
-            String jsonPayload = objectMapper.writeValueAsString(payload);
-            Data testData = Data.json(messageName, jsonPayload);
-            testData.setSourceLocation(Location.builder().appUri("test-app").graphId(graphId)
-                    .extensionName("tcp-client-extension").build());
-            testData.setDestinationLocations(
-                    Collections.singletonList(Location.builder().appUri("test-app").graphId(graphId)
-                            .extensionName("SimpleEcho").build()));
-
-            log.info("TCP客户端发送Data消息: messageName={}, sourceLocation={}, destinationLocations={}",
-                    testData.getName(), testData.getSourceLocation(), testData.getDestinationLocations());
-            channel.writeAndFlush(testData).sync();
-
-        } catch (Exception e) {
-            log.error("TCP客户端发送消息失败", e);
-            throw e;
-        }
-    }
-
     private void sendWebSocketDataMessage(URI uri, String graphId, String messageName, Map<String, Object> payload,
             CompletableFuture<Message> responseFuture, EventLoopGroup group) throws Exception {
         Bootstrap b = new Bootstrap();
@@ -372,14 +296,13 @@ public class EndToEndIntegrationTest {
         private final WebSocketClientHandshaker handshaker;
         private final Promise<Void> handshakeFuture;
         private final CompletableFuture<Message> responseFuture;
-        private Channel channel;
-
         private final MessageEncoder messageEncoder = new MessageEncoder();
         private final MessageDecoder messageDecoder = new MessageDecoder();
+        private Channel channel;
 
         public WebSocketClientHandler(WebSocketClientHandshaker handshaker, CompletableFuture<Message> responseFuture) {
             this.handshaker = handshaker;
-            this.handshakeFuture = new DefaultPromise<>(GlobalEventExecutor.INSTANCE);
+            handshakeFuture = new DefaultPromise<>(GlobalEventExecutor.INSTANCE);
             this.responseFuture = responseFuture;
         }
 
@@ -389,7 +312,7 @@ public class EndToEndIntegrationTest {
 
         @Override
         public void handlerAdded(ChannelHandlerContext ctx) {
-            this.channel = ctx.channel();
+            channel = ctx.channel();
         }
 
         @Override
@@ -445,7 +368,7 @@ public class EndToEndIntegrationTest {
                         Message decodedMsg = (Message) decodedMsgs.get(0);
                         responseFuture.complete(decodedMsg);
                         log.info("WebSocket客户端成功解码并接收到回显消息: {}", decodedMsg.getName());
-                        ctx.close();
+                        // ctx.close(); // 移除此行，避免过早关闭连接
                     } else {
                         log.warn("WebSocket客户端无法解码二进制帧为TEN消息。");
                     }

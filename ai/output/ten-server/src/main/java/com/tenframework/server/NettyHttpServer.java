@@ -1,6 +1,11 @@
 package com.tenframework.server;
 
+import java.util.concurrent.CompletableFuture;
+
 import com.tenframework.core.engine.Engine;
+import com.tenframework.server.handler.HttpCommandInboundHandler;
+import com.tenframework.server.handler.HttpCommandResultOutboundHandler;
+import com.tenframework.server.handler.WebSocketMessageFrameHandler;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelInitializer;
@@ -12,37 +17,23 @@ import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.codec.http.HttpObjectAggregator;
 import io.netty.handler.codec.http.HttpRequestDecoder;
 import io.netty.handler.codec.http.HttpResponseEncoder;
-import lombok.extern.slf4j.Slf4j;
-
-import java.util.concurrent.CompletableFuture;
 import io.netty.handler.codec.http.websocketx.WebSocketServerProtocolHandler;
-import com.tenframework.server.handler.WebSocketMessageFrameHandler;
-import com.tenframework.server.handler.HttpCommandResultOutboundHandler;
-import com.tenframework.server.handler.HttpCommandInboundHandler;
+import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 public class NettyHttpServer {
 
     private final int port;
     private final Engine engine; // Engine 实例
+    private final CompletableFuture<Void> startFuture = new CompletableFuture<>();
+    private final CompletableFuture<Void> shutdownFuture = new CompletableFuture<>();
     private EventLoopGroup bossGroup;
     private EventLoopGroup workerGroup;
-    private CompletableFuture<Void> startFuture = new CompletableFuture<>();
-    private CompletableFuture<Void> shutdownFuture = new CompletableFuture<>();
-
     private int boundPort; // 新增字段，用于存储实际绑定的端口
 
     public NettyHttpServer(int port, Engine engine) {
         this.port = port;
         this.engine = engine;
-    }
-
-    public CompletableFuture<Void> getStartFuture() {
-        return startFuture;
-    }
-
-    public CompletableFuture<Void> getShutdownFuture() {
-        return shutdownFuture;
     }
 
     public CompletableFuture<Void> start() {
@@ -60,10 +51,10 @@ public class NettyHttpServer {
                             ch.pipeline().addLast(new HttpCommandResultOutboundHandler()); // 添加HTTP命令结果编码器
                             ch.pipeline().addLast(new HttpResponseEncoder());
                             ch.pipeline().addLast(new HttpObjectAggregator(65536));
-
                             // WebSocket 握手和协议处理
                             // /ws 是WebSocket路径，如果请求是WebSocket升级，此Handler将升级协议
-                            ch.pipeline().addLast(new WebSocketServerProtocolHandler("/ws", null, true));
+                            ch.pipeline().addLast(
+                                new WebSocketServerProtocolHandler("/websocket", null, true)); // 将路径改为/websocket
 
                             // 自定义WebSocket消息帧处理器，处理WebSocket帧和TEN消息的转换
                             // 注意：此Handler在WebSocket握手成功后才开始处理WebSocket帧
@@ -81,7 +72,7 @@ public class NettyHttpServer {
             ChannelFuture f = b.bind(port);
             f.addListener(future -> {
                 if (future.isSuccess()) {
-                    this.boundPort = ((java.net.InetSocketAddress) ((ChannelFuture) future).channel().localAddress())
+                    boundPort = ((java.net.InetSocketAddress)((ChannelFuture)future).channel().localAddress())
                             .getPort(); // 获取实际绑定的端口
                     log.info("NettyHttpServer started and listening on port {}", boundPort);
                     startFuture.complete(null);

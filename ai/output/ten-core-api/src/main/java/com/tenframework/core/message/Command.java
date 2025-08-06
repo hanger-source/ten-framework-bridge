@@ -38,8 +38,8 @@ public final class Command extends AbstractMessage {
      */
     protected Command() {
         super();
-        this.commandId = generateCommandId();
-        this.args = new HashMap<>();
+        commandId = generateCommandId();
+        args = new HashMap<>();
     }
 
     /**
@@ -73,10 +73,16 @@ public final class Command extends AbstractMessage {
      */
     private Command(Command other) {
         super(other);
-        // 注意：clone时会生成新的commandId，这符合TEN框架的语义
-        this.commandId = generateCommandId();
-        this.parentCommandId = other.parentCommandId;
-        this.args = MessageUtils.deepCopyMap(other.args);
+        commandId = generateCommandId(); // 在克隆时生成新的commandId
+        parentCommandId = other.parentCommandId;
+        args = MessageUtils.deepCopyMap(other.args);
+    }
+
+    /**
+     * 生成UUID格式的命令ID
+     */
+    public static String generateCommandId() {
+        return UUID.randomUUID().toString();
     }
 
     @Override
@@ -150,13 +156,6 @@ public final class Command extends AbstractMessage {
      */
     public Object removeArg(String key) {
         return args.remove(key);
-    }
-
-    /**
-     * 生成UUID格式的命令ID
-     */
-    private static String generateCommandId() {
-        return UUID.randomUUID().toString();
     }
 
     /**

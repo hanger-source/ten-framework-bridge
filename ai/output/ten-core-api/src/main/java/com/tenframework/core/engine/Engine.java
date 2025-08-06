@@ -1,50 +1,46 @@
 package com.tenframework.core.engine;
 
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ConcurrentSkipListSet;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
+
 import com.tenframework.core.Location;
 import com.tenframework.core.extension.EngineExtensionContext;
-import com.tenframework.core.extension.ExtensionMetrics;
 import com.tenframework.core.extension.Extension;
+import com.tenframework.core.graph.GraphConfig;
 import com.tenframework.core.graph.GraphInstance;
+import com.tenframework.core.graph.GraphLoader;
+import com.tenframework.core.graph.NodeConfig;
 import com.tenframework.core.message.AudioFrame;
 import com.tenframework.core.message.Command;
 import com.tenframework.core.message.CommandResult;
+import com.tenframework.core.message.Data;
 import com.tenframework.core.message.Message;
+import com.tenframework.core.message.MessageConstants;
 import com.tenframework.core.message.MessageType;
-import com.tenframework.core.message.Data; // 确保导入 Data
 import com.tenframework.core.message.VideoFrame;
 import com.tenframework.core.path.PathOut;
 import com.tenframework.core.path.PathTable;
 import com.tenframework.core.path.ResultReturnPolicy;
+import com.tenframework.core.server.ChannelDisconnectedException;
+import io.netty.channel.Channel;
 import lombok.extern.slf4j.Slf4j;
 import org.agrona.concurrent.IdleStrategy;
 import org.agrona.concurrent.ManyToOneConcurrentArrayQueue;
 import org.agrona.concurrent.SleepingIdleStrategy;
 
-import java.util.Map;
-import java.util.Optional;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicReference;
-import io.netty.channel.Channel;
-import io.netty.channel.ChannelId; // 未使用，但可能之前有
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.ConcurrentSkipListSet;
-import com.tenframework.core.server.ChannelDisconnectedException;
-import java.util.Collections;
-import java.util.concurrent.TimeUnit;
-import com.tenframework.core.message.MessageConstants; // 新增导入
-import com.tenframework.core.engine.MessageSubmitter;
-import com.tenframework.core.graph.GraphConfig;
-import com.tenframework.core.graph.GraphLoader;
-import com.tenframework.core.graph.NodeConfig;
-
-import java.util.List;
+import static java.util.concurrent.Executors.newSingleThreadExecutor;
 
 /**
  * TEN框架的核心Engine实现
@@ -55,51 +51,42 @@ import java.util.List;
 public final class Engine implements MessageSubmitter {
 
     /**
+     * 队列容量，默认64K条消息
+     */
+    private static final int DEFAULT_QUEUE_CAPACITY = 65536;
+    /**
      * Engine的唯一标识符
      */
     private final String engineId;
-
     /**
      * Engine当前状态
      */
     private final AtomicReference<EngineState> state = new AtomicReference<>(EngineState.CREATED);
-
     /**
      * 引用计数，用于资源管理
      */
     private final AtomicLong referenceCount = new AtomicLong(1);
-
     /**
      * Engine是否正在运行
      */
     private final AtomicBoolean running = new AtomicBoolean(false);
-
     /**
      * 入站消息队列 - 使用Agrona ManyToOneConcurrentArrayQueue
      * 多生产者（Netty线程、Extension虚拟线程）单消费者（Engine核心线程）模式
      */
     private final ManyToOneConcurrentArrayQueue<Message> inboundMessageQueue;
-
     /**
      * 路径表，管理命令的生命周期和结果回溯
      */
     private final PathTable pathTable;
-
     /**
      * Engine核心处理线程 - 单线程ExecutorService
      */
     private final ExecutorService engineThread;
-
     /**
      * Agrona空闲策略，用于优化消息循环的CPU使用
      */
     private final IdleStrategy idleStrategy;
-
-    /**
-     * Engine核心线程的Thread引用，用于线程检查
-     */
-    private volatile Thread coreThread;
-
     /**
      * 维护graphId到GraphInstance的映射
      */
@@ -114,11 +101,10 @@ public final class Engine implements MessageSubmitter {
      * 维护channelId到相关联的Command ID集合的映射，用于断开连接时清理PathOut
      */
     private final ConcurrentMap<String, ConcurrentSkipListSet<UUID>> channelToCommandIdsMap;
-
     /**
-     * 队列容量，默认64K条消息
+     * Engine核心线程的Thread引用，用于线程检查
      */
-    private static final int DEFAULT_QUEUE_CAPACITY = 65536;
+    private volatile Thread coreThread;
 
     /**
      * 构造函数
@@ -143,19 +129,19 @@ public final class Engine implements MessageSubmitter {
         if (capacity < queueCapacity) {
             capacity <<= 1;
         }
-        this.inboundMessageQueue = new ManyToOneConcurrentArrayQueue<>(capacity);
-        this.pathTable = new PathTable();
-        this.idleStrategy = new SleepingIdleStrategy(1_000_000L); // 1ms sleep time
+        inboundMessageQueue = new ManyToOneConcurrentArrayQueue<>(capacity);
+        pathTable = new PathTable();
+        idleStrategy = new SleepingIdleStrategy(1_000_000L); // 1ms sleep time
 
-        this.channelMap = new ConcurrentHashMap<>();
-        this.channelToCommandIdsMap = new ConcurrentHashMap<>();
-        this.graphInstances = new ConcurrentHashMap<>();
+        channelMap = new ConcurrentHashMap<>();
+        channelToCommandIdsMap = new ConcurrentHashMap<>();
+        graphInstances = new ConcurrentHashMap<>();
 
         // 创建单线程ExecutorService，使用自定义ThreadFactory
-        this.engineThread = Executors.newSingleThreadExecutor(r -> {
+        engineThread = newSingleThreadExecutor(r -> {
             Thread t = new Thread(r, "TEN-Engine-" + engineId);
             t.setDaemon(false); // 非守护线程
-            t.setUncaughtExceptionHandler((thread, ex) -> {
+            t.setUncaughtExceptionHandler((_, ex) -> {
                 log.error("Engine核心线程发生未捕获异常", ex);
                 state.set(EngineState.ERROR);
             });
@@ -252,6 +238,7 @@ public final class Engine implements MessageSubmitter {
      * @param message 要处理的消息
      * @return true如果成功提交，false如果队列已满
      */
+    @Override
     public boolean submitMessage(Message message) {
         return submitMessage(message, null);
     }
@@ -264,6 +251,7 @@ public final class Engine implements MessageSubmitter {
      * @param channelId 可选的Channel ID，如果消息来自特定Channel
      * @return true如果成功提交，false如果队列已满
      */
+    @Override
     public boolean submitMessage(Message message, String channelId) {
         if (state.get() != EngineState.RUNNING) {
             log.warn("Engine未在运行状态，拒绝消息: engineId={}, messageType={}",
@@ -474,6 +462,7 @@ public final class Engine implements MessageSubmitter {
             if (targetExtensionNames.size() > 1) {
                 try {
                     messageToSend = command.clone();
+                    messageToSend.setCommandId(Command.generateCommandId()); // 为克隆的命令生成新的ID
                 } catch (CloneNotSupportedException e) {
                     log.error("克隆命令消息失败，无法分发到所有目标: commandId={}, targetExtensionName={}",
                             command.getCommandId(), targetExtensionName, e);
@@ -632,7 +621,7 @@ public final class Engine implements MessageSubmitter {
         CommandResult result;
         if (graphId == null || graphId.isEmpty()) {
             result = CommandResult.error(command.getCommandId(),
-                    (String) Map.of("error", "stop_graph命令缺少graph_id属性").get("error"));
+                Map.of("error", "stop_graph命令缺少graph_id属性").get("error"));
             log.error("stop_graph命令参数缺失: graphId={}", graphId);
         } else {
             GraphInstance removedGraph = graphInstances.remove(graphId);
@@ -644,12 +633,12 @@ public final class Engine implements MessageSubmitter {
                     log.info("图实例停止成功: graphId={}", graphId);
                 } catch (Exception e) {
                     result = CommandResult.error(command.getCommandId(),
-                            (String) Map.of("error", "停止图实例失败: " + e.getMessage()).get("error"));
+                        Map.of("error", "停止图实例失败: " + e.getMessage()).get("error"));
                     log.error("停止图实例时发生异常: graphId={}", graphId, e);
                 }
             } else {
                 result = CommandResult.error(command.getCommandId(),
-                        (String) Map.of("error", "图实例不存在: " + graphId).get("error"));
+                    Map.of("error", "图实例不存在: " + graphId).get("error"));
                 log.warn("尝试停止不存在的图实例: graphId={}", graphId);
             }
         }
@@ -997,12 +986,11 @@ public final class Engine implements MessageSubmitter {
 
             Extension extension = extensionOpt.get();
             EngineExtensionContext context = contextOpt.get();
-
             // 如果有多个目标，需要克隆消息，确保每个Extension接收到独立副本
             Message messageToSend = message;
             if (targetExtensionNames.size() > 1) {
                 try {
-                    messageToSend = (Message) message.clone();
+                    messageToSend = message.clone();
                 } catch (CloneNotSupportedException e) {
                     log.error("克隆数据消息失败，无法分发到所有目标: messageType={}, messageName={}, targetExtensionName={}",
                             message.getType(), message.getName(), targetExtensionName, e);
@@ -1016,7 +1004,7 @@ public final class Engine implements MessageSubmitter {
                     .graphId(graphInstance.getGraphId())
                     .extensionName(targetExtensionName)
                     .build();
-            messageToSend.setDestinationLocations(Collections.singletonList(currentTargetLocation));
+            messageToSend.setDestinationLocations(List.of(currentTargetLocation));
 
             // 根据消息类型调用相应的Extension方法
             try {

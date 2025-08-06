@@ -75,23 +75,6 @@ public enum MessageType {
     }
 
     /**
-     * 从字符串值解析消息类型
-     */
-    public static MessageType fromValue(String value) {
-        if (value == null) {
-            return INVALID;
-        }
-
-        for (MessageType type : values()) {
-            if (type.value.equals(value)) {
-                return type;
-            }
-        }
-
-        throw new IllegalArgumentException("未知的消息类型: " + value);
-    }
-
-    /**
      * 检查是否是命令类型消息
      */
     public boolean isCommand() {

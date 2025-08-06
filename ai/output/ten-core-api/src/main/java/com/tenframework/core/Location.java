@@ -2,6 +2,7 @@ package com.tenframework.core;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonIgnore; // 导入 JsonIgnore
 import lombok.Builder; // 导入 Builder
 
 /**
@@ -60,6 +61,7 @@ public record Location(
     /**
      * 获取图级别的标识符（不包含extensionName）
      */
+    @JsonIgnore
     public String getGraphScope() {
         return appUri + "/" + graphId;
     }

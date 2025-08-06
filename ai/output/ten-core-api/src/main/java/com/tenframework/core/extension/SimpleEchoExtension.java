@@ -1,17 +1,17 @@
 package com.tenframework.core.extension;
 
+import java.io.IOException;
+import java.util.Map;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.tenframework.core.Location;
+import com.tenframework.core.message.AudioFrame;
 import com.tenframework.core.message.Command;
 import com.tenframework.core.message.CommandResult;
 import com.tenframework.core.message.Data;
-import com.tenframework.core.message.AudioFrame;
+import com.tenframework.core.message.MessageConstants;
 import com.tenframework.core.message.VideoFrame;
 import lombok.extern.slf4j.Slf4j;
-
-import java.util.Map;
-import com.tenframework.core.Location; // 导入Location类
-import com.fasterxml.jackson.databind.ObjectMapper; // Add this import
-import java.io.IOException; // Add this import
-import com.tenframework.core.message.MessageConstants; // 新增导入
 
 /**
  * 简单的Echo Extension示例
@@ -32,10 +32,9 @@ import com.tenframework.core.message.MessageConstants; // 新增导入
 @Slf4j
 public class SimpleEchoExtension extends BaseExtension {
 
+    private static final ObjectMapper objectMapper = new ObjectMapper(); // Add this static final field
     private String echoPrefix = "Echo: ";
     private long messageCount = 0;
-
-    private static final ObjectMapper objectMapper = new ObjectMapper(); // Add this static final field
 
     // 构造函数已被移除，依赖BaseExtension的默认构造函数
 
@@ -60,19 +59,39 @@ public class SimpleEchoExtension extends BaseExtension {
         String dataName = data.getName();
         log.info("SimpleEchoExtension收到数据: name={}, sourceLocation={}",
                 dataName, data.getSourceLocation());
+        log.debug("原始数据内容类型: {}, 编码: {}", data.getContentType(), data.getEncoding());
+        if (data.hasData()) {
+            log.debug("原始数据大小: {} bytes", data.getDataSize());
+        } else {
+            log.debug("原始数据不包含有效负载。");
+        }
 
         try {
             // 1. 解析原始数据内容为Map
-            Map<String, Object> originalPayload = objectMapper.readValue(data.getDataBytes(), Map.class);
+            byte[] rawDataBytes = data.getDataBytes();
+            if (rawDataBytes.length == 0) {
+                log.warn("SimpleEchoExtension收到空数据或null数据，无法处理回显。");
+                return;
+            }
+            log.debug("尝试将原始数据解析为JSON Map, 长度: {} bytes", rawDataBytes.length);
+            Map<String, Object> originalPayload = objectMapper.readValue(rawDataBytes, Map.class);
+            log.debug("原始数据解析成功: {}", originalPayload);
             String originalContent = (String) originalPayload.get("content");
+            if (originalContent == null) {
+                log.warn("原始数据payload中未找到'content'字段，跳过回显处理。");
+                return;
+            }
 
             String echoContent = echoPrefix + originalContent; // 只对原始内容进行前缀
+            log.debug("回显内容: {}", echoContent);
 
             // 2. 更新payload中的content
             originalPayload.put("content", echoContent);
+            log.debug("更新后的payload: {}", originalPayload);
 
             // 3. 将更新后的payload序列化回JSON字节
             byte[] echoedContentBytes = objectMapper.writeValueAsBytes(originalPayload);
+            log.debug("回显数据序列化为 {} 字节", echoedContentBytes.length);
 
             Data echoData = Data.binary(MessageConstants.DATA_NAME_ECHO_DATA, echoedContentBytes); // 使用常量
             echoData.setProperties(Map.of("original_name", dataName, "count", ++messageCount));
@@ -81,18 +100,41 @@ public class SimpleEchoExtension extends BaseExtension {
             String clientChannelId = data.getProperty(MessageConstants.PROPERTY_CLIENT_CHANNEL_ID, String.class); // 使用常量
             if (clientChannelId != null) {
                 echoData.setProperty(MessageConstants.PROPERTY_CLIENT_CHANNEL_ID, clientChannelId); // 使用常量
+                log.debug("复制 client_channel_id: {}", clientChannelId);
+            } else {
+                log.warn("原始消息中未找到 __client_channel_id__，无法回传给特定客户端。");
             }
 
             echoData.setSourceLocation(
                     new Location(context.getAppUri(), context.getGraphId(), context.getExtensionName()));
-            echoData.setDestinationLocations(
+            // Modified: Instead of sending back to the original source extension (which
+            // causes a loop if it's another EchoExtension),
+            // send back to the client directly via its original source location if it's a
+            // client.
+            // The Engine's processData method handles routing to the Channel if the
+            // destination appUri is a client.
+            if (data.getSourceLocation() != null &&
+                (MessageConstants.APP_URI_TEST_CLIENT.equals(data.getSourceLocation().appUri()) ||
+                    MessageConstants.APP_URI_HTTP_CLIENT.equals(data.getSourceLocation().appUri()))) {
+                echoData.setDestinationLocations(java.util.Collections.singletonList(data.getSourceLocation()));
+            } else {
+                // Fallback: If not from a recognized client URI, or no source location, send
+                // back to the original source location.
+                // This might still cause a loop if source is another echo extension, but the
+                // primary client case is handled.
+                echoData.setDestinationLocations(
                     java.util.Collections.singletonList(data.getSourceLocation()));
+            }
+            log.debug("准备发送回显数据: name={}, sourceLocation={}, destinationLocations={}",
+                echoData.getName(), echoData.getSourceLocation(), echoData.getDestinationLocations());
             sendMessage(echoData);
             log.info("SimpleEchoExtension发送回显数据: name={}, destinationLocations={}",
                     echoData.getName(), echoData.getDestinationLocations());
         } catch (IOException e) {
             log.error("处理数据解析/序列化时发生错误: {}", e.getMessage(), e);
             // 可以在这里发送一个错误消息回客户端，或者只是记录日志并丢弃消息
+        } catch (Exception e) {
+            log.error("SimpleEchoExtension处理数据时发生意外错误: {}", e.getMessage(), e);
         }
     }
 

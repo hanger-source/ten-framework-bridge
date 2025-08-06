@@ -1,27 +1,24 @@
 package com.tenframework.server.handler;
 
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
 import com.tenframework.core.engine.Engine;
 import com.tenframework.core.message.Message;
 import com.tenframework.core.message.MessageType;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
-import io.netty.handler.codec.http.websocketx.BinaryWebSocketFrame;
-import io.netty.handler.codec.http.websocketx.TextWebSocketFrame;
-import io.netty.handler.codec.http.websocketx.WebSocketFrame;
 import lombok.extern.slf4j.Slf4j;
-import com.tenframework.core.message.MessageConstants;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.Map;
-import io.netty.channel.ChannelId;
-import io.netty.buffer.ByteBuf;
+
+import static com.tenframework.core.message.MessageConstants.PROPERTY_CLIENT_CHANNEL_ID;
 
 @Slf4j
 public class WebSocketMessageFrameHandler extends SimpleChannelInboundHandler<Message> {
 
-    private final Engine engine;
     // 维护 ChannelId 到 Channel 的映射，以便在Engine处理完消息后回传
     private static final Map<String, Channel> activeChannels = new ConcurrentHashMap<>();
+    private final Engine engine;
 
     public WebSocketMessageFrameHandler(Engine engine) {
         this.engine = engine;
@@ -31,7 +28,7 @@ public class WebSocketMessageFrameHandler extends SimpleChannelInboundHandler<Me
     protected void channelRead0(ChannelHandlerContext ctx, Message msg) {
         // 获取当前 Channel 的 ID，并作为临时属性添加到消息中
         String channelId = ctx.channel().id().asShortText();
-        msg.setProperty(MessageConstants.PROPERTY_CLIENT_CHANNEL_ID, channelId); // 使用常量
+        msg.setProperty(PROPERTY_CLIENT_CHANNEL_ID, channelId); // 使用常量
 
         boolean submitted = engine.submitMessage(msg);
         if (!submitted) {

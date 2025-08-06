@@ -1,22 +1,20 @@
 package com.tenframework.agent;
 
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.TimeUnit;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.tenframework.core.Location;
 import com.tenframework.core.engine.Engine;
-import com.tenframework.server.TenServer; // 导入TenServer
 import com.tenframework.core.extension.SimpleEchoExtension;
 import com.tenframework.core.message.Command;
 import com.tenframework.core.message.Data;
-import com.tenframework.core.Location;
-import com.tenframework.core.message.Message;
-
+import com.tenframework.server.TenServer;
 import io.netty.buffer.Unpooled;
-
-import java.util.UUID;
-import java.util.concurrent.TimeUnit;
-import java.util.Collections;
-import java.util.Map;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
-import java.util.HashMap;
 
 public class Main {
         public static void main(String[] args) throws Exception {

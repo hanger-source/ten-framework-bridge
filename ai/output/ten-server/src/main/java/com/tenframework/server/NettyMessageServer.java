@@ -1,8 +1,13 @@
 package com.tenframework.server;
 
+import java.util.concurrent.CompletableFuture;
+
 import com.tenframework.core.engine.Engine;
-import com.tenframework.server.message.MessageDecoder;
+import com.tenframework.server.handler.ByteBufToWebSocketFrameEncoder;
+import com.tenframework.server.handler.WebSocketFrameToByteBufDecoder;
+import com.tenframework.server.handler.WebSocketMessageFrameHandler;
 import com.tenframework.server.message.MessageEncoder;
+import com.tenframework.server.message.WebSocketMessageDecoder;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelInitializer;
@@ -11,19 +16,10 @@ import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
-import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
-import io.netty.handler.codec.LengthFieldPrepender;
-import lombok.extern.slf4j.Slf4j;
-
-import java.util.concurrent.CompletableFuture;
 import io.netty.handler.codec.http.HttpObjectAggregator;
 import io.netty.handler.codec.http.HttpServerCodec;
 import io.netty.handler.codec.http.websocketx.WebSocketServerProtocolHandler;
-import com.tenframework.server.handler.WebSocketMessageFrameHandler; // 修正导入
-import com.tenframework.server.handler.WebSocketFrameToByteBufDecoder; // 新增导入
-import com.tenframework.server.handler.ByteBufToWebSocketFrameEncoder; // 新增导入
-import com.tenframework.server.message.WebSocketMessageDecoder; // 新增导入
-import com.tenframework.server.NettyHttpServer; // 导入 NettyHttpServer
+import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 public class NettyMessageServer {
@@ -31,11 +27,10 @@ public class NettyMessageServer {
     private final int tcpPort; // 修改为tcpPort
     private final int httpPort; // HTTP端口
     private final Engine engine;
+    private final CompletableFuture<Void> startFuture = new CompletableFuture<>();
+    private final CompletableFuture<Void> shutdownFuture = new CompletableFuture<>();
     private EventLoopGroup bossGroup;
     private EventLoopGroup workerGroup;
-    private CompletableFuture<Void> startFuture = new CompletableFuture<>();
-    private CompletableFuture<Void> shutdownFuture = new CompletableFuture<>();
-    private NettyHttpServer nettyHttpServer; // 引入NettyHttpServer实例
 
     private int boundPort; // 新增字段，用于存储实际绑定的端口
 
@@ -43,14 +38,6 @@ public class NettyMessageServer {
         this.tcpPort = tcpPort; // 赋值给tcpPort
         this.httpPort = httpPort; // 赋值给httpPort
         this.engine = engine;
-    }
-
-    public CompletableFuture<Void> getStartFuture() {
-        return startFuture;
-    }
-
-    public CompletableFuture<Void> getShutdownFuture() {
-        return shutdownFuture;
     }
 
     public CompletableFuture<Void> start() throws Exception {
@@ -79,30 +66,17 @@ public class NettyMessageServer {
 
             // 绑定TCP端口
             ChannelFuture tcpFuture = b.bind(tcpPort).sync(); // 使用tcpPort
-            this.boundPort = ((java.net.InetSocketAddress) tcpFuture.channel().localAddress()).getPort(); // 获取实际绑定的端口
+            boundPort = ((java.net.InetSocketAddress) tcpFuture.channel().localAddress()).getPort(); // 获取实际绑定的端口
 
             log.info("NettyMessageServer started and listening on TCP port {}", boundPort); // 日志更新
 
             // 启动HTTP服务器
-            nettyHttpServer = new NettyHttpServer(httpPort, engine);
-            CompletableFuture<Void> httpStartFuture = nettyHttpServer.start();
 
             // 在这里完成startFuture，表示NettyMessageServer自身已启动
             startFuture.complete(null);
 
-            // tcpCloseFuture 仍然用于驱动 shutdownFuture 的完成
-            tcpFuture.channel().closeFuture().addListener(f -> {
-                if (f.isSuccess()) {
-                    // 如果tcpFuture的closeFuture成功，则表示channel关闭，完成shutdownFuture的一部分
-                    // 这里不需要直接完成startFuture，它已经在上面完成了
-                } else {
-                    // 如果关闭过程中出现异常，则在shutdownFuture中反映
-                    // 这里不需要直接完成startFuture，它已经在上面完成了
-                }
-            });
-
             // 返回一个组合的Future，让外部调用者等待所有服务器组件启动
-            return CompletableFuture.allOf(startFuture, httpStartFuture).exceptionally(e -> {
+            return startFuture.exceptionally(e -> {
                 log.error("NettyMessageServer or HttpServer failed during startup.", e);
                 return null; // 异常已记录，向上层抛出
             });
@@ -146,12 +120,7 @@ public class NettyMessageServer {
             workerShutdownFuture.complete(null);
         }
 
-        CompletableFuture<Void> httpShutdownFuture = CompletableFuture.completedFuture(null);
-        if (nettyHttpServer != null) {
-            httpShutdownFuture = nettyHttpServer.shutdown();
-        }
-
-        CompletableFuture.allOf(bossShutdownFuture, workerShutdownFuture, httpShutdownFuture)
+        CompletableFuture.allOf(bossShutdownFuture, workerShutdownFuture)
                 .thenRun(() -> {
                     log.info("NettyMessageServer on TCP port {} shut down completely.", tcpPort);
                     shutdownFuture.complete(null);

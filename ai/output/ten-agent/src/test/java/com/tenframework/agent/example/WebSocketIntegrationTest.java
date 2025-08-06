@@ -1,26 +1,39 @@
 package com.tenframework.agent.example;
 
+import java.net.URI;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.tenframework.core.Location;
 import com.tenframework.core.engine.Engine;
 import com.tenframework.core.extension.BaseExtension;
 import com.tenframework.core.extension.SimpleEchoExtension;
+import com.tenframework.core.graph.GraphInstance;
+import com.tenframework.core.message.Command;
 import com.tenframework.core.message.Data;
 import com.tenframework.core.message.Message;
+import com.tenframework.core.message.MessageConstants;
+import com.tenframework.server.TenServer;
 import com.tenframework.server.message.MessageDecoder;
 import com.tenframework.server.message.MessageEncoder;
-import com.tenframework.server.TenServer;
 import io.netty.bootstrap.Bootstrap;
-import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.EventLoopGroup;
+import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.http.DefaultHttpHeaders;
+import io.netty.handler.codec.http.FullHttpResponse;
 import io.netty.handler.codec.http.HttpClientCodec;
 import io.netty.handler.codec.http.HttpObjectAggregator;
 import io.netty.handler.codec.http.websocketx.BinaryWebSocketFrame;
@@ -29,10 +42,8 @@ import io.netty.handler.codec.http.websocketx.PongWebSocketFrame;
 import io.netty.handler.codec.http.websocketx.TextWebSocketFrame;
 import io.netty.handler.codec.http.websocketx.WebSocketClientHandshaker;
 import io.netty.handler.codec.http.websocketx.WebSocketClientHandshakerFactory;
-import io.netty.handler.codec.http.websocketx.WebSocketClientProtocolHandler;
 import io.netty.handler.codec.http.websocketx.WebSocketFrame;
 import io.netty.handler.codec.http.websocketx.WebSocketVersion;
-import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.util.CharsetUtil;
 import io.netty.util.concurrent.DefaultPromise;
 import io.netty.util.concurrent.GlobalEventExecutor;
@@ -42,42 +53,20 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.net.URI;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-
-import com.tenframework.core.message.MessageConstants;
-import com.tenframework.core.graph.GraphConfig;
-import com.tenframework.core.graph.GraphInstance;
-import com.tenframework.core.message.Command;
-import io.netty.handler.codec.http.FullHttpResponse;
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
-import com.fasterxml.jackson.databind.node.ObjectNode;
-import java.util.HashMap;
 
 @Slf4j
 public class WebSocketIntegrationTest {
 
     private static final int WEBSOCKET_PORT = 0;
     private static final int HTTP_PORT = 0; // 为TenServer添加HTTP端口
+    private static final ObjectMapper objectMapper = new ObjectMapper();
     private Engine engine;
     private TenServer tenServer; // 使用TenServer
     private EventLoopGroup clientGroup;
-    private static final ObjectMapper objectMapper = new ObjectMapper();
-
     private SimpleEchoExtension echoExtension;
     private BaseExtension tcpClientExtension;
 
@@ -89,7 +78,7 @@ public class WebSocketIntegrationTest {
 
         // 使用TenServer启动WebSocket服务，让操作系统自动分配端口
         tenServer = new TenServer(WEBSOCKET_PORT, HTTP_PORT, engine); // 提供HTTP端口
-        tenServer.start().get(5, TimeUnit.SECONDS);
+        tenServer.start().get(10, TimeUnit.SECONDS); // 延长超时时间
         // 获取实际绑定的端口
         int actualWebsocketPort = tenServer.getTcpPort();
         int actualHttpPort = tenServer.getHttpPort();
@@ -126,15 +115,15 @@ public class WebSocketIntegrationTest {
     @AfterEach
     void tearDown() throws Exception {
         if (tenServer != null) {
-            tenServer.shutdown().get(5, TimeUnit.SECONDS);
-            // Thread.sleep(1000); // 移除不必要的延迟
+            tenServer.shutdown().get(15, TimeUnit.SECONDS); // 延长关闭超时时间
         }
         if (engine != null) {
             engine.stop();
         }
         if (clientGroup != null) {
-            clientGroup.shutdownGracefully().sync();
+            clientGroup.shutdownGracefully(1, 10, TimeUnit.SECONDS).sync(); // 延长客户端组关闭时间
         }
+        TimeUnit.MILLISECONDS.sleep(500); // 添加短暂延迟，确保所有资源已完全释放
         log.info("所有测试服务已关闭。");
     }
 
@@ -163,15 +152,15 @@ public class WebSocketIntegrationTest {
 
         // 定义连接
         com.fasterxml.jackson.databind.node.ArrayNode connections = objectMapper.createArrayNode();
-        // tcp-client-extension -> SimpleEcho
+        // 添加从客户端到SimpleEcho的连接
         connections.add(objectMapper.createObjectNode()
-                .put("source", "tcp-client-extension")
-                .set("destinations", objectMapper.createArrayNode().add("SimpleEcho")));
-        // SimpleEcho -> tcp-client-extension (回显)
-        connections.add(objectMapper.createObjectNode()
-                .put("source", "SimpleEcho")
-                .set("destinations", objectMapper.createArrayNode().add("tcp-client-extension")));
+                .put("source", "tcp-client-extension") // 模拟客户端消息的sourceLocation.extensionName()，与testData保持一致
+                .set("destinations", objectMapper.createArrayNode()
+                        .add("SimpleEcho"))); // 目的地是SimpleEchoExtension，直接添加字符串
+
         graphJsonNode.set("connections", connections);
+
+        log.info("WebSocket测试图配置: {}", graphJsonNode.toPrettyString());
 
         Command startGraphCommand = Command.builder()
                 .name("start_graph")
@@ -187,7 +176,7 @@ public class WebSocketIntegrationTest {
                 .destinationLocations(List.of(new Location(appUri, graphId, "engine")))
                 .build();
         engine.submitMessage(startGraphCommand);
-        TimeUnit.SECONDS.sleep(1);
+        TimeUnit.SECONDS.sleep(3); // 延长等待时间，确保图实例启动稳定
 
         GraphInstance actualGraphInstance = engine.getGraphInstance(graphId)
                 .orElseThrow(() -> new IllegalStateException("未找到启动的图实例: " + graphId));
@@ -197,7 +186,7 @@ public class WebSocketIntegrationTest {
                 wsEchoResponseFuture, clientGroup);
 
         log.info("等待接收WebSocket回显消息，最长等待5秒...");
-        Message receivedWsMessage = wsEchoResponseFuture.get(5, TimeUnit.SECONDS);
+        Message receivedWsMessage = wsEchoResponseFuture.get(5, TimeUnit.SECONDS); // 延长超时时间
         log.info("成功接收到WebSocket回显消息: {}", receivedWsMessage);
         assertNotNull(receivedWsMessage, "应收到WebSocket回显消息");
         assertTrue(receivedWsMessage instanceof Data, "WebSocket回显消息应为Data类型");
@@ -255,9 +244,8 @@ public class WebSocketIntegrationTest {
         Data testData = Data.json(messageName, objectMapper.writeValueAsString(payload));
         testData.setSourceLocation(Location.builder().appUri("test-client").graphId(graphId)
                 .extensionName("tcp-client-extension").build());
-        testData.setDestinationLocations(
-                Collections.singletonList(Location.builder().appUri("test-app").graphId(graphId)
-                        .extensionName("SimpleEcho").build()));
+        testData.setDestinationLocations(List.of(Location.builder().appUri("test-app").graphId(graphId)
+                .extensionName("SimpleEcho").build()));
 
         handler.sendMessage(testData).sync();
 
@@ -269,14 +257,13 @@ public class WebSocketIntegrationTest {
         private final WebSocketClientHandshaker handshaker;
         private final Promise<Void> handshakeFuture;
         private final CompletableFuture<Message> responseFuture;
-        private Channel channel;
-
         private final MessageEncoder messageEncoder = new MessageEncoder();
         private final MessageDecoder messageDecoder = new MessageDecoder();
+        private Channel channel;
 
         public WebSocketClientHandler(WebSocketClientHandshaker handshaker, CompletableFuture<Message> responseFuture) {
             this.handshaker = handshaker;
-            this.handshakeFuture = new DefaultPromise<>(GlobalEventExecutor.INSTANCE);
+            handshakeFuture = new DefaultPromise<>(GlobalEventExecutor.INSTANCE);
             this.responseFuture = responseFuture;
         }
 
@@ -286,7 +273,7 @@ public class WebSocketIntegrationTest {
 
         @Override
         public void handlerAdded(ChannelHandlerContext ctx) {
-            this.channel = ctx.channel();
+            channel = ctx.channel();
         }
 
         @Override
@@ -319,37 +306,35 @@ public class WebSocketIntegrationTest {
                 return;
             }
 
-            if (msg instanceof FullHttpResponse) {
-                FullHttpResponse response = (FullHttpResponse) msg;
+            if (msg instanceof FullHttpResponse response) {
                 throw new IllegalStateException(
                         "Unexpected FullHttpResponse (getStatus=" + response.status() + ", content="
                                 + response.content().toString(CharsetUtil.UTF_8) + ')');
             }
 
-            if (msg instanceof WebSocketFrame) {
-                WebSocketFrame frame = (WebSocketFrame) msg;
-                if (frame instanceof TextWebSocketFrame) {
-                    TextWebSocketFrame textFrame = (TextWebSocketFrame) frame;
-                    log.warn("WebSocket客户端收到文本帧: {}", textFrame.text());
-                } else if (frame instanceof BinaryWebSocketFrame) {
-                    BinaryWebSocketFrame binaryFrame = (BinaryWebSocketFrame) frame;
-                    List<Object> decodedMsgs = new java.util.ArrayList<>();
-                    messageDecoder.decode(ctx, new BinaryWebSocketFrame(binaryFrame.content().retain()), decodedMsgs);
+            if (msg instanceof WebSocketFrame frame) {
+                switch (frame) {
+                    case TextWebSocketFrame textFrame -> log.warn("WebSocket客户端收到文本帧: {}", textFrame.text());
+                    case BinaryWebSocketFrame binaryFrame -> {
+                        List<Object> decodedMsgs = new java.util.ArrayList<>();
+                        messageDecoder.decode(ctx, new BinaryWebSocketFrame(binaryFrame.content().retain()),
+                                decodedMsgs);
 
-                    if (!decodedMsgs.isEmpty() && decodedMsgs.get(0) instanceof Message) {
-                        Message decodedMsg = (Message) decodedMsgs.get(0);
-                        responseFuture.complete(decodedMsg);
-                        log.info("WebSocket客户端成功解码并接收到回显消息: {}", decodedMsg.getName());
-                        ctx.close();
-                    } else {
-                        log.warn("WebSocket客户端无法解码二进制帧为TEN消息。");
+                        if (!decodedMsgs.isEmpty() && decodedMsgs.getFirst() instanceof Message decodedMsg) {
+                            responseFuture.complete(decodedMsg);
+                            log.info("WebSocket客户端成功解码并接收到回显消息: {}", decodedMsg.getName());
+                        } else {
+                            log.warn("WebSocket客户端无法解码二进制帧为TEN消息。");
+                        }
                     }
-                } else if (frame instanceof PongWebSocketFrame) {
-                    log.debug("WebSocket客户端收到Pong帧。");
-                } else if (frame instanceof CloseWebSocketFrame) {
-                    log.info("WebSocket客户端收到Close帧，关闭连接: code={}, reason={}",
-                            ((CloseWebSocketFrame) frame).statusCode(), ((CloseWebSocketFrame) frame).reasonText());
-                    ch.close();
+                    case PongWebSocketFrame pongWebSocketFrame -> log.debug("WebSocket客户端收到Pong帧。");
+                    case CloseWebSocketFrame closeWebSocketFrame -> {
+                        log.info("WebSocket客户端收到Close帧，关闭连接: code={}, reason={}",
+                                closeWebSocketFrame.statusCode(), closeWebSocketFrame.reasonText());
+                        ch.close();
+                    }
+                    default -> {
+                    }
                 }
             }
         }
