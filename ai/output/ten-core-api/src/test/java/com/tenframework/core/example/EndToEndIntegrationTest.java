@@ -71,6 +71,7 @@ import io.netty.util.concurrent.GlobalEventExecutor; // 新增导入
 import java.util.ArrayList; // 新增导入
 import java.util.List; // 新增导入
 import io.netty.handler.codec.http.websocketx.WebSocketFrame; // 确保导入
+import com.tenframework.core.message.MessageConstants; // 新增导入
 
 @Slf4j
 public class EndToEndIntegrationTest {
@@ -203,7 +204,7 @@ public class EndToEndIntegrationTest {
         assertNotNull(receivedWsMessage, "应收到WebSocket回显消息");
         assertTrue(receivedWsMessage instanceof Data, "WebSocket回显消息应为Data类型");
         Data wsEchoData = (Data) receivedWsMessage;
-        assertEquals("echo_data", wsEchoData.getName());
+        assertEquals(MessageConstants.DATA_NAME_ECHO_DATA, wsEchoData.getName()); // 使用常量
 
         // 解析数据内容并断言
         Map<String, Object> receivedPayload = objectMapper.readValue(wsEchoData.getData().toString(CharsetUtil.UTF_8),

@@ -53,6 +53,7 @@ import java.util.concurrent.TimeUnit;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import com.tenframework.core.message.MessageConstants;
 
 @Slf4j
 public class WebSocketIntegrationTest {
@@ -153,7 +154,7 @@ public class WebSocketIntegrationTest {
         assertNotNull(receivedWsMessage, "应收到WebSocket回显消息");
         assertTrue(receivedWsMessage instanceof Data, "WebSocket回显消息应为Data类型");
         Data wsEchoData = (Data) receivedWsMessage;
-        assertEquals("echo_data", wsEchoData.getName());
+        assertEquals(MessageConstants.DATA_NAME_ECHO_DATA, wsEchoData.getName()); // 使用常量
 
         // 解析数据内容并断言
         Map<String, Object> receivedPayload = objectMapper.readValue(wsEchoData.getData().toString(CharsetUtil.UTF_8),

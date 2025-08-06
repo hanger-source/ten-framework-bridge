@@ -10,9 +10,11 @@ import io.netty.handler.codec.http.websocketx.BinaryWebSocketFrame;
 import io.netty.handler.codec.http.websocketx.TextWebSocketFrame;
 import io.netty.handler.codec.http.websocketx.WebSocketFrame;
 import lombok.extern.slf4j.Slf4j;
+import com.tenframework.core.message.MessageConstants;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.Map;
 import io.netty.channel.ChannelId;
+import io.netty.buffer.ByteBuf;
 
 @Slf4j
 public class WebSocketMessageFrameHandler extends SimpleChannelInboundHandler<WebSocketFrame> {
@@ -35,10 +37,13 @@ public class WebSocketMessageFrameHandler extends SimpleChannelInboundHandler<We
             // 目前，我们主要关注 BinaryWebSocketFrame
         } else if (frame instanceof BinaryWebSocketFrame) {
             // 处理二进制帧，预计是 MsgPack 封装的 TEN 消息
-            // 将 Channel ID 作为临时属性添加到 ByteBuf 中，以便 MessageDecoder 或 Engine 可以获取
-            // 注意：我们不能直接修改 ByteBuf 的属性，而是将 Channel ID 作为 Message 的一个属性传递
-            // 因此，我们会在 channelRead 方法中处理这个逻辑
-            ctx.fireChannelRead(frame.content()); // 将 ByteBuf 传递给下一个处理器 (MessageDecoder)
+            // 将 Channel ID 作为临时属性添加到 ByteBuf 中，以便 MessageDecoder 或 Engine
+            // 可以根据此ID将响应消息回传给正确的客户端通道。
+            // 注意：这里将ByteBuf作为消息发送，但我们将其视为一个内部Message的包装，
+            // MessageDecoder将负责从ByteBuf中解码出真实的Message。
+            ByteBuf processedContent = ((BinaryWebSocketFrame) frame).content();
+            Message message = (Message) processedContent; // 假设这里MessageDecoder已经处理
+            message.setProperty(MessageConstants.PROPERTY_CLIENT_CHANNEL_ID, ctx.channel().id().asShortText()); // 使用常量
         } else {
             String message = "Unsupported frame type: " + frame.getClass().getName();
             throw new UnsupportedOperationException(message);

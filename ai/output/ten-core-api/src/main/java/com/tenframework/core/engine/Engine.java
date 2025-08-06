@@ -37,6 +37,7 @@ import java.util.concurrent.ConcurrentSkipListSet;
 import com.tenframework.core.server.ChannelDisconnectedException;
 import java.util.Collections;
 import java.util.concurrent.TimeUnit;
+import com.tenframework.core.message.MessageConstants; // 新增导入
 
 /**
  * TEN框架的核心Engine实现
@@ -648,8 +649,9 @@ public final class Engine {
             Location firstDestination = message.getDestinationLocations().get(0);
             // 假设 "test-client" 或 "http_client" 是客户端的appUri，或者根据实际情况判断
             // 并且消息中带有 __client_channel_id__ 属性
-            if ("test-client".equals(firstDestination.appUri()) || "http_client".equals(firstDestination.appUri())) {
-                String clientChannelId = message.getProperty("__client_channel_id__", String.class); // 直接获取
+            if (MessageConstants.APP_URI_TEST_CLIENT.equals(firstDestination.appUri())
+                    || MessageConstants.APP_URI_HTTP_CLIENT.equals(firstDestination.appUri())) {
+                String clientChannelId = message.getProperty(MessageConstants.PROPERTY_CLIENT_CHANNEL_ID, String.class); // 使用常量
                 if (clientChannelId != null) {
                     if (sendMessageToChannel(clientChannelId, message)) {
                         log.debug("数据消息已成功回传到客户端Channel: engineId={}, messageType={}, messageName={}, channelId={}",

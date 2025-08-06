@@ -11,6 +11,7 @@ import java.util.Map;
 import com.tenframework.core.Location; // 导入Location类
 import com.fasterxml.jackson.databind.ObjectMapper; // Add this import
 import java.io.IOException; // Add this import
+import com.tenframework.core.message.MessageConstants; // 新增导入
 
 /**
  * 简单的Echo Extension示例
@@ -71,14 +72,15 @@ public class SimpleEchoExtension extends BaseExtension {
             originalPayload.put("content", echoContent);
 
             // 3. 将更新后的payload序列化回JSON字节
-            byte[] echoedBytes = objectMapper.writeValueAsBytes(originalPayload);
+            byte[] echoedContentBytes = objectMapper.writeValueAsBytes(originalPayload);
 
-            Data echoData = Data.binary("echo_data", echoedBytes); // 使用新的字节内容
+            Data echoData = Data.binary(MessageConstants.DATA_NAME_ECHO_DATA, echoedContentBytes); // 使用常量
             echoData.setProperties(Map.of("original_name", dataName, "count", ++messageCount));
 
-            String clientChannelId = data.getProperty("__client_channel_id__", String.class);
+            // IMPORTANT: 复制原始消息的__client_channel_id__到回显消息
+            String clientChannelId = data.getProperty(MessageConstants.PROPERTY_CLIENT_CHANNEL_ID, String.class); // 使用常量
             if (clientChannelId != null) {
-                echoData.setProperty("__client_channel_id__", clientChannelId);
+                echoData.setProperty(MessageConstants.PROPERTY_CLIENT_CHANNEL_ID, clientChannelId); // 使用常量
             }
 
             echoData.setSourceLocation(

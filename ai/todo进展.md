@@ -77,7 +77,7 @@ TODO:
 ✅ 1.5.3.2 实现一个 HTTP `ChannelHandler`，将特定的 HTTP 请求 (例如，`POST /start_graph` 携带 JSON Payload) 解析为 `TEN Command` 对象，并提交到 `Engine`。
 ✅ 1.5.3.3 实现将 `Engine` 返回的 `CommandResult` 转换为 HTTP 响应 (JSON 格式) 返回给请求方。
 ✅ 1.5.3.3.1 改进 `HttpCommandResultOutboundHandler`：根据 `CommandResult` 的业务状态（例如，成功/失败）动态设置 HTTP 响应的状态码（例如，4xx 错误码而非统一 500）。
-1.6.1 编写一个**可运行的最小示例** (`Main` 类或 `Application` 类)，能够： 启动 `Engine`。 启动基础的 Netty Websocket/TCP（预留支持扩展） Server 和简化的 HTTP Server。 注册一个 `SimpleEchoExtension`。 通过 HTTP 接口发送一个 `start_graph` 命令（定义包含 `SimpleEchoExtension` 的简单图，JSON 格式）。 通过 TCP/MsgPack 接口发送一个 `Data` 消息给 `SimpleEchoExtension`。 通过 TCP/MsgPack 接口接收 `SimpleEchoExtension` 的回显 `Data` 消息。 通过 HTTP 接口发送 `stop_graph` 命令。
+✅ 1.6.1 编写一个**可运行的最小示例** (`Main` 类或 `Application` 类)，能够： 启动 `Engine`。 启动基础的 Netty Websocket/TCP（预留支持扩展） Server 和简化的 HTTP Server。 注册一个 `SimpleEchoExtension`。 通过 HTTP 接口发送一个 `start_graph` 命令（定义包含 `SimpleEchoExtension` 的简单图，JSON 格式）。 通过 TCP/MsgPack 接口发送一个 `Data` 消息给 `SimpleEchoExtension`。 通过 TCP/MsgPack 接口接收 `SimpleEchoExtension` 的回显 `Data` 消息。 通过 HTTP 接口发送 `stop_graph` 命令。
 ✅ 1.6.2 编写集成测试用例，自动化验证上述端到端流程。
 ✅ 1.6.2.1 改进集成测试清理：确保 `sendTcpDataMessage` 中的 Netty `EventLoopGroup` 在测试完成后被正确关闭，避免资源泄露。
 ✅ 1.6.3 验证消息在网络层、`Engine`、`Extension` 之间的正确发送、路由、处理和结果回溯。
