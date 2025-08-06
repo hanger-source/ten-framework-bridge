@@ -336,7 +336,7 @@ public class WebSocketIntegrationTest {
                 } else if (frame instanceof BinaryWebSocketFrame) {
                     BinaryWebSocketFrame binaryFrame = (BinaryWebSocketFrame) frame;
                     List<Object> decodedMsgs = new java.util.ArrayList<>();
-                    messageDecoder.decode(ctx, binaryFrame.content().retain(), decodedMsgs);
+                    messageDecoder.decode(ctx, new BinaryWebSocketFrame(binaryFrame.content().retain()), decodedMsgs);
 
                     if (!decodedMsgs.isEmpty() && decodedMsgs.get(0) instanceof Message) {
                         Message decodedMsg = (Message) decodedMsgs.get(0);

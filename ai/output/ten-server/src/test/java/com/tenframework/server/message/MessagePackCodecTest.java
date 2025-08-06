@@ -72,7 +72,7 @@ public class MessagePackCodecTest {
         assertTrue(encodedFrame.content().isReadable()); // 检查内容的可读性
 
         // 解码
-        channel.writeInbound(encodedFrame.content().retain()); // 直接传递 ByteBuf 内容
+        channel.writeInbound(new BinaryWebSocketFrame(encodedFrame.content().retain()));
         Message decodedMessage = channel.readInbound();
         assertNotNull(decodedMessage);
         assertTrue(decodedMessage instanceof Command);
@@ -105,7 +105,7 @@ public class MessagePackCodecTest {
         assertNotNull(encodedFrame);
         assertTrue(encodedFrame.content().isReadable());
 
-        channel.writeInbound(encodedFrame.content().retain());
+        channel.writeInbound(new BinaryWebSocketFrame(encodedFrame.content().retain()));
         Message decodedMessage = channel.readInbound();
         assertNotNull(decodedMessage);
         assertTrue(decodedMessage instanceof Data);
@@ -143,7 +143,7 @@ public class MessagePackCodecTest {
         assertNotNull(encodedFrame);
         assertTrue(encodedFrame.content().isReadable());
 
-        channel.writeInbound(encodedFrame.content().retain());
+        channel.writeInbound(new BinaryWebSocketFrame(encodedFrame.content().retain()));
         Message decodedMessage = channel.readInbound();
         assertNotNull(decodedMessage);
         assertTrue(decodedMessage instanceof AudioFrame);
@@ -184,7 +184,7 @@ public class MessagePackCodecTest {
         assertNotNull(encodedFrame);
         assertTrue(encodedFrame.content().isReadable());
 
-        channel.writeInbound(encodedFrame.content().retain());
+        channel.writeInbound(new BinaryWebSocketFrame(encodedFrame.content().retain()));
         Message decodedMessage = channel.readInbound();
         assertNotNull(decodedMessage);
         assertTrue(decodedMessage instanceof VideoFrame);
@@ -235,7 +235,7 @@ public class MessagePackCodecTest {
         assertNotNull(encodedFrame);
         assertTrue(encodedFrame.content().isReadable());
 
-        channel.writeInbound(encodedFrame.content().retain());
+        channel.writeInbound(new BinaryWebSocketFrame(encodedFrame.content().retain()));
         Message decodedMessage = channel.readInbound();
         assertNotNull(decodedMessage);
         assertTrue(decodedMessage instanceof CommandResult);
@@ -284,8 +284,8 @@ public class MessagePackCodecTest {
         assertNotNull(encodedCmd);
         assertNotNull(encodedData);
 
-        channel.writeInbound(encodedCmd.content().retain()); // 直接传递 ByteBuf 内容
-        channel.writeInbound(encodedData.content().retain()); // 直接传递 ByteBuf 内容
+        channel.writeInbound(new BinaryWebSocketFrame(encodedCmd.content().retain()));
+        channel.writeInbound(new BinaryWebSocketFrame(encodedData.content().retain()));
 
         Message decodedCmd = channel.readInbound();
         Message decodedData = channel.readInbound();
@@ -324,7 +324,7 @@ public class MessagePackCodecTest {
         ByteBuf invalidDataContent = Unpooled.wrappedBuffer(new byte[] { 0x01, 0x02, 0x03, 0x04 });
         BinaryWebSocketFrame invalidData = new BinaryWebSocketFrame(invalidDataContent);
 
-        channel.writeInbound(invalidData.content().retain());
+        channel.writeInbound(new BinaryWebSocketFrame(invalidDataContent));
         Message decodedMessage = channel.readInbound();
         assertNull(decodedMessage); // 期望解码失败，不输出任何消息
     }
@@ -336,7 +336,7 @@ public class MessagePackCodecTest {
         ByteBuf incompleteDataContent = Unpooled.wrappedBuffer(new byte[] { (byte) 0xC7 }); // EXT 8 type code
         BinaryWebSocketFrame incompleteData = new BinaryWebSocketFrame(incompleteDataContent);
 
-        channel.writeInbound(incompleteData.content().retain());
+        channel.writeInbound(new BinaryWebSocketFrame(incompleteDataContent));
         Message decodedMessage = channel.readInbound();
         assertNull(decodedMessage); // 期望等待更多数据，不会立即解码
 
@@ -349,7 +349,7 @@ public class MessagePackCodecTest {
         // length
         // (1
         // byte)
-        channel.writeInbound(furtherIncomplete.content().retain());
+        channel.writeInbound(new BinaryWebSocketFrame(furtherIncompleteContent));
         decodedMessage = channel.readInbound();
         assertNull(decodedMessage); // 仍然不足以解码一个Message
 
@@ -357,7 +357,7 @@ public class MessagePackCodecTest {
         ByteBuf malformedInnerJsonContent = Unpooled
                 .wrappedBuffer(new byte[] { MessageUtils.TEN_MSGPACK_EXT_TYPE_MSG, 0x05, '{', 'a', 'b', 'c', '}' });
         BinaryWebSocketFrame malformedInnerJson = new BinaryWebSocketFrame(malformedInnerJsonContent);
-        channel.writeInbound(malformedInnerJson.content().retain());
+        channel.writeInbound(new BinaryWebSocketFrame(malformedInnerJsonContent));
         decodedMessage = channel.readInbound();
         assertNull(decodedMessage); // 期望内部JSON解码失败，不输出任何消息
     }

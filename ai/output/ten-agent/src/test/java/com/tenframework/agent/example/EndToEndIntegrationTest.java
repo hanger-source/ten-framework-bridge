@@ -435,7 +435,7 @@ public class EndToEndIntegrationTest {
                     log.debug("WebSocket客户端收到二进制帧，大小: {} 字节", binaryFrame.content().readableBytes());
 
                     List<Object> decodedMsgs = new ArrayList<>();
-                    messageDecoder.decode(ctx, binaryFrame.content().retain(), decodedMsgs);
+                    messageDecoder.decode(ctx, new BinaryWebSocketFrame(binaryFrame.content().retain()), decodedMsgs);
 
                     if (!decodedMsgs.isEmpty() && decodedMsgs.get(0) instanceof Message) {
                         Message decodedMsg = (Message) decodedMsgs.get(0);

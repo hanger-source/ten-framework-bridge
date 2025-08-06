@@ -17,13 +17,15 @@ import java.util.List;
 import com.tenframework.core.message.Message;
 import com.tenframework.core.message.MessageUtils;
 import org.msgpack.value.ValueType;
+import io.netty.handler.codec.http.websocketx.BinaryWebSocketFrame;
+import io.netty.handler.codec.http.websocketx.WebSocketFrame;
 
 /**
  * TEN框架消息解码器，将MsgPack格式的字节流解码为内部Message对象
  * 继承Netty的MessageToMessageDecoder，处理BinaryWebSocketFrame到Message的转换
  */
 @Slf4j
-public class MessageDecoder extends MessageToMessageDecoder<ByteBuf> {
+public class MessageDecoder extends MessageToMessageDecoder<WebSocketFrame> {
 
     private final ObjectMapper objectMapper;
 
@@ -39,7 +41,14 @@ public class MessageDecoder extends MessageToMessageDecoder<ByteBuf> {
     }
 
     @Override
-    public void decode(ChannelHandlerContext ctx, ByteBuf msg, List<Object> out) throws Exception {
+    public void decode(ChannelHandlerContext ctx, WebSocketFrame frame, List<Object> out) throws Exception {
+        if (!(frame instanceof BinaryWebSocketFrame)) {
+            log.warn("MessageDecoder只处理BinaryWebSocketFrame，收到: {}", frame.getClass().getName());
+            return; // 或抛出UnsupportedOperationException
+        }
+
+        ByteBuf msg = ((BinaryWebSocketFrame) frame).content();
+
         if (msg == null || !msg.isReadable()) {
             log.warn("尝试解码空或不可读的ByteBuf");
             return;
