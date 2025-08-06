@@ -152,3 +152,27 @@ rtc_demo/agora_rtc_demo/API-Examples-Web
 rtc_demo/ali_rtc_demo/AliRTCSample
 
 ai/output/ten-core-api/target/*
+ai/output/ten-agent/target/original-ten-agent-example-1.0.0-SNAPSHOT.jar
+ai/output/ten-agent/target/ten-agent-example-1.0.0-SNAPSHOT.jar
+ai/output/ten-agent/target/classes/com/tenframework/agent/Main.class
+ai/output/ten-agent/target/maven-archiver/pom.properties
+ai/output/ten-agent/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst
+ai/output/ten-agent/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst
+ai/output/ten-core-api/target/classes/com/tenframework/core/engine/Engine.class
+ai/output/ten-core-api/target/classes/com/tenframework/core/engine/Engine$1.class
+ai/output/ten-core-api/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst
+ai/output/ten-core-api/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst
+ai/output/ten-core-api/target/classes/com/tenframework/core/engine/Engine.class
+ai/output/ten-core-api/target/classes/com/tenframework/core/engine/Engine$1.class
+ai/output/ten-core-api/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst
+ai/output/ten-core-api/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst
+ai/output/ten-core-api/target/classes/com/tenframework/core/engine/Engine.class
+ai/output/ten-core-api/target/classes/com/tenframework/core/engine/Engine$1.class
+ai/output/ten-core-api/target/classes/com/tenframework/core/extension/EngineExtensionContext.class
+ai/output/ten-core-api/target/classes/com/tenframework/core/message/Command.class
+ai/output/ten-core-api/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst
+ai/output/ten-core-api/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst
+ai/output/ten-core-api/target/maven-status/maven-compiler-plugin/testCompile/default-testCompile/createdFiles.lst
+ai/output/ten-core-api/target/maven-status/maven-compiler-plugin/testCompile/default-testCompile/inputFiles.lst
+ai/output/ten-server/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst
+ai/output/ten-server/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst

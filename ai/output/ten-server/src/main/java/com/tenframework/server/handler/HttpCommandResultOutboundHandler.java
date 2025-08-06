@@ -1,4 +1,5 @@
-package com.tenframework.core.server;
+
+package com.tenframework.server.handler;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tenframework.core.message.CommandResult;
@@ -40,8 +41,7 @@ public class HttpCommandResultOutboundHandler extends MessageToMessageEncoder<Co
                     "command_id", msg.getCommandId() != null ? msg.getCommandId() : "N/A",
                     "result", msg.getResult() != null ? msg.getResult() : Map.of(),
                     "is_final", msg.isFinal(),
-                    "message", msg.getError() != null ? msg.getError() : (msg.isSuccess() ? "Success" : "Failure")
-            );
+                    "message", msg.getError() != null ? msg.getError() : (msg.isSuccess() ? "Success" : "Failure"));
 
             String json = objectMapper.writeValueAsString(responseMap);
             HttpResponseStatus httpStatus = msg.isSuccess() ? OK : INTERNAL_SERVER_ERROR;

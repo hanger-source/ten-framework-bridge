@@ -7,10 +7,10 @@ import com.tenframework.core.extension.SimpleEchoExtension;
 import com.tenframework.core.message.Data;
 import com.tenframework.core.Location;
 import com.tenframework.core.message.Message;
-import com.tenframework.core.message.MessageDecoder;
-import com.tenframework.core.message.MessageEncoder;
-import com.tenframework.core.server.NettyHttpServer;
-import com.tenframework.core.server.NettyMessageServer;
+import com.tenframework.server.message.MessageDecoder; // 从ten-server导入
+import com.tenframework.server.message.MessageEncoder; // 从ten-server导入
+import com.tenframework.server.TenServer; // 从ten-server导入
+
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -26,7 +26,7 @@ import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.handler.codec.LengthFieldPrepender;
 import io.netty.channel.SimpleChannelInboundHandler;
-import com.tenframework.core.extension.ExtensionContext; // 导入ExtensionContext
+import com.tenframework.core.extension.ExtensionContext;
 import io.netty.handler.codec.http.DefaultHttpHeaders;
 import io.netty.handler.codec.http.HttpClientCodec;
 import io.netty.handler.codec.http.HttpObjectAggregator;
@@ -59,19 +59,20 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import io.netty.handler.codec.http.FullHttpResponse; // 新增导入
-import java.io.BufferedReader; // 新增导入
-import java.io.InputStreamReader; // 新增导入
-import java.io.OutputStream; // 新增导入
-import io.netty.util.CharsetUtil; // 新增导入
-import io.netty.handler.codec.http.websocketx.WebSocketClientHandshaker; // 新增导入
-import io.netty.util.concurrent.Promise; // 新增导入
-import io.netty.util.concurrent.DefaultPromise; // 新增导入
-import io.netty.util.concurrent.GlobalEventExecutor; // 新增导入
-import java.util.ArrayList; // 新增导入
-import java.util.List; // 新增导入
-import io.netty.handler.codec.http.websocketx.WebSocketFrame; // 确保导入
-import com.tenframework.core.message.MessageConstants; // 新增导入
+import io.netty.handler.codec.http.FullHttpResponse;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import io.netty.util.CharsetUtil;
+import io.netty.handler.codec.http.websocketx.WebSocketClientHandshaker;
+import io.netty.util.concurrent.Promise;
+import io.netty.util.concurrent.DefaultPromise;
+import io.netty.util.concurrent.GlobalEventExecutor;
+import java.util.ArrayList;
+import java.util.List;
+import io.netty.handler.codec.http.websocketx.WebSocketFrame;
+import com.tenframework.core.message.MessageConstants;
+import com.tenframework.core.graph.GraphInstance;
 
 @Slf4j
 public class EndToEndIntegrationTest {
@@ -82,9 +83,8 @@ public class EndToEndIntegrationTest {
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
     private Engine engine;
-    private NettyMessageServer messageServer;
-    private NettyHttpServer httpServer;
-    private EventLoopGroup clientGroup; // 添加客户端EventLoopGroup成员变量
+    private TenServer tenServer; // 使用TenServer
+    private EventLoopGroup clientGroup;
 
     @BeforeEach
     void setUp() throws Exception {
@@ -92,85 +92,24 @@ public class EndToEndIntegrationTest {
         engine.start();
         log.info("Engine [{}] started for test.", engine.getEngineId());
 
-        // 注册 SimpleEchoExtension
-        SimpleEchoExtension echoExtension = new SimpleEchoExtension();
-        Map<String, Object> echoConfig = Map.of("name", "SimpleEcho");
-        boolean registered = engine.registerExtension("SimpleEcho", echoExtension, echoConfig, "test://app"); // 添加appUri
-        assertTrue(registered, "SimpleEchoExtension should register successfully.");
-        log.info("SimpleEchoExtension registered successfully for test.");
+        // 使用TenServer启动TCP和HTTP服务
+        tenServer = new TenServer(TCP_PORT, HTTP_PORT, engine);
+        tenServer.start().get(5, TimeUnit.SECONDS); // 阻塞等待服务器启动完成
+        log.info("TenServer started on TCP port {} and HTTP port {}", TCP_PORT, HTTP_PORT);
 
-        // 注册一个模拟的tcp-client-extension，以便Engine能够正确路由回显消息
-        BaseExtension tcpClientExtension = new BaseExtension() {
-            @Override
-            protected void handleCommand(com.tenframework.core.message.Command command, ExtensionContext context) {
-                // 空实现
-            }
-
-            @Override
-            protected void handleData(com.tenframework.core.message.Data data, ExtensionContext context) {
-                // 空实现
-            }
-
-            @Override
-            protected void handleAudioFrame(com.tenframework.core.message.AudioFrame audioFrame,
-                    ExtensionContext context) {
-                // 空实现
-            }
-
-            @Override
-            protected void handleVideoFrame(com.tenframework.core.message.VideoFrame videoFrame,
-                    ExtensionContext context) {
-                // 空实现
-            }
-        };
-        Map<String, Object> tcpClientConfig = Map.of("name", "tcp-client-extension");
-        boolean tcpClientRegistered = engine.registerExtension("tcp-client-extension", tcpClientExtension,
-                tcpClientConfig, "test://app");
-        assertTrue(tcpClientRegistered, "TCP Client Extension should register successfully.");
-        log.info("TCP Client Extension registered successfully for test.");
-
-        messageServer = new NettyMessageServer(TCP_PORT, engine);
-        new Thread(() -> {
-            try {
-                messageServer.start();
-            } catch (Exception e) {
-                log.error("NettyMessageServer启动失败", e);
-            }
-        }, "Test-TCP-Server-Thread").start();
-        messageServer.getStartFuture().get(5, TimeUnit.SECONDS); // 等待TCP服务器启动
-
-        httpServer = new NettyHttpServer(HTTP_PORT, engine);
-        new Thread(() -> {
-            try {
-                httpServer.start();
-            } catch (Exception e) {
-                log.error("NettyHttpServer启动失败", e);
-            }
-        }, "Test-HTTP-Server-Thread").start();
-        httpServer.getStartFuture().get(5, TimeUnit.SECONDS); // 等待HTTP服务器启动
-
-        log.info("所有测试服务已启动。");
-
-        // 初始化客户端EventLoopGroup
         clientGroup = new NioEventLoopGroup();
     }
 
     @AfterEach
     void tearDown() throws Exception {
-        if (httpServer != null) {
-            httpServer.shutdown();
-            httpServer.getShutdownFuture().get(5, TimeUnit.SECONDS); // 等待HTTP服务器完全关闭
-        }
-        if (messageServer != null) {
-            messageServer.shutdown();
-            messageServer.getShutdownFuture().get(5, TimeUnit.SECONDS); // 等待TCP服务器完全关闭
+        if (tenServer != null) {
+            tenServer.shutdown().get(5, TimeUnit.SECONDS); // 关闭TenServer
         }
         if (engine != null) {
             engine.stop();
         }
-        // 关闭客户端EventLoopGroup
         if (clientGroup != null) {
-            clientGroup.shutdownGracefully().sync(); // 这个 sync() 是 ChannelFuture 的，没问题
+            clientGroup.shutdownGracefully().sync();
         }
         log.info("所有测试服务已关闭。");
     }
@@ -182,13 +121,57 @@ public class EndToEndIntegrationTest {
         String graphId = UUID.randomUUID().toString();
         Map<String, Object> startGraphPayload = new HashMap<>();
         startGraphPayload.put("graph_id", graphId);
-        startGraphPayload.put("app_uri", "test-app"); // 将default_app改为test-app
+        startGraphPayload.put("app_uri", "test-app");
         startGraphPayload.put("properties", Map.of("initial_message", "Hello from HTTP start_graph!"));
+
+        // 添加 graph_json 属性，定义图的结构
+        String graphJson = String.format(
+                "{\"graph_id\":\"%s\",\"nodes\":[{\"name\":\"SimpleEcho\",\"type\":\"com.tenframework.core.extension.SimpleEchoExtension\"},{\"name\":\"tcp-client-extension\",\"type\":\"com.tenframework.core.extension.BaseExtension\"}],\"connections\":[{\"source\":\"tcp-client-extension\",\"destinations\":[\"SimpleEcho\"]},{\"source\":\"SimpleEcho\",\"destinations\":[\"tcp-client-extension\"]}]}",
+                graphId);
+        startGraphPayload.put("graph_json", graphJson);
 
         String httpResponse = sendHttpRequest(HTTP_PORT, "/start_graph", "POST", startGraphPayload);
         assertTrue(httpResponse.contains("\"status\":\"success\""), "HTTP start_graph 响应应包含 'status:success'");
         log.info("HTTP /start_graph 响应: {}", httpResponse);
         TimeUnit.SECONDS.sleep(1);
+
+        // 获取并验证 GraphInstance，然后注册 Extension
+        GraphInstance graphInstance = engine.getGraphInstance(graphId)
+                .orElseThrow(() -> new IllegalStateException("未找到启动的图实例: " + graphId));
+        log.info("成功获取到图实例: {}", actualGraphInstance.getGraphId());
+
+        // 注册 SimpleEchoExtension
+        SimpleEchoExtension echoExtension = new SimpleEchoExtension();
+        Map<String, Object> echoConfig = Map.of("name", "SimpleEcho");
+        boolean registeredEcho = graphInstance.registerExtension("SimpleEcho", echoExtension, echoConfig);
+        assertTrue(registeredEcho, "SimpleEchoExtension should register successfully.");
+        log.info("SimpleEchoExtension registered successfully on GraphInstance.");
+
+        // 注册一个模拟的tcp-client-extension，以便Engine能够正确路由回显消息
+        BaseExtension tcpClientExtension = new BaseExtension() {
+            @Override
+            protected void handleCommand(com.tenframework.core.message.Command command, ExtensionContext context) {
+            }
+
+            @Override
+            protected void handleData(com.tenframework.core.message.Data data, ExtensionContext context) {
+            }
+
+            @Override
+            protected void handleAudioFrame(com.tenframework.core.message.AudioFrame audioFrame,
+                    ExtensionContext context) {
+            }
+
+            @Override
+            protected void handleVideoFrame(com.tenframework.core.message.VideoFrame videoFrame,
+                    ExtensionContext context) {
+            }
+        };
+        Map<String, Object> tcpClientConfig = Map.of("name", "tcp-client-extension");
+        boolean registeredTcpClient = graphInstance.registerExtension("tcp-client-extension", tcpClientExtension,
+                tcpClientConfig);
+        assertTrue(registeredTcpClient, "TCP Client Extension should register successfully on GraphInstance.");
+        log.info("TCP Client Extension registered successfully on GraphInstance.");
 
         // 2. 通过 WebSocket/MsgPack 接口发送一个 Data 消息给 SimpleEchoExtension
         log.info("--- 测试 WebSocket/MsgPack Data 消息回显 ---");
@@ -204,19 +187,19 @@ public class EndToEndIntegrationTest {
         assertNotNull(receivedWsMessage, "应收到WebSocket回显消息");
         assertTrue(receivedWsMessage instanceof Data, "WebSocket回显消息应为Data类型");
         Data wsEchoData = (Data) receivedWsMessage;
-        assertEquals(MessageConstants.DATA_NAME_ECHO_DATA, wsEchoData.getName()); // 使用常量
+        assertEquals(MessageConstants.DATA_NAME_ECHO_DATA, wsEchoData.getName());
 
         // 解析数据内容并断言
         Map<String, Object> receivedPayload = objectMapper.readValue(wsEchoData.getData().toString(CharsetUtil.UTF_8),
                 Map.class);
-        assertEquals("Echo: Hello WebSocket Echo!", receivedPayload.get("content")); // 修改断言，期望带有前缀的回显内容
+        assertEquals("Echo: Hello WebSocket Echo!", receivedPayload.get("content"));
 
         log.info("成功接收到回显WebSocket Data消息: {}", wsEchoData.getName());
         TimeUnit.SECONDS.sleep(1);
 
         // 3. 通过 HTTP 接口发送 stop_graph 命令
         log.info("--- 测试 HTTP /stop_graph 命令 ---");
-        Map<String, Object> stopGraphPayload = Map.of("graph_id", graphId, "app_uri", "test-app"); // appUri改为test-app
+        Map<String, Object> stopGraphPayload = Map.of("graph_id", graphId, "app_uri", "test-app");
         String stopResponse = sendHttpRequest(HTTP_PORT, "/stop_graph", "POST", stopGraphPayload);
         assertTrue(stopResponse.contains("\"status\":\"success\""), "HTTP stop_graph 响应应包含 'status:success'");
         log.info("HTTP /stop_graph 响应: {}", stopResponse);
@@ -285,8 +268,8 @@ public class EndToEndIntegrationTest {
                         @Override
                         protected void initChannel(SocketChannel ch) throws Exception {
                             // 出站处理器 (编码消息以便发送)
-                            ch.pipeline().addLast(new LengthFieldPrepender(4)); // 消息长度编码器
-                            ch.pipeline().addLast(new MessageEncoder()); // 消息编码器
+                            ch.pipeline().addLast(new LengthFieldPrepender(4));
+                            ch.pipeline().addLast(new MessageEncoder());
 
                             // 入站处理器 (解码接收到的消息)
                             ch.pipeline().addLast(new LengthFieldBasedFrameDecoder(Integer.MAX_VALUE, 0, 4, 0, 4));
@@ -298,7 +281,7 @@ public class EndToEndIntegrationTest {
                                 protected void channelRead0(ChannelHandlerContext ctx, Message msg) {
                                     log.debug("TCP客户端收到消息: type={}, name={}", msg.getType(), msg.getName());
                                     responseFuture.complete(msg);
-                                    ctx.close(); // 收到消息后立即关闭连接
+                                    ctx.close();
                                 }
 
                                 @Override
@@ -321,25 +304,21 @@ public class EndToEndIntegrationTest {
             String jsonPayload = objectMapper.writeValueAsString(payload);
             Data testData = Data.json(messageName, jsonPayload);
             testData.setSourceLocation(Location.builder().appUri("test-app").graphId(graphId)
-                    .extensionName("tcp-client-extension").build()); // 将N/A改为tcp-client-extension
+                    .extensionName("tcp-client-extension").build());
             testData.setDestinationLocations(
                     Collections.singletonList(Location.builder().appUri("test-app").graphId(graphId)
-                            .extensionName("SimpleEcho").build())); // appUri改为test-app
+                            .extensionName("SimpleEcho").build()));
 
             log.info("TCP客户端发送Data消息: messageName={}, sourceLocation={}, destinationLocations={}",
                     testData.getName(), testData.getSourceLocation(), testData.getDestinationLocations());
             channel.writeAndFlush(testData).sync();
 
-            // 为了接收回显，客户端需要保持连接一段时间
-            // 但这里是测试，收到消息后即可关闭
-            // 如果希望持续监听，则需要更复杂的客户端逻辑
         } catch (Exception e) {
             log.error("TCP客户端发送消息失败", e);
             throw e;
         }
     }
 
-    // 新增：WebSocket客户端发送Data消息并接收回显
     private void sendWebSocketDataMessage(URI uri, String graphId, String messageName, Map<String, Object> payload,
             CompletableFuture<Message> responseFuture, EventLoopGroup group) throws Exception {
         Bootstrap b = new Bootstrap();
@@ -351,9 +330,6 @@ public class EndToEndIntegrationTest {
                         ch.pipeline().addLast(
                                 new HttpClientCodec(),
                                 new HttpObjectAggregator(8192));
-                        // 这里不再直接添加 WebSocketClientProtocolHandler，而是将 handshaker 传递给
-                        // WebSocketClientHandler
-                        // WebSocketClientHandler 会自己处理握手
                         ch.pipeline().addLast(new WebSocketClientHandler(
                                 WebSocketClientHandshakerFactory.newHandshaker(
                                         uri, WebSocketVersion.V13, null, true, new DefaultHttpHeaders()),
@@ -363,39 +339,35 @@ public class EndToEndIntegrationTest {
 
         Channel ch = b.connect(uri.getHost(), uri.getPort()).sync().channel();
 
-        // 等待WebSocket握手完成
         WebSocketClientHandler handler = (WebSocketClientHandler) ch.pipeline().last();
-        handler.handshakeFuture().sync(); // 等待握手完成
+        handler.handshakeFuture().sync();
 
-        // 构建 Data 消息
         Data testData = Data.json(messageName, objectMapper.writeValueAsString(payload));
         testData.setSourceLocation(Location.builder().appUri("test-client").graphId(graphId)
-                .extensionName("tcp-client-extension").build()); // 沿用原有逻辑
+                .extensionName("tcp-client-extension").build());
         testData.setDestinationLocations(
                 Collections.singletonList(Location.builder().appUri("test-app").graphId(graphId)
                         .extensionName("SimpleEcho").build()));
 
-        // 在握手成功后，通过 WebSocketClientHandler 发送消息
-        handler.sendMessage(testData).sync(); // 通过handler发送消息，让handler在握手完成后发送
+        handler.sendMessage(testData).sync();
 
         log.info("WebSocket客户端发送Data消息: messageName={}, sourceLocation={}, destinationLocations={}",
                 testData.getName(), testData.getSourceLocation(), testData.getDestinationLocations());
     }
 
-    // 内部类：WebSocket客户端处理器
-    private class WebSocketClientHandler extends SimpleChannelInboundHandler<Object> { // 保持 Object，因为会先收到 HttpResponse
+    private class WebSocketClientHandler extends SimpleChannelInboundHandler<Object> {
 
         private final WebSocketClientHandshaker handshaker;
-        private final Promise<Void> handshakeFuture; // 使用 Promise
+        private final Promise<Void> handshakeFuture;
         private final CompletableFuture<Message> responseFuture;
-        private Channel channel; // 引用 Channel
+        private Channel channel;
 
-        private final MessageEncoder messageEncoder = new MessageEncoder(); // 用于发送消息的编码器
-        private final MessageDecoder messageDecoder = new MessageDecoder(); // 用于接收消息的解码器
+        private final MessageEncoder messageEncoder = new MessageEncoder();
+        private final MessageDecoder messageDecoder = new MessageDecoder();
 
         public WebSocketClientHandler(WebSocketClientHandshaker handshaker, CompletableFuture<Message> responseFuture) {
             this.handshaker = handshaker;
-            this.handshakeFuture = new DefaultPromise<>(GlobalEventExecutor.INSTANCE); // 初始化 Promise
+            this.handshakeFuture = new DefaultPromise<>(GlobalEventExecutor.INSTANCE);
             this.responseFuture = responseFuture;
         }
 
@@ -405,12 +377,12 @@ public class EndToEndIntegrationTest {
 
         @Override
         public void handlerAdded(ChannelHandlerContext ctx) {
-            this.channel = ctx.channel(); // 获取 Channel 引用
+            this.channel = ctx.channel();
         }
 
         @Override
         public void channelActive(ChannelHandlerContext ctx) {
-            handshaker.handshake(ctx.channel()); // 在连接激活时执行握手
+            handshaker.handshake(ctx.channel());
         }
 
         @Override
@@ -422,21 +394,19 @@ public class EndToEndIntegrationTest {
             if (channel == null || !channel.isActive()) {
                 throw new IllegalStateException("WebSocket channel is not active.");
             }
-            // 手动编码 Message 为 BinaryWebSocketFrame
             List<Object> encodedFrames = new ArrayList<>();
             messageEncoder.encode(null, message, encodedFrames);
             BinaryWebSocketFrame binaryFrame = (BinaryWebSocketFrame) encodedFrames.get(0);
-            return channel.writeAndFlush(binaryFrame); // 发送BinaryWebSocketFrame
+            return channel.writeAndFlush(binaryFrame);
         }
 
         @Override
         protected void channelRead0(ChannelHandlerContext ctx, Object msg) throws Exception {
             Channel ch = ctx.channel();
             if (!handshaker.isHandshakeComplete()) {
-                // HTTP响应，处理WebSocket握手结果
                 handshaker.finishHandshake(ch, (FullHttpResponse) msg);
                 log.info("WebSocket Client连接成功!");
-                handshakeFuture.setSuccess(null); // 握手成功
+                handshakeFuture.setSuccess(null);
                 return;
             }
 
@@ -447,7 +417,6 @@ public class EndToEndIntegrationTest {
                                 + response.content().toString(CharsetUtil.UTF_8) + ')');
             }
 
-            // 处理 WebSocket 帧
             if (msg instanceof WebSocketFrame) {
                 WebSocketFrame frame = (WebSocketFrame) msg;
                 if (frame instanceof TextWebSocketFrame) {
@@ -457,15 +426,14 @@ public class EndToEndIntegrationTest {
                     BinaryWebSocketFrame binaryFrame = (BinaryWebSocketFrame) frame;
                     log.debug("WebSocket客户端收到二进制帧，大小: {} 字节", binaryFrame.content().readableBytes());
 
-                    // 使用MessageDecoder解码二进制帧中的数据
                     List<Object> decodedMsgs = new ArrayList<>();
-                    messageDecoder.decode(ctx, binaryFrame, decodedMsgs); // 直接传递 BinaryWebSocketFrame
+                    messageDecoder.decode(ctx, binaryFrame, decodedMsgs);
 
                     if (!decodedMsgs.isEmpty() && decodedMsgs.get(0) instanceof Message) {
                         Message decodedMsg = (Message) decodedMsgs.get(0);
                         responseFuture.complete(decodedMsg);
                         log.info("WebSocket客户端成功解码并接收到回显消息: {}", decodedMsg.getName());
-                        ctx.close(); // 收到消息后关闭连接
+                        ctx.close();
                     } else {
                         log.warn("WebSocket客户端无法解码二进制帧为TEN消息。");
                     }
@@ -485,12 +453,11 @@ public class EndToEndIntegrationTest {
         public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
             log.error("WebSocket客户端处理异常", cause);
             responseFuture.completeExceptionally(cause);
-            handshakeFuture.setFailure(cause); // setCompleteExceptionally改为setFailure
+            handshakeFuture.setFailure(cause);
             ctx.close();
         }
     }
 
-    // 辅助方法：查找可用端口
     private static int findAvailablePort() {
         try (java.net.ServerSocket socket = new java.net.ServerSocket(0)) {
             socket.setReuseAddress(true);

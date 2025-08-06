@@ -196,7 +196,7 @@ public final class Command extends AbstractMessage {
     }
 
     @Override
-    public Command clone() {
+    public Command clone() throws CloneNotSupportedException {
         return new Command(this);
     }
 

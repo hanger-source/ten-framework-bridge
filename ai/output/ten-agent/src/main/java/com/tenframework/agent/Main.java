@@ -1,26 +1,13 @@
 package com.tenframework.agent;
 
 import com.tenframework.core.engine.Engine;
-import com.tenframework.core.server.NettyHttpServer;
-import com.tenframework.core.server.NettyMessageServer;
+import com.tenframework.server.TenServer; // 导入TenServer
 import com.tenframework.core.extension.SimpleEchoExtension;
 import com.tenframework.core.message.Command;
 import com.tenframework.core.message.Data;
-import com.tenframework.core.message.CommandResult;
 import com.tenframework.core.Location;
 import com.tenframework.core.message.Message;
-import com.tenframework.core.message.MessageEncoder;
-import com.tenframework.core.message.MessageDecoder;
 
-import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.EventLoopGroup;
-import io.netty.channel.nio.NioEventLoopGroup;
-import io.netty.bootstrap.Bootstrap;
-import io.netty.channel.ChannelOption;
-import io.netty.channel.socket.nio.NioSocketChannel;
-import io.netty.channel.ChannelInitializer;
-import io.netty.channel.socket.SocketChannel;
 import io.netty.buffer.Unpooled;
 
 import java.util.UUID;
@@ -50,17 +37,13 @@ public class Main {
                 engine.registerExtension("echo-extension", echoExtension, extensionProperties, "main-app"); // 添加appUri
                 System.out.println("SimpleEchoExtension registered.");
 
-                // 3. 启动 Netty TCP Server 和简化的 HTTP Server
+                // 3. 启动 TenServer
                 int tcpPort = 9090;
                 int httpPort = 9091;
 
-                NettyMessageServer tcpServer = new NettyMessageServer(tcpPort, engine);
-                tcpServer.start();
-                System.out.println("Netty TCP Server started on port " + tcpPort);
-
-                NettyHttpServer httpServer = new NettyHttpServer(httpPort, engine);
-                httpServer.start();
-                System.out.println("Netty HTTP Server started on port " + httpPort);
+                TenServer tenServer = new TenServer(tcpPort, httpPort, engine);
+                tenServer.start().join(); // 阻塞等待服务器启动完成
+                System.out.println("TenServer started on TCP port " + tcpPort + " and HTTP port " + httpPort);
 
                 // --- 模拟客户端交互 ---
 
@@ -141,8 +124,7 @@ public class Main {
 
                 // 7. 关闭服务
                 System.out.println("\n--- Shutting down services ---");
-                httpServer.shutdown(); // 将 stop() 改为 shutdown()
-                tcpServer.shutdown(); // 将 stop() 改为 shutdown()
+                tenServer.shutdown().join(); // 阻塞等待服务器关闭完成
                 engine.stop();
                 System.out.println("All services stopped.");
         }

@@ -185,7 +185,13 @@ class MessageSystemTest {
         original.setArg("param", "value");
         original.setProperty("prop", "test");
 
-        Command cloned = original.clone();
+        Command cloned = null;
+        try {
+            cloned = original.clone();
+        } catch (CloneNotSupportedException e) {
+            fail("消息克隆失败: " + e.getMessage());
+        }
+        assertNotNull(cloned, "克隆对象不应为空");
         assertNotEquals(original.getCommandId(), cloned.getCommandId()); // 新的命令ID
         assertEquals(original.getName(), cloned.getName());
         assertEquals(original.getArg("param"), cloned.getArg("param"));

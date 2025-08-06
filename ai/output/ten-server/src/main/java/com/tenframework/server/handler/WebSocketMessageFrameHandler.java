@@ -1,4 +1,4 @@
-package com.tenframework.core.server;
+package com.tenframework.server.handler;
 
 import com.tenframework.core.engine.Engine;
 import com.tenframework.core.message.Message;

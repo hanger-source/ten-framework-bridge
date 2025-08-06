@@ -22,6 +22,13 @@
             <version>${project.parent.version}</version> <!-- 使用父模块版本 -->
         </dependency>
 
+        <!-- Add dependency on ten-server -->
+        <dependency>
+            <groupId>com.tenframework</groupId>
+            <artifactId>ten-server</artifactId>
+            <version>${project.parent.version}</version>
+        </dependency>
+
         <!-- Netty -->
         <dependency>
             <groupId>io.netty</groupId>

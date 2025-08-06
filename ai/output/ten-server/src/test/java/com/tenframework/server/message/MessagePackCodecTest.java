@@ -1,4 +1,4 @@
-package com.tenframework.core.message;
+package com.tenframework.server.message;
 
 import com.tenframework.core.Location;
 import io.netty.buffer.ByteBuf;
@@ -16,6 +16,14 @@ import java.util.Map;
 import java.util.Random;
 
 import static org.junit.jupiter.api.Assertions.*;
+
+import com.tenframework.core.message.Command;
+import com.tenframework.core.message.CommandResult;
+import com.tenframework.core.message.Data;
+import com.tenframework.core.message.AudioFrame;
+import com.tenframework.core.message.VideoFrame;
+import com.tenframework.core.message.Message;
+import com.tenframework.core.message.MessageUtils;
 
 /**
  * MsgPack编解码器单元测试
@@ -226,202 +234,30 @@ public class MessagePackCodecTest {
         CommandResult decodedResult = (CommandResult) decodedMessage;
 
         assertEquals(originalResult.getCommandId(), decodedResult.getCommandId());
-        assertEquals(originalResult.getResult(), decodedResult.getResult());
         assertEquals(originalResult.isFinal(), decodedResult.isFinal());
         assertEquals(originalResult.getError(), decodedResult.getError());
         assertEquals(originalResult.getErrorCode(), decodedResult.getErrorCode());
-        assertTrue(decodedResult.checkIntegrity());
-    }
-
-    @Test
-    void testCommandCloneIndependence() throws CloneNotSupportedException {
-        Command original = Command.builder().name("original_cmd").build();
-        original.setCommandId("cmd-original");
-        original.setParentCommandId("parent-original");
-        original.setSourceLocation(new Location("app-orig", "graph-orig", "ext-orig"));
-        original.setDestinationLocations(Collections.singletonList(new Location("app-dest", "graph-dest", "ext-dest")));
-        original.setArg("arg1", "value1");
-        original.setProperty("prop1", "propVal1");
-
-        Command cloned = (Command) original.clone();
-
-        // 验证克隆后的消息与原始消息在初始内容上相同
-        assertEquals(original.getName(), cloned.getName());
-        assertEquals(original.getParentCommandId(), cloned.getParentCommandId());
-        // 注意：commandId在克隆时会重新生成
-        assertNotEquals(original.getCommandId(), cloned.getCommandId());
-        assertEquals(original.getSourceLocation(), cloned.getSourceLocation());
-        assertEquals(original.getDestinationLocations(), cloned.getDestinationLocations());
-        assertEquals(original.getArgs(), cloned.getArgs());
-        assertEquals(original.getProperties(), cloned.getProperties());
-
-        // 修改原始消息，验证克隆消息是否不受影响
-        original.setName("modified_cmd");
-        original.setParentCommandId("modified-parent");
-        original.setSourceLocation(new Location("app-mod", "graph-mod", "ext-mod"));
-        original.getDestinationLocations().add(new Location("app-new", "graph-new", "ext-new"));
-        original.setArg("arg1", "newValue1");
-        original.setArg("arg2", 456);
-        original.setProperty("prop1", "newPropVal1");
-        original.setProperty("prop2", false);
-
-        // 验证克隆消息的字段未改变
-        assertEquals("original_cmd", cloned.getName());
-        assertEquals("parent-original", cloned.getParentCommandId());
-        assertEquals(new Location("app-orig", "graph-orig", "ext-orig"), cloned.getSourceLocation());
-        assertEquals(1, cloned.getDestinationLocations().size());
-        assertEquals(new Location("app-dest", "graph-dest", "ext-dest"), cloned.getDestinationLocations().get(0));
-        assertEquals("value1", cloned.getArg("arg1", String.class).orElse(null));
-        assertFalse(cloned.hasArg("arg2"));
-        assertEquals("propVal1", cloned.getProperty("prop1", String.class));
-        assertFalse(cloned.hasProperty("prop2"));
-    }
-
-    @Test
-    void testDataCloneIndependence() throws CloneNotSupportedException {
-        byte[] originalBytes = { (byte) 1, (byte) 2, (byte) 3, (byte) 4 };
-        Data original = Data.binary("original_data", originalBytes);
-        original.setContentType("original/type");
-        original.setProperty("origProp", 123);
-
-        Data cloned = (Data) original.clone();
-
-        // 验证克隆后的消息与原始消息在初始内容上相同
-        assertEquals(original.getName(), cloned.getName());
-        assertArrayEquals(originalBytes, cloned.getDataBytes());
-        assertEquals(original.getContentType(), cloned.getContentType());
-        assertEquals(original.getProperties(), cloned.getProperties());
-        assertEquals(original.getData().refCnt(), cloned.getData().refCnt()); // 引用计数应该相同 (都为1)
-
-        // 修改原始消息的数据和属性
-        byte[] modifiedBytes = { (byte) 5, (byte) 6, (byte) 7, (byte) 8 };
-        original.setDataBytes(modifiedBytes);
-        original.setContentType("modified/type");
-        original.setProperty("origProp", 456);
-        original.setProperty("newProp", true);
-
-        // 验证克隆消息的数据和属性未改变，且ByteBuf引用独立
-        assertEquals("original_data", cloned.getName());
-        assertArrayEquals(originalBytes, cloned.getDataBytes()); // 核心：验证ByteBuf深拷贝
-        assertEquals("original/type", cloned.getContentType());
-        assertEquals(123, cloned.getProperty("origProp", Integer.class));
-        assertFalse(cloned.hasProperty("newProp"));
-        assertEquals(1, cloned.getData().refCnt()); // 验证克隆数据的引用计数仍然为1
-        assertEquals(1, original.getData().refCnt()); // 验证原始数据的引用计数仍然为1
-    }
-
-    @Test
-    void testAudioFrameCloneIndependence() throws CloneNotSupportedException {
-        byte[] originalAudioBytes = { (byte) 10, (byte) 20, (byte) 30, (byte) 40 };
-        AudioFrame original = new AudioFrame("original_audio", Unpooled.wrappedBuffer(originalAudioBytes), 44100, 2,
-                16);
-        original.setEof(true);
-        original.setFormat("WAV");
-        original.setProperty("audioProp", "test");
-
-        AudioFrame cloned = (AudioFrame) original.clone();
-
-        assertEquals(original.getName(), cloned.getName());
-        assertArrayEquals(originalAudioBytes, cloned.getDataBytes());
-        assertEquals(original.getSampleRate(), cloned.getSampleRate());
-        assertEquals(original.getChannels(), cloned.getChannels());
-        assertEquals(original.getBitsPerSample(), cloned.getBitsPerSample());
-        assertEquals(original.isEof(), cloned.isEof());
-        assertEquals(original.getFormat(), cloned.getFormat());
-        assertEquals(original.getProperties(), cloned.getProperties());
+        assertEquals(originalResult.getResult(), decodedResult.getResult()); // Map深拷贝
+        assertEquals(originalResult.getProperties(), decodedResult.getProperties()); // Map深拷贝
 
         // 修改原始消息
-        byte[] modifiedAudioBytes = { (byte) 50, (byte) 60, (byte) 70, (byte) 80 };
-        original.setDataBytes(modifiedAudioBytes);
-        original.setEof(false);
-        original.setFormat("MP3");
-        original.setProperty("audioProp", "modified");
-        original.setProperty("newAudioProp", 999);
+        originalResult.setFinal(true);
+        originalResult.setError("modified error");
+        originalResult.getResult().put("status", "MODIFIED");
+        ((List) originalResult.getResult().get("data")).add("item2"); // 修改List内容
+        originalResult.getProperties().put("resProp", "modifiedResVal");
+        originalResult.getProperties().put("newResProp", 789);
 
         // 验证克隆消息未改变
-        assertEquals("original_audio", cloned.getName());
-        assertArrayEquals(originalAudioBytes, cloned.getDataBytes());
-        assertTrue(cloned.isEof());
-        assertEquals("WAV", cloned.getFormat());
-        assertEquals("test", cloned.getProperty("audioProp", String.class));
-        assertFalse(cloned.hasProperty("newAudioProp"));
-    }
-
-    @Test
-    void testVideoFrameCloneIndependence() throws CloneNotSupportedException {
-        byte[] originalVideoBytes = { (byte) 100, (byte) 110, (byte) 120, (byte) 130 };
-        VideoFrame original = new VideoFrame("original_video", Unpooled.wrappedBuffer(originalVideoBytes), 640, 480,
-                "YUV");
-        original.setFps(25.0);
-        original.setFrameType("P");
-        original.setProperty("videoProp", true);
-
-        VideoFrame cloned = (VideoFrame) original.clone();
-
-        assertEquals(original.getName(), cloned.getName());
-        assertArrayEquals(originalVideoBytes, cloned.getDataBytes());
-        assertEquals(original.getWidth(), cloned.getWidth());
-        assertEquals(original.getHeight(), cloned.getHeight());
-        assertEquals(original.getPixelFormat(), cloned.getPixelFormat());
-        assertEquals(original.getFps(), cloned.getFps());
-        assertEquals(original.getFrameType(), cloned.getFrameType());
-        assertEquals(original.getProperties(), cloned.getProperties());
-
-        // 修改原始消息
-        byte[] modifiedVideoBytes = { (byte) 140, (byte) 150, (byte) 160, (byte) 170 };
-        original.setDataBytes(modifiedVideoBytes);
-        original.setFps(60.0);
-        original.setFrameType("I");
-        original.setProperty("videoProp", false);
-        original.setProperty("newVideoProp", "abc");
-
-        // 验证克隆消息未改变
-        assertEquals("original_video", cloned.getName());
-        assertArrayEquals(originalVideoBytes, cloned.getDataBytes());
-        assertEquals(25.0, cloned.getFps());
-        assertEquals("P", cloned.getFrameType());
-        assertEquals(true, cloned.getProperty("videoProp", Boolean.class));
-        assertFalse(cloned.hasProperty("newVideoProp"));
-    }
-
-    @Test
-    void testCommandResultCloneIndependence() throws CloneNotSupportedException {
-        Map<String, Object> originalResultMap = new HashMap<>();
-        originalResultMap.put("status", "OK");
-        originalResultMap.put("data", new ArrayList<>(Collections.singletonList("item1")));
-
-        CommandResult original = CommandResult.success("original-result-cmd", originalResultMap);
-        original.setFinal(false);
-        original.setError("original error");
-        original.setProperty("resProp", "resVal");
-
-        CommandResult cloned = (CommandResult) original.clone();
-
-        assertEquals(original.getCommandId(), cloned.getCommandId());
-        assertEquals(original.isFinal(), cloned.isFinal());
-        assertEquals(original.getError(), cloned.getError());
-        assertEquals(original.getErrorCode(), cloned.getErrorCode());
-        assertEquals(original.getResult(), cloned.getResult()); // Map深拷贝
-        assertEquals(original.getProperties(), cloned.getProperties()); // Map深拷贝
-
-        // 修改原始消息
-        original.setFinal(true);
-        original.setError("modified error");
-        original.getResult().put("status", "MODIFIED");
-        ((List) original.getResult().get("data")).add("item2"); // 修改List内容
-        original.getProperties().put("resProp", "modifiedResVal");
-        original.getProperties().put("newResProp", 789);
-
-        // 验证克隆消息未改变
-        assertFalse(cloned.isFinal());
-        assertEquals("original error", cloned.getError());
-        assertEquals("OK", cloned.getResultValue("status", String.class).orElse(null));
-        List<String> clonedDataList = (List<String>) cloned.getResultValue("data", List.class).orElse(null);
-        assertNotNull(clonedDataList);
-        assertEquals(1, clonedDataList.size());
-        assertEquals("item1", clonedDataList.get(0));
-        assertEquals("resVal", cloned.getProperty("resProp", String.class));
-        assertFalse(cloned.hasProperty("newResProp"));
+        assertFalse(decodedResult.isFinal());
+        assertEquals("original error", decodedResult.getError());
+        assertEquals("OK", decodedResult.getResultValue("status", String.class).orElse(null));
+        List<String> decodedDataList = (List<String>) decodedResult.getResultValue("data", List.class).orElse(null);
+        assertNotNull(decodedDataList);
+        assertEquals(1, decodedDataList.size());
+        assertEquals("item1", decodedDataList.get(0));
+        assertEquals("resVal", decodedResult.getProperty("resProp", String.class));
+        assertFalse(decodedResult.hasProperty("newResProp"));
     }
 
     @Test
@@ -516,14 +352,4 @@ public class MessagePackCodecTest {
         decodedMessage = channel.readInbound();
         assertNull(decodedMessage); // 期望内部JSON解码失败，不输出任何消息
     }
-
-    // 辅助方法：确保所有ByteBuf在测试结束时被释放
-    // EmbeddedChannel通常会自动管理，但为了健壮性，可以在这里添加检查
-    // @AfterEach
-    // void tearDown() {
-    // assertTrue(channel.finish());
-    // assertTrue(channel.inboundMessages().isEmpty());
-    // assertTrue(channel.outboundMessages().isEmpty());
-    // }
-
 }

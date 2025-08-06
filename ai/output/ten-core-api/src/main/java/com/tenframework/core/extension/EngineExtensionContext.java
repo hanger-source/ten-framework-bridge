@@ -1,7 +1,7 @@
 package com.tenframework.core.extension;
 
 import com.tenframework.core.Location;
-import com.tenframework.core.engine.Engine;
+import com.tenframework.core.engine.MessageSubmitter;
 import com.tenframework.core.message.CommandResult;
 import com.tenframework.core.message.Message;
 import com.tenframework.core.path.PathOut;
@@ -14,6 +14,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.CompletableFuture;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * EngineExtensionContext类
@@ -26,18 +27,19 @@ public class EngineExtensionContext implements ExtensionContext {
     private final String extensionName;
     private final String graphId;
     private final String appUri;
-    private final Engine engine;
+    private final MessageSubmitter messageSubmitter; // 替换为MessageSubmitter接口
     private final Map<String, Object> properties;
     private final ExecutorService virtualThreadExecutor; // 虚拟线程ExecutorService
-    private final Extension extension; // 新增字段，存储关联的Extension实例
+    private final Extension extension; // 存储关联的Extension实例
 
-    public EngineExtensionContext(String extensionName, String appUri, Engine engine, Map<String, Object> properties,
-            Extension extension) { // 增加 Extension 参数
+    public EngineExtensionContext(String extensionName, String graphId, String appUri,
+            MessageSubmitter messageSubmitter, Map<String, Object> properties,
+            Extension extension) { // 增加 Extension 参数，修改参数列表
         this.extensionName = extensionName;
+        this.graphId = graphId; // 直接传入graphId
         this.appUri = appUri;
-        this.engine = engine;
-        this.properties = properties;
-        this.graphId = UUID.randomUUID().toString(); // 每个ExtensionContext拥有独立的graphId
+        this.messageSubmitter = messageSubmitter;
+        this.properties = properties != null ? new ConcurrentHashMap<>(properties) : new ConcurrentHashMap<>();
         this.virtualThreadExecutor = Executors.newVirtualThreadPerTaskExecutor();
         this.extension = extension; // 初始化 Extension 实例
         log.debug("EngineExtensionContext创建成功: extensionName={}, graphId={}", extensionName, graphId);
@@ -66,12 +68,12 @@ public class EngineExtensionContext implements ExtensionContext {
 
         // 设置消息的源位置（如果未设置）
         if (message.getSourceLocation() == null) {
-            Location sourceLocation = new Location(this.appUri, graphId, extensionName);
+            Location sourceLocation = new Location(this.appUri, this.graphId, extensionName); // 使用传入的graphId
             message.setSourceLocation(sourceLocation);
         }
 
         // 消息发送后会回到Engine的inboundMessageQueue进行处理
-        boolean success = engine.submitMessage(message);
+        boolean success = messageSubmitter.submitMessage(message); // 使用messageSubmitter
         if (!success) {
             log.warn("Extension发送消息失败，Engine队列已满: extensionName={}, graphId={}, messageType={}",
                     extensionName, graphId, message.getType());
@@ -105,12 +107,12 @@ public class EngineExtensionContext implements ExtensionContext {
 
         // 设置命令结果的源位置（如果未设置）
         if (result.getSourceLocation() == null) {
-            Location sourceLocation = new Location(this.appUri, graphId, extensionName);
+            Location sourceLocation = new Location(this.appUri, this.graphId, extensionName); // 使用传入的graphId
             result.setSourceLocation(sourceLocation);
         }
 
         // 命令结果本质上也是一种消息，回溯到Engine的inboundMessageQueue处理
-        boolean success = engine.submitMessage(result);
+        boolean success = messageSubmitter.submitMessage(result); // 使用messageSubmitter
         if (!success) {
             log.warn("Extension发送命令结果失败，Engine队列已满: extensionName={}, graphId={}, commandId={}",
                     extensionName, graphId, result.getCommandId());
@@ -168,9 +170,9 @@ public class EngineExtensionContext implements ExtensionContext {
      */
     @Override
     public int getActiveVirtualThreadCount() {
-        if (extension instanceof BaseExtension baseExtension) {
-            return baseExtension.getActiveTaskCount();
-        }
+        // TODO:
+        // BaseExtension的getActiveTaskCount()现在是BaseExtension的私有方法，需要修改BaseExtension或Extension接口
+        // 暂时返回0，待后续统一Metric收集机制
         return 0; // 如果不是 BaseExtension 类型，返回0或抛出异常
     }
 

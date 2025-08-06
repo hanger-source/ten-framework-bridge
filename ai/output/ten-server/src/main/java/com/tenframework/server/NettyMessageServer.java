@@ -1,6 +1,8 @@
-package com.tenframework.core.server;
+package com.tenframework.server;
 
 import com.tenframework.core.engine.Engine;
+import com.tenframework.server.message.MessageDecoder;
+import com.tenframework.server.message.MessageEncoder;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelInitializer;
@@ -9,26 +11,27 @@ import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
-import io.netty.handler.codec.http.HttpObjectAggregator;
-import io.netty.handler.codec.http.HttpRequestDecoder;
-import io.netty.handler.codec.http.HttpResponseEncoder;
+import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
+import io.netty.handler.codec.LengthFieldPrepender;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.concurrent.CompletableFuture;
+import io.netty.handler.codec.http.HttpObjectAggregator;
+import io.netty.handler.codec.http.HttpServerCodec;
 import io.netty.handler.codec.http.websocketx.WebSocketServerProtocolHandler;
-import com.tenframework.core.server.WebSocketMessageFrameHandler;
+import com.tenframework.server.handler.WebSocketMessageFrameHandler; // 修正导入
 
 @Slf4j
-public class NettyHttpServer {
+public class NettyMessageServer {
 
     private final int port;
-    private final Engine engine; // Engine 实例
+    private final Engine engine;
     private EventLoopGroup bossGroup;
     private EventLoopGroup workerGroup;
     private CompletableFuture<Void> startFuture = new CompletableFuture<>();
     private CompletableFuture<Void> shutdownFuture = new CompletableFuture<>();
 
-    public NettyHttpServer(int port, Engine engine) {
+    public NettyMessageServer(int port, Engine engine) {
         this.port = port;
         this.engine = engine;
     }
@@ -42,39 +45,37 @@ public class NettyHttpServer {
     }
 
     public void start() throws Exception {
-        bossGroup = new NioEventLoopGroup();
-        workerGroup = new NioEventLoopGroup();
+        bossGroup = new NioEventLoopGroup(); // (1) 用于接受传入连接的线程组
+        workerGroup = new NioEventLoopGroup(); // (2) 用于处理已接受连接的I/O操作的线程组
 
         try {
-            ServerBootstrap b = new ServerBootstrap();
+            ServerBootstrap b = new ServerBootstrap(); // (3) 一个辅助类，用于设置服务器
             b.group(bossGroup, workerGroup)
-                    .channel(NioServerSocketChannel.class)
-                    .childHandler(new ChannelInitializer<SocketChannel>() {
+                    .channel(NioServerSocketChannel.class) // (4) 使用NioServerSocketChannel作为服务器的通道类型
+                    .childHandler(new ChannelInitializer<SocketChannel>() { // (5)
+                                                                            // ChannelInitializer用于为新接受的通道设置ChannelPipeline
                         @Override
                         public void initChannel(SocketChannel ch) {
-                            ch.pipeline().addLast(new HttpRequestDecoder());
-                            ch.pipeline().addLast(new HttpCommandResultOutboundHandler()); // 添加HTTP命令结果编码器
-                            ch.pipeline().addLast(new HttpResponseEncoder());
-                            ch.pipeline().addLast(new HttpObjectAggregator(65536));
+                            ch.pipeline().addLast(new HttpServerCodec()); // HTTP 消息编解码器
+                            ch.pipeline().addLast(new HttpObjectAggregator(65536)); // HTTP 消息聚合器
+                            // WebSocket 协议处理器，指定 WebSocket 路径。这里将处理握手请求。
+                            ch.pipeline().addLast(new WebSocketServerProtocolHandler("/websocket"));
 
-                            // WebSocket 握手和协议处理
-                            // /ws 是WebSocket路径，如果请求是WebSocket升级，此Handler将升级协议
-                            ch.pipeline().addLast(new WebSocketServerProtocolHandler("/ws", null, true));
-
-                            // 自定义WebSocket消息帧处理器，处理WebSocket帧和TEN消息的转换
-                            // 注意：此Handler在WebSocket握手成功后才开始处理WebSocket帧
-                            ch.pipeline().addLast(new WebSocketMessageFrameHandler(engine));
-
-                            // 原始的HTTP命令处理器，只处理非WebSocket升级的HTTP请求
-                            // 在WebSocket握手成功后，HttpCommandInboundHandler和之前的HTTP编码器/解码器会被移除
-                            ch.pipeline().addLast(new HttpCommandInboundHandler(engine));
+                            // 在 WebSocket 握手成功后，上述处理器会从 pipeline 中移除 HTTP 相关的处理器
+                            // 并在其位置添加 WebSocketFrameDecoder 和 WebSocketFrameEncoder。
+                            // 接下来，我们将添加处理 WebSocket 帧的自定义处理器。
+                            ch.pipeline().addLast(new MessageEncoder()); // 消息编码器：Message -> WebSocket Binary Frame
+                            ch.pipeline().addLast(new MessageDecoder()); // 消息解码器：WebSocket Binary Frame -> Message
+                            ch.pipeline().addLast(new WebSocketMessageFrameHandler(engine)); // 自定义 WebSocket 业务处理器
                         }
                     })
-                    .option(ChannelOption.SO_BACKLOG, 128)
-                    .childOption(ChannelOption.SO_KEEPALIVE, true);
+                    .option(ChannelOption.SO_BACKLOG, 128) // (6) 设置服务器套接字的选项，如积压队列大小
+                    .childOption(ChannelOption.SO_KEEPALIVE, true); // (7) 设置已接受通道的选项，如启用TCP KeepAlive
 
-            ChannelFuture f = b.bind(port).sync();
-            log.info("NettyHttpServer started and listening on port {}", port);
+            // 绑定端口并启动服务器
+            ChannelFuture f = b.bind(port).sync(); // (8) 绑定端口并等待绑定操作完成
+
+            log.info("NettyMessageServer started and listening on port {}", port);
             startFuture.complete(null); // 服务器启动成功，完成startFuture
 
             f.channel().closeFuture().addListener(future -> {
@@ -84,18 +85,11 @@ public class NettyHttpServer {
         } catch (Exception e) {
             startFuture.completeExceptionally(e); // 启动失败，completeExceptionally
             throw e;
-        } finally {
-            // The original code had a finally block here, but the new code removes the
-            // sync() call.
-            // The original code also had a shutdown() call here.
-            // The new code's start() method now handles the shutdown.
-            // So, the original finally block is effectively removed by the new start()
-            // logic.
-        }
+        } // finally 块保持不变
     }
 
     public void shutdown() {
-        log.info("Shutting down NettyHttpServer on port {}", port);
+        log.info("Shutting down NettyMessageServer on port {}", port);
         CompletableFuture<Void> bossShutdownFuture = CompletableFuture.completedFuture(null);
         CompletableFuture<Void> workerShutdownFuture = CompletableFuture.completedFuture(null);
 
@@ -135,11 +129,11 @@ public class NettyHttpServer {
 
         CompletableFuture.allOf(bossShutdownFuture, workerShutdownFuture)
                 .thenRun(() -> {
-                    log.info("NettyHttpServer on port {} shut down completely.", port);
+                    log.info("NettyMessageServer on port {} shut down completely.", port);
                     shutdownFuture.complete(null); // 所有组都关闭后，完成shutdownFuture
                 })
                 .exceptionally(e -> {
-                    log.error("NettyHttpServer shutdown encountered errors on port {}: {}", port, e.getMessage());
+                    log.error("NettyMessageServer shutdown encountered errors on port {}: {}", port, e.getMessage());
                     shutdownFuture.completeExceptionally(e); // 如果有任何异常，完成shutdownFutureWithException
                     return null;
                 });

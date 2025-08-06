@@ -1,4 +1,4 @@
-package com.tenframework.core.message;
+package com.tenframework.server.message;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.module.SimpleModule;

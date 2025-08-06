@@ -54,6 +54,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.tenframework.core.message.MessageConstants;
+import com.tenframework.core.graph.GraphConfig;
+import com.tenframework.core.graph.GraphInstance;
+import com.tenframework.core.message.Command;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 @Slf4j
 public class WebSocketIntegrationTest {
@@ -64,50 +68,39 @@ public class WebSocketIntegrationTest {
     private EventLoopGroup clientGroup;
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
+    // 在此处定义Extension实例，确保在测试方法中可访问
+    private SimpleEchoExtension echoExtension; // 重新定义
+    private BaseExtension tcpClientExtension; // 重新定义
+
     @BeforeEach
     void setUp() throws Exception {
         engine = new Engine("test-websocket-engine");
         engine.start();
         log.info("Engine [{}] started for test.", engine.getEngineId());
 
-        // 注册 SimpleEchoExtension
-        SimpleEchoExtension echoExtension = new SimpleEchoExtension();
-        Map<String, Object> echoConfig = Map.of("name", "SimpleEcho");
-        boolean registered = engine.registerExtension("SimpleEcho", echoExtension, echoConfig, "test://app");
-        assertTrue(registered, "SimpleEchoExtension should register successfully.");
-        log.info("SimpleEchoExtension registered successfully for test.");
-
-        // 注册一个模拟的tcp-client-extension，以便Engine能够正确路由回显消息
-        BaseExtension tcpClientExtension = new BaseExtension() {
+        // 初始化Extension实例
+        echoExtension = new SimpleEchoExtension();
+        tcpClientExtension = new BaseExtension() {
             @Override
             protected void handleCommand(com.tenframework.core.message.Command command,
                     com.tenframework.core.extension.ExtensionContext context) {
-                // 空实现
             }
 
             @Override
             protected void handleData(com.tenframework.core.message.Data data,
                     com.tenframework.core.extension.ExtensionContext context) {
-                // 空实现
             }
 
             @Override
             protected void handleAudioFrame(com.tenframework.core.message.AudioFrame audioFrame,
                     com.tenframework.core.extension.ExtensionContext context) {
-                // 空实现
             }
 
             @Override
             protected void handleVideoFrame(com.tenframework.core.message.VideoFrame videoFrame,
                     com.tenframework.core.extension.ExtensionContext context) {
-                // 空实现
             }
         };
-        Map<String, Object> tcpClientConfig = Map.of("name", "tcp-client-extension");
-        boolean tcpClientRegistered = engine.registerExtension("tcp-client-extension", tcpClientExtension,
-                tcpClientConfig, "test://app");
-        assertTrue(tcpClientRegistered, "TCP Client Extension should register successfully.");
-        log.info("TCP Client Extension registered successfully for test.");
 
         messageServer = new NettyMessageServer(WEBSOCKET_PORT, engine);
         new Thread(() -> {
@@ -144,6 +137,32 @@ public class WebSocketIntegrationTest {
         CompletableFuture<Message> wsEchoResponseFuture = new CompletableFuture<>();
         URI websocketUri = new URI("ws://localhost:" + WEBSOCKET_PORT + "/websocket"); // WebSocket路径
         String graphId = UUID.randomUUID().toString();
+        String appUri = "test-app"; // 定义appUri
+
+        // 1. 模拟发送 start_graph 命令来启动图实例
+        // 构造包含 SimpleEchoExtension 和 tcp-client-extension 的图配置JSON
+        String graphJson = String.format(
+                "{\"graph_id\":\"%s\",\"nodes\":[{\"name\":\"SimpleEcho\",\"type\":\"com.tenframework.core.extension.SimpleEchoExtension\"},{\"name\":\"tcp-client-extension\",\"type\":\"com.tenframework.core.extension.BaseExtension\"}],\"connections\":[{\"source\":\"tcp-client-extension\",\"destinations\":[\"SimpleEcho\"]},{\"source\":\"SimpleEcho\",\"destinations\":[\"tcp-client-extension\"]}]}",
+                graphId);
+
+        Command startGraphCommand = Command.builder()
+                .name("start_graph")
+                .commandId(UUID.randomUUID().toString())
+                .properties(Map.of(
+                        "graph_id", graphId,
+                        "app_uri", appUri,
+                        "graph_json", graphJson // 传入完整的图JSON配置
+                ))
+                .sourceLocation(new Location("test://client", graphId, "client"))
+                .destinationLocations(List.of(new Location(appUri, graphId, "engine")))
+                .build();
+        engine.submitMessage(startGraphCommand);
+        TimeUnit.SECONDS.sleep(1); // 给Engine一点时间处理命令和启动GraphInstance
+
+        // 获取 GraphInstance (通过Engine的公共方法获取)
+        GraphInstance actualGraphInstance = engine.getGraphInstance(graphId)
+                .orElseThrow(() -> new IllegalStateException("未找到启动的图实例: " + graphId));
+        log.info("成功获取到图实例: {}", actualGraphInstance.getGraphId());
 
         sendWebSocketDataMessage(websocketUri, graphId, "echo_test_data", Map.of("content", "Hello WebSocket Echo!"),
                 wsEchoResponseFuture, clientGroup);
@@ -162,6 +181,20 @@ public class WebSocketIntegrationTest {
         assertEquals("Echo: Hello WebSocket Echo!", receivedPayload.get("content")); // 修改断言以匹配Echo前缀
 
         log.info("成功接收到回显WebSocket Data消息: {}", wsEchoData.getName());
+
+        // 2. 模拟发送 stop_graph 命令进行清理
+        Command stopGraphCommand = Command.builder()
+                .name("stop_graph")
+                .commandId(UUID.randomUUID().toString())
+                .properties(Map.of("graph_id", graphId, "app_uri", appUri))
+                .sourceLocation(new Location("test://client", graphId, "client"))
+                .destinationLocations(List.of(new Location(appUri, graphId, "engine")))
+                .build();
+        engine.submitMessage(stopGraphCommand);
+        TimeUnit.SECONDS.sleep(1); // 等待Engine清理图实例
+
+        // 验证图实例已被移除
+        assertFalse(engine.getGraphInstance(graphId).isPresent(), "图实例应该已被移除");
     }
 
     private void sendWebSocketDataMessage(URI uri, String graphId, String messageName, Map<String, Object> payload,

@@ -1,4 +1,4 @@
-package com.tenframework.core.server;
+package com.tenframework.server.handler;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.JsonNode;
