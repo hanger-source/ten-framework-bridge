@@ -176,3 +176,15 @@ ai/output/ten-core-api/target/maven-status/maven-compiler-plugin/testCompile/def
 ai/output/ten-core-api/target/maven-status/maven-compiler-plugin/testCompile/default-testCompile/inputFiles.lst
 ai/output/ten-server/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst
 ai/output/ten-server/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst
+ai/output/ten-core-api/target/classes/com/tenframework/core/engine/Engine.class
+ai/output/ten-core-api/target/classes/com/tenframework/core/engine/Engine$1.class
+ai/output/ten-core-api/target/classes/com/tenframework/core/extension/EngineExtensionContext.class
+ai/output/ten-core-api/target/classes/com/tenframework/core/message/Command.class
+ai/output/ten-core-api/target/classes/com/tenframework/core/engine/Engine.class
+ai/output/ten-core-api/target/classes/com/tenframework/core/engine/Engine$1.class
+ai/output/ten-core-api/target/classes/com/tenframework/core/extension/EngineExtensionContext.class
+ai/output/ten-core-api/target/classes/com/tenframework/core/message/Command.class
+ai/output/ten-core-api/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst
+ai/output/ten-core-api/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst
+ai/output/ten-core-api/target/maven-status/maven-compiler-plugin/testCompile/default-testCompile/createdFiles.lst
+ai/output/ten-core-api/target/maven-status/maven-compiler-plugin/testCompile/default-testCompile/inputFiles.lst
