@@ -9,6 +9,8 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.util.Map;
 import com.tenframework.core.Location; // 导入Location类
+import com.fasterxml.jackson.databind.ObjectMapper; // Add this import
+import java.io.IOException; // Add this import
 
 /**
  * 简单的Echo Extension示例
@@ -32,6 +34,8 @@ public class SimpleEchoExtension extends BaseExtension {
     private String echoPrefix = "Echo: ";
     private long messageCount = 0;
 
+    private static final ObjectMapper objectMapper = new ObjectMapper(); // Add this static final field
+
     // 构造函数已被移除，依赖BaseExtension的默认构造函数
 
     @Override
@@ -52,25 +56,42 @@ public class SimpleEchoExtension extends BaseExtension {
 
     @Override
     protected void handleData(Data data, ExtensionContext context) {
-        // 开发者只需关注业务逻辑
         String dataName = data.getName();
-        String dataContent = new String(data.getDataBytes());
-        log.info("SimpleEchoExtension收到数据: name={}, content={}, sourceLocation={}",
-                dataName, dataContent, data.getSourceLocation());
+        log.info("SimpleEchoExtension收到数据: name={}, sourceLocation={}",
+                dataName, data.getSourceLocation());
 
-        // 简单的回显逻辑
-        String echoContent = echoPrefix + dataContent;
+        try {
+            // 1. 解析原始数据内容为Map
+            Map<String, Object> originalPayload = objectMapper.readValue(data.getDataBytes(), Map.class);
+            String originalContent = (String) originalPayload.get("content");
 
-        // 使用BaseExtension提供的便捷方法发送消息
-        Data echoData = Data.binary("echo_data", echoContent.getBytes());
-        echoData.setProperties(Map.of("original_name", dataName, "count", ++messageCount));
-        echoData.setSourceLocation(new Location(context.getAppUri(), context.getGraphId(), context.getExtensionName()));
-        // 将回显数据发送回EndToEndIntegrationTest中模拟的Engine目标
-        echoData.setDestinationLocations(
-                java.util.Collections.singletonList(data.getSourceLocation())); // 将硬编码的"engine"改为原始数据的源Location
-        sendMessage(echoData);
-        log.info("SimpleEchoExtension发送回显数据: name={}, destinationLocations={}",
-                echoData.getName(), echoData.getDestinationLocations());
+            String echoContent = echoPrefix + originalContent; // 只对原始内容进行前缀
+
+            // 2. 更新payload中的content
+            originalPayload.put("content", echoContent);
+
+            // 3. 将更新后的payload序列化回JSON字节
+            byte[] echoedBytes = objectMapper.writeValueAsBytes(originalPayload);
+
+            Data echoData = Data.binary("echo_data", echoedBytes); // 使用新的字节内容
+            echoData.setProperties(Map.of("original_name", dataName, "count", ++messageCount));
+
+            String clientChannelId = data.getProperty("__client_channel_id__", String.class);
+            if (clientChannelId != null) {
+                echoData.setProperty("__client_channel_id__", clientChannelId);
+            }
+
+            echoData.setSourceLocation(
+                    new Location(context.getAppUri(), context.getGraphId(), context.getExtensionName()));
+            echoData.setDestinationLocations(
+                    java.util.Collections.singletonList(data.getSourceLocation()));
+            sendMessage(echoData);
+            log.info("SimpleEchoExtension发送回显数据: name={}, destinationLocations={}",
+                    echoData.getName(), echoData.getDestinationLocations());
+        } catch (IOException e) {
+            log.error("处理数据解析/序列化时发生错误: {}", e.getMessage(), e);
+            // 可以在这里发送一个错误消息回客户端，或者只是记录日志并丢弃消息
+        }
     }
 
     @Override

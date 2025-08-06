@@ -192,7 +192,7 @@ public class EndToEndIntegrationTest {
         // 2. 通过 WebSocket/MsgPack 接口发送一个 Data 消息给 SimpleEchoExtension
         log.info("--- 测试 WebSocket/MsgPack Data 消息回显 ---");
         CompletableFuture<Message> wsEchoResponseFuture = new CompletableFuture<>();
-        URI websocketUri = new URI("ws://localhost:" + HTTP_PORT + "/ws"); // WebSocket路径
+        URI websocketUri = new URI("ws://localhost:" + TCP_PORT + "/websocket"); // **端口修改为 TCP_PORT**
 
         sendWebSocketDataMessage(websocketUri, graphId, "echo_test_data", Map.of("content", "Hello WebSocket Echo!"),
                 wsEchoResponseFuture, clientGroup);
@@ -203,10 +203,13 @@ public class EndToEndIntegrationTest {
         assertNotNull(receivedWsMessage, "应收到WebSocket回显消息");
         assertTrue(receivedWsMessage instanceof Data, "WebSocket回显消息应为Data类型");
         Data wsEchoData = (Data) receivedWsMessage;
-        assertEquals("echo_test_data", wsEchoData.getName());
-        Map<String, Object> receivedWsPayload = objectMapper.readValue(wsEchoData.getData().toString(CharsetUtil.UTF_8),
+        assertEquals("echo_data", wsEchoData.getName());
+
+        // 解析数据内容并断言
+        Map<String, Object> receivedPayload = objectMapper.readValue(wsEchoData.getData().toString(CharsetUtil.UTF_8),
                 Map.class);
-        assertEquals("Hello WebSocket Echo!", receivedWsPayload.get("content"));
+        assertEquals("Echo: Hello WebSocket Echo!", receivedPayload.get("content")); // 修改断言，期望带有前缀的回显内容
+
         log.info("成功接收到回显WebSocket Data消息: {}", wsEchoData.getName());
         TimeUnit.SECONDS.sleep(1);
 

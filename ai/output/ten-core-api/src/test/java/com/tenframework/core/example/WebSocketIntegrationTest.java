@@ -153,8 +153,13 @@ public class WebSocketIntegrationTest {
         assertNotNull(receivedWsMessage, "应收到WebSocket回显消息");
         assertTrue(receivedWsMessage instanceof Data, "WebSocket回显消息应为Data类型");
         Data wsEchoData = (Data) receivedWsMessage;
-        assertEquals("echo_test_data", wsEchoData.getName());
-        assertEquals("Hello WebSocket Echo!", wsEchoData.getData().toString(CharsetUtil.UTF_8));
+        assertEquals("echo_data", wsEchoData.getName());
+
+        // 解析数据内容并断言
+        Map<String, Object> receivedPayload = objectMapper.readValue(wsEchoData.getData().toString(CharsetUtil.UTF_8),
+                Map.class);
+        assertEquals("Echo: Hello WebSocket Echo!", receivedPayload.get("content")); // 修改断言以匹配Echo前缀
+
         log.info("成功接收到回显WebSocket Data消息: {}", wsEchoData.getName());
     }
 
