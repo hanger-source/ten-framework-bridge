@@ -20,19 +20,28 @@ import io.netty.handler.codec.http.HttpObjectAggregator;
 import io.netty.handler.codec.http.HttpServerCodec;
 import io.netty.handler.codec.http.websocketx.WebSocketServerProtocolHandler;
 import com.tenframework.server.handler.WebSocketMessageFrameHandler; // 修正导入
+import com.tenframework.server.handler.WebSocketFrameToByteBufDecoder; // 新增导入
+import com.tenframework.server.handler.ByteBufToWebSocketFrameEncoder; // 新增导入
+import com.tenframework.server.message.WebSocketMessageDecoder; // 新增导入
+import com.tenframework.server.NettyHttpServer; // 导入 NettyHttpServer
 
 @Slf4j
 public class NettyMessageServer {
 
-    private final int port;
+    private final int tcpPort; // 修改为tcpPort
+    private final int httpPort; // HTTP端口
     private final Engine engine;
     private EventLoopGroup bossGroup;
     private EventLoopGroup workerGroup;
     private CompletableFuture<Void> startFuture = new CompletableFuture<>();
     private CompletableFuture<Void> shutdownFuture = new CompletableFuture<>();
+    private NettyHttpServer nettyHttpServer; // 引入NettyHttpServer实例
 
-    public NettyMessageServer(int port, Engine engine) {
-        this.port = port;
+    private int boundPort; // 新增字段，用于存储实际绑定的端口
+
+    public NettyMessageServer(int tcpPort, int httpPort, Engine engine) { // 修改构造函数参数
+        this.tcpPort = tcpPort; // 赋值给tcpPort
+        this.httpPort = httpPort; // 赋值给httpPort
         this.engine = engine;
     }
 
@@ -44,98 +53,125 @@ public class NettyMessageServer {
         return shutdownFuture;
     }
 
-    public void start() throws Exception {
-        bossGroup = new NioEventLoopGroup(); // (1) 用于接受传入连接的线程组
-        workerGroup = new NioEventLoopGroup(); // (2) 用于处理已接受连接的I/O操作的线程组
+    public CompletableFuture<Void> start() throws Exception {
+        bossGroup = new NioEventLoopGroup();
+        workerGroup = new NioEventLoopGroup();
 
         try {
-            ServerBootstrap b = new ServerBootstrap(); // (3) 一个辅助类，用于设置服务器
+            ServerBootstrap b = new ServerBootstrap();
             b.group(bossGroup, workerGroup)
-                    .channel(NioServerSocketChannel.class) // (4) 使用NioServerSocketChannel作为服务器的通道类型
-                    .childHandler(new ChannelInitializer<SocketChannel>() { // (5)
-                                                                            // ChannelInitializer用于为新接受的通道设置ChannelPipeline
+                    .channel(NioServerSocketChannel.class)
+                    .childHandler(new ChannelInitializer<SocketChannel>() {
                         @Override
                         public void initChannel(SocketChannel ch) {
-                            ch.pipeline().addLast(new HttpServerCodec()); // HTTP 消息编解码器
-                            ch.pipeline().addLast(new HttpObjectAggregator(65536)); // HTTP 消息聚合器
-                            // WebSocket 协议处理器，指定 WebSocket 路径。这里将处理握手请求。
+                            ch.pipeline().addLast(new HttpServerCodec());
+                            ch.pipeline().addLast(new HttpObjectAggregator(65536));
                             ch.pipeline().addLast(new WebSocketServerProtocolHandler("/websocket"));
-
-                            // 在 WebSocket 握手成功后，上述处理器会从 pipeline 中移除 HTTP 相关的处理器
-                            // 并在其位置添加 WebSocketFrameDecoder 和 WebSocketFrameEncoder。
-                            // 接下来，我们将添加处理 WebSocket 帧的自定义处理器。
-                            ch.pipeline().addLast(new MessageDecoder()); // 消息解码器：WebSocket Binary Frame -> Message
-                            ch.pipeline().addLast(new MessageEncoder()); // 消息编码器：Message -> WebSocket Binary Frame
-                            ch.pipeline().addLast(new WebSocketMessageFrameHandler(engine)); // 自定义 WebSocket 业务处理器
+                            ch.pipeline().addLast(new WebSocketFrameToByteBufDecoder()); // 将 WebSocketFrame 转换为 ByteBuf
+                            ch.pipeline().addLast(new WebSocketMessageDecoder()); // 消息解码器：ByteBuf -> Message (无长度前缀)
+                            ch.pipeline().addLast(new MessageEncoder()); // 消息编码器：Message -> ByteBuf
+                            ch.pipeline().addLast(new ByteBufToWebSocketFrameEncoder()); // ByteBuf -> WebSocketFrame
+                            ch.pipeline().addLast(new WebSocketMessageFrameHandler(engine));
                         }
                     })
-                    .option(ChannelOption.SO_BACKLOG, 128) // (6) 设置服务器套接字的选项，如积压队列大小
-                    .childOption(ChannelOption.SO_KEEPALIVE, true); // (7) 设置已接受通道的选项，如启用TCP KeepAlive
+                    .option(ChannelOption.SO_BACKLOG, 128)
+                    .childOption(ChannelOption.SO_KEEPALIVE, true);
 
-            // 绑定端口并启动服务器
-            ChannelFuture f = b.bind(port).sync(); // (8) 绑定端口并等待绑定操作完成
+            // 绑定TCP端口
+            ChannelFuture tcpFuture = b.bind(tcpPort).sync(); // 使用tcpPort
+            this.boundPort = ((java.net.InetSocketAddress) tcpFuture.channel().localAddress()).getPort(); // 获取实际绑定的端口
 
-            log.info("NettyMessageServer started and listening on port {}", port);
-            startFuture.complete(null); // 服务器启动成功，完成startFuture
+            log.info("NettyMessageServer started and listening on TCP port {}", boundPort); // 日志更新
 
-            f.channel().closeFuture().addListener(future -> {
-                shutdown();
-                shutdownFuture.complete(null); // 服务器关闭，完成shutdownFuture
+            // 启动HTTP服务器
+            nettyHttpServer = new NettyHttpServer(httpPort, engine);
+            CompletableFuture<Void> httpStartFuture = nettyHttpServer.start();
+
+            // 在这里完成startFuture，表示NettyMessageServer自身已启动
+            startFuture.complete(null);
+
+            // tcpCloseFuture 仍然用于驱动 shutdownFuture 的完成
+            tcpFuture.channel().closeFuture().addListener(f -> {
+                if (f.isSuccess()) {
+                    // 如果tcpFuture的closeFuture成功，则表示channel关闭，完成shutdownFuture的一部分
+                    // 这里不需要直接完成startFuture，它已经在上面完成了
+                } else {
+                    // 如果关闭过程中出现异常，则在shutdownFuture中反映
+                    // 这里不需要直接完成startFuture，它已经在上面完成了
+                }
             });
+
+            // 返回一个组合的Future，让外部调用者等待所有服务器组件启动
+            return CompletableFuture.allOf(startFuture, httpStartFuture).exceptionally(e -> {
+                log.error("NettyMessageServer or HttpServer failed during startup.", e);
+                return null; // 异常已记录，向上层抛出
+            });
+
         } catch (Exception e) {
-            startFuture.completeExceptionally(e); // 启动失败，completeExceptionally
+            startFuture.completeExceptionally(e);
             throw e;
-        } // finally 块保持不变
+        }
     }
 
-    public void shutdown() {
-        log.info("Shutting down NettyMessageServer on port {}", port);
+    public CompletableFuture<Void> shutdown() {
+        log.info("Shutting down NettyMessageServer on TCP port {}", tcpPort);
         CompletableFuture<Void> bossShutdownFuture = CompletableFuture.completedFuture(null);
         CompletableFuture<Void> workerShutdownFuture = CompletableFuture.completedFuture(null);
 
         if (bossGroup != null) {
-            bossShutdownFuture = CompletableFuture.supplyAsync(() -> {
-                try {
-                    bossGroup.shutdownGracefully().sync();
+            bossGroup.shutdownGracefully().addListener(f -> {
+                if (f.isSuccess()) {
+                    bossShutdownFuture.complete(null);
                     log.info("BossGroup shutdown gracefully.");
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    log.error("BossGroup shutdown interrupted.", e);
-                    throw new RuntimeException(e);
-                } catch (Exception e) {
-                    log.error("BossGroup shutdown failed.", e);
-                    throw new RuntimeException(e);
+                } else {
+                    bossShutdownFuture.completeExceptionally(f.cause());
+                    log.error("BossGroup shutdown failed.", f.cause());
                 }
-                return null;
             });
+        } else {
+            bossShutdownFuture.complete(null);
         }
 
         if (workerGroup != null) {
-            workerShutdownFuture = CompletableFuture.supplyAsync(() -> {
-                try {
-                    workerGroup.shutdownGracefully().sync();
+            workerGroup.shutdownGracefully().addListener(f -> {
+                if (f.isSuccess()) {
+                    workerShutdownFuture.complete(null);
                     log.info("WorkerGroup shutdown gracefully.");
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    log.error("WorkerGroup shutdown interrupted.", e);
-                    throw new RuntimeException(e);
-                } catch (Exception e) {
-                    log.error("WorkerGroup shutdown failed.", e);
-                    throw new RuntimeException(e);
+                } else {
+                    workerShutdownFuture.completeExceptionally(f.cause());
+                    log.error("WorkerGroup shutdown failed.", f.cause());
                 }
-                return null;
             });
+        } else {
+            workerShutdownFuture.complete(null);
         }
 
-        CompletableFuture.allOf(bossShutdownFuture, workerShutdownFuture)
+        CompletableFuture<Void> httpShutdownFuture = CompletableFuture.completedFuture(null);
+        if (nettyHttpServer != null) {
+            httpShutdownFuture = nettyHttpServer.shutdown();
+        }
+
+        CompletableFuture.allOf(bossShutdownFuture, workerShutdownFuture, httpShutdownFuture)
                 .thenRun(() -> {
-                    log.info("NettyMessageServer on port {} shut down completely.", port);
-                    shutdownFuture.complete(null); // 所有组都关闭后，完成shutdownFuture
+                    log.info("NettyMessageServer on TCP port {} shut down completely.", tcpPort);
+                    shutdownFuture.complete(null);
                 })
                 .exceptionally(e -> {
-                    log.error("NettyMessageServer shutdown encountered errors on port {}: {}", port, e.getMessage());
-                    shutdownFuture.completeExceptionally(e); // 如果有任何异常，完成shutdownFutureWithException
+                    log.error("NettyMessageServer shutdown encountered errors on TCP port {}: {}", tcpPort,
+                            e.getMessage());
+                    shutdownFuture.completeExceptionally(e);
                     return null;
                 });
+
+        return shutdownFuture;
+    }
+
+    public int getPort() {
+        return tcpPort; // 提供获取tcpPort的方法
+    }
+
+    // 新增方法，用于获取实际绑定的端口
+    public int getBoundPort() {
+        return boundPort;
     }
 }

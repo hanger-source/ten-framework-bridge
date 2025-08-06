@@ -79,8 +79,8 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 public class EndToEndIntegrationTest {
 
     // 将端口设置为动态获取，避免端口冲突
-    private static final int TCP_PORT = findAvailablePort();
-    private static final int HTTP_PORT = findAvailablePort();
+    private static final int TCP_PORT = 0;
+    private static final int HTTP_PORT = 0;
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
     private Engine engine;
@@ -93,10 +93,13 @@ public class EndToEndIntegrationTest {
         engine.start();
         log.info("Engine [{}] started for test.", engine.getEngineId());
 
-        // 使用TenServer启动TCP和HTTP服务
+        // 使用TenServer启动TCP和HTTP服务，让操作系统自动分配端口
         tenServer = new TenServer(TCP_PORT, HTTP_PORT, engine);
         tenServer.start().get(5, TimeUnit.SECONDS); // 阻塞等待服务器启动完成
-        log.info("TenServer started on TCP port {} and HTTP port {}", TCP_PORT, HTTP_PORT);
+        // 获取实际绑定的端口
+        int actualTcpPort = tenServer.getTcpPort();
+        int actualHttpPort = tenServer.getHttpPort();
+        log.info("TenServer started on TCP port {} and HTTP port {}", actualTcpPort, actualHttpPort);
 
         clientGroup = new NioEventLoopGroup();
     }
@@ -105,6 +108,7 @@ public class EndToEndIntegrationTest {
     void tearDown() throws Exception {
         if (tenServer != null) {
             tenServer.shutdown().get(5, TimeUnit.SECONDS); // 关闭TenServer
+            // Thread.sleep(1000); // 移除不必要的延迟
         }
         if (engine != null) {
             engine.stop();
@@ -163,7 +167,7 @@ public class EndToEndIntegrationTest {
                 Map.of("app_uri", "http_client", "graph_id", "N/A", "extension_name", "N/A"));
         startGraphPayload.put("destination_locations", Collections.emptyList());
 
-        String httpResponse = sendHttpRequest(HTTP_PORT, "/start_graph", "POST", startGraphPayload);
+        String httpResponse = sendHttpRequest(tenServer.getHttpPort(), "/start_graph", "POST", startGraphPayload);
         assertTrue(httpResponse.contains("\"status\":\"success\""), "HTTP start_graph 响应应包含 'status:success'");
         log.info("HTTP /start_graph 响应: {}", httpResponse);
         TimeUnit.SECONDS.sleep(1);
@@ -176,7 +180,7 @@ public class EndToEndIntegrationTest {
         // 2. 通过 WebSocket/MsgPack 接口发送一个 Data 消息给 SimpleEchoExtension
         log.info("--- 测试 WebSocket/MsgPack Data 消息回显 ---");
         CompletableFuture<Message> wsEchoResponseFuture = new CompletableFuture<>();
-        URI websocketUri = new URI("ws://localhost:" + TCP_PORT + "/websocket");
+        URI websocketUri = new URI("ws://localhost:" + tenServer.getTcpPort() + "/websocket");
 
         sendWebSocketDataMessage(websocketUri, graphId, "echo_test_data", Map.of("content", "Hello WebSocket Echo!"),
                 wsEchoResponseFuture, clientGroup);
@@ -208,14 +212,14 @@ public class EndToEndIntegrationTest {
                 Map.of("app_uri", "http_client", "graph_id", "N/A", "extension_name", "N/A"));
         stopGraphPayload.put("destination_locations", Collections.emptyList());
 
-        String stopResponse = sendHttpRequest(HTTP_PORT, "/stop_graph", "POST", stopGraphPayload);
+        String stopResponse = sendHttpRequest(tenServer.getHttpPort(), "/stop_graph", "POST", stopGraphPayload);
         assertTrue(stopResponse.contains("\"status\":\"success\""), "HTTP stop_graph 响应应包含 'status:success'");
         log.info("HTTP /stop_graph 响应: {}", stopResponse);
         TimeUnit.SECONDS.sleep(1);
 
         // 4. 测试 Engine /ping
         log.info("--- 测试 HTTP /ping 命令 ---");
-        String pingResponse = sendHttpRequest(HTTP_PORT, "/ping", "POST", Collections.emptyMap());
+        String pingResponse = sendHttpRequest(tenServer.getHttpPort(), "/ping", "POST", Collections.emptyMap());
         assertTrue(pingResponse.contains("\"status\":\"pong\""), "HTTP /ping 响应应包含 'status:pong'");
         log.info("HTTP /ping 响应: {}", pingResponse);
     }
@@ -463,15 +467,6 @@ public class EndToEndIntegrationTest {
             responseFuture.completeExceptionally(cause);
             handshakeFuture.setFailure(cause);
             ctx.close();
-        }
-    }
-
-    private static int findAvailablePort() {
-        try (java.net.ServerSocket socket = new java.net.ServerSocket(0)) {
-            socket.setReuseAddress(true);
-            return socket.getLocalPort();
-        } catch (java.io.IOException e) {
-            throw new IllegalStateException("无法找到可用端口: " + e.getMessage(), e);
         }
     }
 }

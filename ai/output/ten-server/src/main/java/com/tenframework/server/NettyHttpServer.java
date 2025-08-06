@@ -30,6 +30,8 @@ public class NettyHttpServer {
     private CompletableFuture<Void> startFuture = new CompletableFuture<>();
     private CompletableFuture<Void> shutdownFuture = new CompletableFuture<>();
 
+    private int boundPort; // 新增字段，用于存储实际绑定的端口
+
     public NettyHttpServer(int port, Engine engine) {
         this.port = port;
         this.engine = engine;
@@ -43,7 +45,7 @@ public class NettyHttpServer {
         return shutdownFuture;
     }
 
-    public void start() throws Exception {
+    public CompletableFuture<Void> start() {
         bossGroup = new NioEventLoopGroup();
         workerGroup = new NioEventLoopGroup();
 
@@ -75,75 +77,79 @@ public class NettyHttpServer {
                     .option(ChannelOption.SO_BACKLOG, 128)
                     .childOption(ChannelOption.SO_KEEPALIVE, true);
 
-            ChannelFuture f = b.bind(port).sync();
-            log.info("NettyHttpServer started and listening on port {}", port);
-            startFuture.complete(null); // 服务器启动成功，完成startFuture
-
-            f.channel().closeFuture().addListener(future -> {
-                shutdown();
-                shutdownFuture.complete(null); // 服务器关闭，完成shutdownFuture
+            // bind方法是非阻塞的，返回一个ChannelFuture
+            ChannelFuture f = b.bind(port);
+            f.addListener(future -> {
+                if (future.isSuccess()) {
+                    this.boundPort = ((java.net.InetSocketAddress) ((ChannelFuture) future).channel().localAddress())
+                            .getPort(); // 获取实际绑定的端口
+                    log.info("NettyHttpServer started and listening on port {}", boundPort);
+                    startFuture.complete(null);
+                } else {
+                    log.error("NettyHttpServer failed to start on port {}", port, future.cause());
+                    startFuture.completeExceptionally(future.cause());
+                }
             });
+
+            return startFuture;
+
         } catch (Exception e) {
             startFuture.completeExceptionally(e); // 启动失败，completeExceptionally
-            throw e;
-        } finally {
-            // The original code had a finally block here, but the new code removes the
-            // sync() call.
-            // The original code also had a shutdown() call here.
-            // The new code's start() method now handles the shutdown.
-            // So, the original finally block is effectively removed by the new start()
-            // logic.
+            // 不需要重新抛出，因为我们通过CompletableFuture处理异步异常
+            return startFuture;
         }
     }
 
-    public void shutdown() {
+    public CompletableFuture<Void> shutdown() {
         log.info("Shutting down NettyHttpServer on port {}", port);
-        CompletableFuture<Void> bossShutdownFuture = CompletableFuture.completedFuture(null);
-        CompletableFuture<Void> workerShutdownFuture = CompletableFuture.completedFuture(null);
+        CompletableFuture<Void> bossShutdownFuture = new CompletableFuture<>();
+        CompletableFuture<Void> workerShutdownFuture = new CompletableFuture<>();
 
         if (bossGroup != null) {
-            bossShutdownFuture = CompletableFuture.supplyAsync(() -> {
-                try {
-                    bossGroup.shutdownGracefully().sync();
+            bossGroup.shutdownGracefully().addListener(f -> {
+                if (f.isSuccess()) {
+                    bossShutdownFuture.complete(null);
                     log.info("BossGroup shutdown gracefully.");
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    log.error("BossGroup shutdown interrupted.", e);
-                    throw new RuntimeException(e);
-                } catch (Exception e) {
-                    log.error("BossGroup shutdown failed.", e);
-                    throw new RuntimeException(e);
+                } else {
+                    bossShutdownFuture.completeExceptionally(f.cause());
+                    log.error("BossGroup shutdown failed.", f.cause());
                 }
-                return null;
             });
+        } else {
+            bossShutdownFuture.complete(null);
         }
 
         if (workerGroup != null) {
-            workerShutdownFuture = CompletableFuture.supplyAsync(() -> {
-                try {
-                    workerGroup.shutdownGracefully().sync();
+            workerGroup.shutdownGracefully().addListener(f -> {
+                if (f.isSuccess()) {
+                    workerShutdownFuture.complete(null);
                     log.info("WorkerGroup shutdown gracefully.");
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    log.error("WorkerGroup shutdown interrupted.", e);
-                    throw new RuntimeException(e);
-                } catch (Exception e) {
-                    log.error("WorkerGroup shutdown failed.", e);
-                    throw new RuntimeException(e);
+                } else {
+                    workerShutdownFuture.completeExceptionally(f.cause());
+                    log.error("WorkerGroup shutdown failed.", f.cause());
                 }
-                return null;
             });
+        } else {
+            workerShutdownFuture.complete(null);
         }
 
+        // 使用CompletableFuture.allOf等待所有关闭操作完成
         CompletableFuture.allOf(bossShutdownFuture, workerShutdownFuture)
                 .thenRun(() -> {
                     log.info("NettyHttpServer on port {} shut down completely.", port);
-                    shutdownFuture.complete(null); // 所有组都关闭后，完成shutdownFuture
+                    shutdownFuture.complete(null);
                 })
                 .exceptionally(e -> {
                     log.error("NettyHttpServer shutdown encountered errors on port {}: {}", port, e.getMessage());
-                    shutdownFuture.completeExceptionally(e); // 如果有任何异常，完成shutdownFutureWithException
+                    shutdownFuture.completeExceptionally(e);
                     return null;
                 });
+
+        return shutdownFuture;
+    }
+
+    // 新增方法，用于获取实际绑定的端口
+    public int getBoundPort() {
+        return boundPort;
     }
 }

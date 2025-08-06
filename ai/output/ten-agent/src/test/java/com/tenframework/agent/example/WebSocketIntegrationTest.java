@@ -71,8 +71,8 @@ import java.util.HashMap;
 @Slf4j
 public class WebSocketIntegrationTest {
 
-    private static final int WEBSOCKET_PORT = findAvailablePort();
-    private static final int HTTP_PORT = findAvailablePort(); // 为TenServer添加HTTP端口
+    private static final int WEBSOCKET_PORT = 0;
+    private static final int HTTP_PORT = 0; // 为TenServer添加HTTP端口
     private Engine engine;
     private TenServer tenServer; // 使用TenServer
     private EventLoopGroup clientGroup;
@@ -87,10 +87,13 @@ public class WebSocketIntegrationTest {
         engine.start();
         log.info("Engine [{}] started for test.", engine.getEngineId());
 
-        // 使用TenServer启动WebSocket服务
+        // 使用TenServer启动WebSocket服务，让操作系统自动分配端口
         tenServer = new TenServer(WEBSOCKET_PORT, HTTP_PORT, engine); // 提供HTTP端口
         tenServer.start().get(5, TimeUnit.SECONDS);
-        log.info("TenServer (WebSocket) started on port {}", WEBSOCKET_PORT);
+        // 获取实际绑定的端口
+        int actualWebsocketPort = tenServer.getTcpPort();
+        int actualHttpPort = tenServer.getHttpPort();
+        log.info("TenServer (WebSocket) started on TCP port {} and HTTP port {}", actualWebsocketPort, actualHttpPort);
 
         clientGroup = new NioEventLoopGroup();
 
@@ -124,6 +127,7 @@ public class WebSocketIntegrationTest {
     void tearDown() throws Exception {
         if (tenServer != null) {
             tenServer.shutdown().get(5, TimeUnit.SECONDS);
+            // Thread.sleep(1000); // 移除不必要的延迟
         }
         if (engine != null) {
             engine.stop();
@@ -138,7 +142,7 @@ public class WebSocketIntegrationTest {
     void testWebSocketEchoFlow() throws Exception {
         log.info("--- 测试 WebSocket/MsgPack Data 消息回显 ---");
         CompletableFuture<Message> wsEchoResponseFuture = new CompletableFuture<>();
-        URI websocketUri = new URI("ws://localhost:" + WEBSOCKET_PORT + "/websocket");
+        URI websocketUri = new URI("ws://localhost:" + tenServer.getTcpPort() + "/websocket");
         String graphId = UUID.randomUUID().toString();
         String appUri = "test-app";
 
@@ -154,13 +158,7 @@ public class WebSocketIntegrationTest {
         nodesArray.add(objectMapper.createObjectNode()
                 .put("name", "tcp-client-extension")
                 .put("type", "com.tenframework.core.extension.SimpleEchoExtension"));
-        // ObjectNode nodes = objectMapper.createObjectNode(); // 原始的ObjectNode定义，注释掉或删除
-        // nodes.put("SimpleEcho", objectMapper.createObjectNode()
-        // .put("type", "com.tenframework.core.extension.SimpleEchoExtension")
-        // .put("name", "SimpleEcho"));
-        // nodes.put("tcp-client-extension", objectMapper.createObjectNode()
-        // .put("type", "com.tenframework.core.extension.SimpleEchoExtension")
-        // .put("name", "tcp-client-extension"));
+
         graphJsonNode.set("nodes", nodesArray); // 将 ArrayNode 设置为 nodes
 
         // 定义连接
@@ -362,15 +360,6 @@ public class WebSocketIntegrationTest {
             responseFuture.completeExceptionally(cause);
             handshakeFuture.setFailure(cause);
             ctx.close();
-        }
-    }
-
-    private static int findAvailablePort() {
-        try (java.net.ServerSocket socket = new java.net.ServerSocket(0)) {
-            socket.setReuseAddress(true);
-            return socket.getLocalPort();
-        } catch (java.io.IOException e) {
-            throw new IllegalStateException("无法找到可用端口: " + e.getMessage(), e);
         }
     }
 }

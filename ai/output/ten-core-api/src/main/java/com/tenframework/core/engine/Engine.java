@@ -497,10 +497,13 @@ public final class Engine implements MessageSubmitter {
             if (associatedChannelId != null) {
                 channelToCommandIdsMap.computeIfAbsent(associatedChannelId, k -> new ConcurrentSkipListSet<>())
                         .add(messageToSend.getCommandIdAsUUID());
+                log.debug("Engine: 关联Command {} 到 Channel {}", messageToSend.getCommandId(), associatedChannelId); // 新增日志
             }
 
             // 调用Extension的onCommand方法
             try {
+                log.debug("Engine: 正在调用Extension.onCommand. EngineId: {}, ExtensionName: {}, CommandId: {}", // 新增日志
+                        engineId, targetExtensionName, messageToSend.getCommandId());
                 extension.onCommand(messageToSend, context);
                 log.debug("Extension处理命令完成: engineId={}, extensionName={}, commandName={}, commandId={}",
                         engineId, targetExtensionName, messageToSend.getName(), messageToSend.getCommandId());
@@ -529,16 +532,16 @@ public final class Engine implements MessageSubmitter {
         CommandResult result;
         if (graphId == null || graphId.isEmpty() || appUri == null || appUri.isEmpty() || graphJsonObj == null) {
             result = CommandResult.error(command.getCommandId(),
-                    (String) Map.of("error", "start_graph命令缺少graph_id, app_uri或graph_json属性").get("error"));
+                Map.of("error", "start_graph命令缺少graph_id, app_uri或graph_json属性").get("error"));
             log.error("start_graph命令参数缺失: graphId={}, appUri={}, graphJson={}", graphId, appUri, graphJsonObj);
         } else if (!(graphJsonObj instanceof String graphJson)) { // 增加类型检查
             result = CommandResult.error(command.getCommandId(),
-                    (String) Map.of("error", "graph_json属性不是有效的JSON字符串").get("error"));
+                Map.of("error", "graph_json属性不是有效的JSON字符串").get("error"));
             log.error("start_graph命令graph_json类型错误: graphId={}, appUri={}, graphJsonType={}", graphId, appUri,
                     graphJsonObj.getClass().getName());
         } else if (graphInstances.containsKey(graphId)) {
             result = CommandResult.error(command.getCommandId(),
-                    (String) Map.of("error", "图实例已存在: " + graphId).get("error"));
+                Map.of("error", "图实例已存在: " + graphId).get("error"));
             log.warn("尝试启动已存在的图实例: graphId={}", graphId);
         } else {
             try {
@@ -607,6 +610,7 @@ public final class Engine implements MessageSubmitter {
             resultFuture.complete(result);
         } else if (associatedChannelId != null) {
             // 如果没有resultFuture（例如来自TCP），则通过Channel回传
+            log.debug("Engine: start_graph命令结果通过Channel回传. ChannelId: {}, Result: {}", associatedChannelId, result); // 新增日志
             sendMessageToChannel(associatedChannelId, result);
         }
     }
@@ -658,6 +662,7 @@ public final class Engine implements MessageSubmitter {
             resultFuture.complete(result);
         } else if (associatedChannelId != null) {
             // 如果没有resultFuture（例如来自TCP），则通过Channel回传
+            log.debug("Engine: stop_graph命令结果通过Channel回传. ChannelId: {}, Result: {}", associatedChannelId, result); // 新增日志
             sendMessageToChannel(associatedChannelId, result);
         }
     }
@@ -753,6 +758,8 @@ public final class Engine implements MessageSubmitter {
             resultFuture.complete(result);
         } else if (associatedChannelId != null) {
             // 如果没有resultFuture（例如来自TCP），则通过Channel回传
+            log.debug("Engine: add_extension_to_graph命令结果通过Channel回传. ChannelId: {}, Result: {}", associatedChannelId,
+                    result); // 新增日志
             sendMessageToChannel(associatedChannelId, result);
         }
     }
@@ -810,6 +817,8 @@ public final class Engine implements MessageSubmitter {
             resultFuture.complete(result);
         } else if (associatedChannelId != null) {
             // 如果没有resultFuture（例如来自TCP），则通过Channel回传
+            log.debug("Engine: remove_extension_from_graph命令结果通过Channel回传. ChannelId: {}, Result: {}",
+                    associatedChannelId, result); // 新增日志
             sendMessageToChannel(associatedChannelId, result);
         }
     }
@@ -851,12 +860,16 @@ public final class Engine implements MessageSubmitter {
 
         PathOut pathOut = pathOutOpt.get();
 
+        log.debug("Engine: 处理CommandResult. CommandId: {}, IsFinal: {}, IsSuccess: {}", // 新增日志
+                commandResult.getCommandId(), commandResult.isFinal(), commandResult.isSuccess());
+
         try {
             // 处理结果返回策略
             handleResultReturnPolicy(pathOut, commandResult);
 
             // 如果是最终结果，清理PathOut并完成Future
             if (commandResult.isFinal()) {
+                log.debug("Engine: CommandResult是最终结果. CommandId: {}", commandResult.getCommandId()); // 新增日志
                 completeCommandResult(pathOut, commandResult);
                 pathTable.removeOutPath(commandId);
                 // 从channelToCommandIdsMap中移除该commandId
@@ -929,6 +942,7 @@ public final class Engine implements MessageSubmitter {
             if (MessageConstants.APP_URI_TEST_CLIENT.equals(firstDestination.appUri())
                     || MessageConstants.APP_URI_HTTP_CLIENT.equals(firstDestination.appUri())) {
                 String clientChannelId = message.getProperty(MessageConstants.PROPERTY_CLIENT_CHANNEL_ID, String.class); // 使用常量
+                log.debug("Engine: 数据消息目标是客户端. ChannelId: {}, AppUri: {}", clientChannelId, firstDestination.appUri()); // 新增日志
                 if (clientChannelId != null) {
                     if (sendMessageToChannel(clientChannelId, message)) {
                         log.debug("数据消息已成功回传到客户端Channel: engineId={}, messageType={}, messageName={}, channelId={}",
@@ -960,6 +974,7 @@ public final class Engine implements MessageSubmitter {
         }
 
         // 3. 解析消息的实际目的地列表
+        log.debug("Engine: 正在解析数据消息目标Extension. GraphId: {}, MessageName: {}", sourceGraphId, message.getName()); // 新增日志
         List<String> targetExtensionNames = graphInstance.resolveDestinations(message);
 
         if (targetExtensionNames.isEmpty()) {
@@ -1005,6 +1020,9 @@ public final class Engine implements MessageSubmitter {
 
             // 根据消息类型调用相应的Extension方法
             try {
+                log.debug(
+                        "Engine: 正在调用Extension.onData/onAudioFrame/onVideoFrame. EngineId: {}, ExtensionName: {}, MessageName: {}", // 新增日志
+                        engineId, targetExtensionName, messageToSend.getName());
                 switch (messageToSend.getType()) {
                     case DATA -> {
                         if (messageToSend instanceof Data data) {
@@ -1057,6 +1075,16 @@ public final class Engine implements MessageSubmitter {
                 handleFirstErrorOrLastOkPolicy(pathOut, commandResult);
             }
         }
+
+        // 如果PathOut关联了channelId，并且不是FIRST_ERROR_OR_LAST_OK策略的最终结果，则将结果回传给客户端
+        if (pathOut.getChannelId() != null) {
+            // 如果是EACH_OK_AND_ERROR策略，或者FIRST_ERROR_OR_LAST_OK策略但还未收到最终结果，则直接发送
+            if (policy == ResultReturnPolicy.EACH_OK_AND_ERROR || !commandResult.isFinal()) {
+                log.debug("Engine: handleResultReturnPolicy通过Channel回传. ChannelId: {}, Result: {}",
+                        pathOut.getChannelId(), commandResult); // 新增日志
+                sendMessageToChannel(pathOut.getChannelId(), commandResult);
+            }
+        }
     }
 
     /**
@@ -1082,6 +1110,7 @@ public final class Engine implements MessageSubmitter {
 
         // 如果是最终结果，使用缓存的结果或当前结果
         if (commandResult.isFinal()) {
+            log.debug("Engine: FIRST_ERROR_OR_LAST_OK最终结果. CommandId: {}", commandResult.getCommandId()); // 新增日志
             CommandResult finalResult = pathOut.getCachedCommandResult() != null ? pathOut.getCachedCommandResult()
                     : commandResult;
             completeCommandResult(pathOut, finalResult);
@@ -1103,11 +1132,14 @@ public final class Engine implements MessageSubmitter {
 
         // 如果是最终结果，完成Future
         if (commandResult.isFinal()) {
+            log.debug("Engine: EACH_OK_AND_ERROR最终结果. CommandId: {}", commandResult.getCommandId()); // 新增日志
             completeCommandResult(pathOut, commandResult);
         }
 
         // 如果PathOut关联了channelId，则将结果回传给客户端
         if (pathOut.getChannelId() != null) {
+            log.debug("Engine: EACH_OK_AND_ERROR通过Channel回传. ChannelId: {}, Result: {}", pathOut.getChannelId(),
+                    commandResult); // 新增日志
             sendMessageToChannel(pathOut.getChannelId(), commandResult);
         }
     }
@@ -1142,6 +1174,9 @@ public final class Engine implements MessageSubmitter {
 
             log.debug("命令结果已回溯: engineId={}, originalCommandId={}, parentCommandId={}",
                     engineId, commandResult.getCommandId(), pathOut.getParentCommandId());
+        } else if (pathOut.getChannelId() != null) { // 如果是根命令，且有ChannelId，直接通过Channel回传最终结果
+            log.debug("Engine: 根命令结果通过Channel回传. ChannelId: {}, Result: {}", pathOut.getChannelId(), commandResult); // 新增日志
+            sendMessageToChannel(pathOut.getChannelId(), commandResult);
         }
     }
 
