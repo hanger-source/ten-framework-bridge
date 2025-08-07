@@ -3,6 +3,8 @@ package com.tenframework.core.graph;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import java.io.File;
+import java.io.IOException;
 
 public class GraphLoader {
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper()
@@ -17,6 +19,17 @@ public class GraphLoader {
      */
     public static GraphConfig loadGraphConfigFromJson(String jsonString) throws JsonProcessingException {
         return OBJECT_MAPPER.readValue(jsonString, GraphConfig.class);
+    }
+
+    /**
+     * 从文件加载图配置。
+     *
+     * @param filePath 图配置文件的路径
+     * @return 解析后的GraphConfig对象
+     * @throws IOException 如果文件读取或JSON解析失败
+     */
+    public static GraphConfig loadGraphConfigFromFile(String filePath) throws IOException {
+        return OBJECT_MAPPER.readValue(new File(filePath), GraphConfig.class);
     }
 
     /**

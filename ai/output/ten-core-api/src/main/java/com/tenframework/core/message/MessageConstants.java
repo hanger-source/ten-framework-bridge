@@ -15,11 +15,17 @@ public final class MessageConstants {
     // App URI常量
     public static final String APP_URI_TEST_CLIENT = "ten.app.test-client";
     public static final String APP_URI_HTTP_CLIENT = "ten.app.http-client";
+    public static final String APP_URI_SYSTEM = "system-app"; // 新增系统应用URI
 
     // 通用消息属性键
-    public static final String PROPERTY_CLIENT_CHANNEL_ID = "__client_channel_id__";
-    public static final String PROPERTY_CLIENT_LOCATION_URI = "__client_location_uri__"; // 新增
-    public static final String PROPERTY_MESSAGE_PRIORITY = "priority"; // 新增消息优先级属性
+    public static final String PROPERTY_CLIENT_LOCATION_URI = "client_location_uri";
+    /** 属性键: 客户端的Channel ID */
+    public static final String PROPERTY_CLIENT_CHANNEL_ID = "client_channel_id";
+    // 消息优先级属性
+    public static final String PROPERTY_MESSAGE_PRIORITY = "message_priority";
+
+    // --- Extension 类型 --- 1
+    public static final String EXTENSION_TYPE_CLIENT_CONNECTION = "client_connection";
 
     // Data消息名称常量
     public static final String DATA_NAME_ECHO_DATA = "echo_data";

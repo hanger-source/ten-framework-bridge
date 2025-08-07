@@ -15,6 +15,12 @@ public class GraphConfig {
     private String graphId;
 
     /**
+     * 应用的URI，例如 "test-app"
+     */
+    @JsonProperty("app_uri")
+    private String appUri;
+
+    /**
      * 预定义的图配置，键为图ID
      */
     @JsonProperty("predefined_graphs")

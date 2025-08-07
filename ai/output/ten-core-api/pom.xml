@@ -68,6 +68,7 @@
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
+            <version>1.18.30</version> <!-- 统一版本为1.18.30 -->
             <scope>provided</scope>
         </dependency>
 
@@ -136,7 +137,9 @@
             <plugin>
                 <groupId>org.projectlombok</groupId>
                 <artifactId>lombok-maven-plugin</artifactId>
-                <version>1.18.20.0</version> <!-- 请根据Lombok版本选择兼容的插件版本 -->
+                <version>1.18.30</version>
+                <!-- 暂时移除delombok执行，我们只需要注解处理功能 -->
+                <!--
                 <executions>
                     <execution>
                         <phase>generate-sources</phase>
@@ -145,6 +148,7 @@
                         </goals>
                     </execution>
                 </executions>
+                -->
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>

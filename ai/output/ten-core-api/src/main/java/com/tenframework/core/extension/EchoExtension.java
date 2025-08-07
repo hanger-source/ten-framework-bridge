@@ -1,15 +1,15 @@
 package com.tenframework.core.extension;
 
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+
 import com.tenframework.core.message.AudioFrame;
 import com.tenframework.core.message.Command;
 import com.tenframework.core.message.CommandResult;
 import com.tenframework.core.message.Data;
 import com.tenframework.core.message.VideoFrame;
 import lombok.extern.slf4j.Slf4j;
-
-import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
 
 /**
  * EchoExtension - 简单的回显扩展
@@ -38,7 +38,7 @@ public class EchoExtension implements Extension {
 
     @Override
     public String getAppUri() {
-        return appUri;
+        return this.appUri;
     }
 
     @Override

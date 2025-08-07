@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonIgnore; // 导入 JsonIgnore
 import lombok.Builder; // 导入 Builder
+import com.tenframework.core.message.MessageConstants; // 新增导入
 
 /**
  * 位置定位系统 - 标识消息在TEN框架中的精确位置
@@ -27,11 +28,15 @@ public record Location(
         if (appUri == null || appUri.trim().isEmpty()) {
             throw new IllegalArgumentException("appUri 不能为空");
         }
-        if (graphId == null || graphId.trim().isEmpty()) {
-            throw new IllegalArgumentException("graphId 不能为空");
-        }
-        if (extensionName == null || extensionName.trim().isEmpty()) {
-            throw new IllegalArgumentException("extensionName 不能为空");
+
+        // 对于 system-app，graphId 和 extensionName 可以为空
+        if (!MessageConstants.APP_URI_SYSTEM.equals(appUri)) {
+            if (graphId == null || graphId.trim().isEmpty()) {
+                throw new IllegalArgumentException("graphId 不能为空，除非appUri是系统应用");
+            }
+            if (extensionName == null || extensionName.trim().isEmpty()) {
+                throw new IllegalArgumentException("extensionName 不能为空，除非appUri是系统应用");
+            }
         }
     }
 

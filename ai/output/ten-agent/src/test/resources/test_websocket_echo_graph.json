@@ -1,0 +1,10 @@
+{
+  "graph_id": "test-websocket-echo-graph",
+  "nodes": [
+    {
+      "name": "SimpleEcho",
+      "type": "com.tenframework.core.extension.SimpleEchoExtension"
+    }
+  ],
+  "connections": []
+}

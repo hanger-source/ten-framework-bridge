@@ -2,7 +2,6 @@ package com.tenframework.core.engine;
 
 import java.util.Collections;
 import java.util.List;
-import java.util.ArrayList;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -17,6 +16,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 import com.tenframework.core.Location;
+import com.tenframework.core.extension.ClientConnectionExtension;
 import com.tenframework.core.extension.EngineExtensionContext;
 import com.tenframework.core.extension.Extension;
 import com.tenframework.core.graph.GraphConfig;
@@ -36,7 +36,6 @@ import com.tenframework.core.path.PathTable;
 import com.tenframework.core.path.ResultReturnPolicy;
 import com.tenframework.core.server.ChannelDisconnectedException;
 import io.netty.channel.Channel;
-import io.netty.channel.ChannelHandlerContext;
 import lombok.extern.slf4j.Slf4j;
 import org.agrona.concurrent.IdleStrategy;
 import org.agrona.concurrent.ManyToOneConcurrentArrayQueue;
@@ -102,10 +101,10 @@ public final class Engine implements MessageSubmitter {
      * 维护channelId到相关联的Command ID集合的映射，用于断开连接时清理PathOut
      */
     private final ConcurrentMap<String, ConcurrentSkipListSet<UUID>> channelToCommandIdsMap;
-    /**
-     * 维护客户端Location URI到服务器端Channel ID的映射，用于将消息回传给特定客户端
-     */
-    private final ConcurrentMap<String, String> clientLocationUriToChannelIdMap; // 新增
+
+    // ClientConnectionExtension 实例
+    private final ClientConnectionExtension clientConnectionExtension; // 新增
+
     /**
      * Engine核心线程的Thread引用，用于线程检查
      */
@@ -141,7 +140,27 @@ public final class Engine implements MessageSubmitter {
         channelMap = new ConcurrentHashMap<>();
         channelToCommandIdsMap = new ConcurrentHashMap<>();
         graphInstances = new ConcurrentHashMap<>();
-        clientLocationUriToChannelIdMap = new ConcurrentHashMap<>(); // 初始化新增的Map
+
+        // 创建并注册ClientConnectionExtension到特殊的系统图
+        GraphConfig systemGraphConfig = new GraphConfig();
+        systemGraphConfig.setGraphId("system-graph");
+        systemGraphConfig.setAppUri("system-app");
+        NodeConfig clientNodeConfig = new NodeConfig();
+        clientNodeConfig.setName(ClientConnectionExtension.NAME);
+        clientNodeConfig.setType("com.tenframework.core.extension.ClientConnectionExtension");
+        systemGraphConfig.setNodes(List.of(clientNodeConfig));
+
+        try {
+            GraphInstance systemGraphInstance = new GraphInstance(systemGraphConfig.getGraphId(),
+                    systemGraphConfig.getAppUri(), this, systemGraphConfig);
+            this.clientConnectionExtension = new ClientConnectionExtension(this); // 初始化
+            systemGraphInstance.registerExtension(ClientConnectionExtension.NAME, this.clientConnectionExtension, null);
+            graphInstances.put(systemGraphConfig.getGraphId(), systemGraphInstance);
+            log.info("ClientConnectionExtension已注册到系统图: graphId={}", systemGraphConfig.getGraphId());
+        } catch (Exception e) {
+            log.error("初始化ClientConnectionExtension失败", e);
+            throw new RuntimeException("Failed to initialize ClientConnectionExtension", e);
+        }
 
         // 创建单线程ExecutorService，使用自定义ThreadFactory
         engineThread = newSingleThreadExecutor(r -> {
@@ -604,9 +623,16 @@ public final class Engine implements MessageSubmitter {
         if (resultFuture != null && !resultFuture.isDone()) {
             resultFuture.complete(result);
         } else if (associatedChannelId != null) {
-            // 如果没有resultFuture（例如来自TCP），则通过Channel回传
-            log.debug("Engine: start_graph命令结果通过Channel回传. ChannelId: {}, Result: {}", associatedChannelId, result); // 新增日志
-            sendMessageToChannel(associatedChannelId, result);
+            // 如果没有resultFuture（例如来自TCP），则通过Channel回传，现在改为路由到ClientConnectionExtension
+            result.setProperty(MessageConstants.PROPERTY_CLIENT_CHANNEL_ID, associatedChannelId);
+            result.setDestinationLocations(List.of(Location.builder()
+                    .appUri("system-app")
+                    .graphId("system-graph")
+                    .extensionName(ClientConnectionExtension.NAME)
+                    .build()));
+            submitMessage(result);
+            log.debug("Engine: start_graph命令结果路由到ClientConnectionExtension. ChannelId: {}, Result: {}",
+                    associatedChannelId, result); // 新增日志
         }
     }
 
@@ -656,9 +682,16 @@ public final class Engine implements MessageSubmitter {
         if (resultFuture != null && !resultFuture.isDone()) {
             resultFuture.complete(result);
         } else if (associatedChannelId != null) {
-            // 如果没有resultFuture（例如来自TCP），则通过Channel回传
-            log.debug("Engine: stop_graph命令结果通过Channel回传. ChannelId: {}, Result: {}", associatedChannelId, result); // 新增日志
-            sendMessageToChannel(associatedChannelId, result);
+            // 如果没有resultFuture（例如来自TCP），则通过Channel回传，现在改为路由到ClientConnectionExtension
+            result.setProperty(MessageConstants.PROPERTY_CLIENT_CHANNEL_ID, associatedChannelId);
+            result.setDestinationLocations(List.of(Location.builder()
+                    .appUri("system-app")
+                    .graphId("system-graph")
+                    .extensionName(ClientConnectionExtension.NAME)
+                    .build()));
+            submitMessage(result);
+            log.debug("Engine: stop_graph命令结果路由到ClientConnectionExtension. ChannelId: {}, Result: {}",
+                    associatedChannelId, result); // 新增日志
         }
     }
 
@@ -752,10 +785,16 @@ public final class Engine implements MessageSubmitter {
         if (resultFuture != null && !resultFuture.isDone()) {
             resultFuture.complete(result);
         } else if (associatedChannelId != null) {
-            // 如果没有resultFuture（例如来自TCP），则通过Channel回传
-            log.debug("Engine: add_extension_to_graph命令结果通过Channel回传. ChannelId: {}, Result: {}", associatedChannelId,
-                    result); // 新增日志
-            sendMessageToChannel(associatedChannelId, result);
+            // 如果没有resultFuture（例如来自TCP），则通过Channel回传，现在改为路由到ClientConnectionExtension
+            result.setProperty(MessageConstants.PROPERTY_CLIENT_CHANNEL_ID, associatedChannelId);
+            result.setDestinationLocations(List.of(Location.builder()
+                    .appUri("system-app")
+                    .graphId("system-graph")
+                    .extensionName(ClientConnectionExtension.NAME)
+                    .build()));
+            submitMessage(result);
+            log.debug("Engine: add_extension_to_graph命令结果路由到ClientConnectionExtension. ChannelId: {}, Result: {}",
+                    associatedChannelId, result); // 新增日志
         }
     }
 
@@ -811,10 +850,16 @@ public final class Engine implements MessageSubmitter {
         if (resultFuture != null && !resultFuture.isDone()) {
             resultFuture.complete(result);
         } else if (associatedChannelId != null) {
-            // 如果没有resultFuture（例如来自TCP），则通过Channel回传
-            log.debug("Engine: remove_extension_from_graph命令结果通过Channel回传. ChannelId: {}, Result: {}",
+            // 如果没有resultFuture（例如来自TCP），则通过Channel回传，现在改为路由到ClientConnectionExtension
+            result.setProperty(MessageConstants.PROPERTY_CLIENT_CHANNEL_ID, associatedChannelId);
+            result.setDestinationLocations(List.of(Location.builder()
+                    .appUri("system-app")
+                    .graphId("system-graph")
+                    .extensionName(ClientConnectionExtension.NAME)
+                    .build()));
+            submitMessage(result);
+            log.debug("Engine: remove_extension_from_graph命令结果路由到ClientConnectionExtension. ChannelId: {}, Result: {}",
                     associatedChannelId, result); // 新增日志
-            sendMessageToChannel(associatedChannelId, result);
         }
     }
 
@@ -929,28 +974,23 @@ public final class Engine implements MessageSubmitter {
         log.debug("处理数据消息: engineId={}, messageType={}, messageName={}",
                 engineId, message.getType(), message.getName());
 
-        // 如果消息带有客户端Location URI，尝试通过映射查找服务器端Channel ID并回传
-        String clientLocationUri = message.getProperty(MessageConstants.PROPERTY_CLIENT_LOCATION_URI, String.class); // 从消息属性中获取Location
-                                                                                                                     // URI
+        String clientLocationUri = message.getProperty(MessageConstants.PROPERTY_CLIENT_LOCATION_URI, String.class);
+        String channelId = message.getProperty(MessageConstants.PROPERTY_CLIENT_CHANNEL_ID, String.class);
 
-        if (clientLocationUri != null) {
-            String serverChannelId = clientLocationUriToChannelIdMap.get(clientLocationUri); // 通过Location
-                                                                                             // URI查找服务器端Channel ID
-            if (serverChannelId != null) {
-                log.debug("Engine: 数据消息带有客户端Location URI. Location URI: {}, 对应的服务器端Channel ID: {}, MessageName: {}",
-                        clientLocationUri, serverChannelId, message.getName());
-                if (sendMessageToChannel(serverChannelId, message)) {
-                    log.debug("数据消息已成功回传到客户端Channel: engineId={}, messageType={}, messageName={}, clientLocationUri={}",
-                            engineId, message.getType(), message.getName(), clientLocationUri);
-                    return; // 消息已回传，无需继续路由到Extension
-                } else {
-                    log.warn("未能将数据消息回传到客户端Channel: engineId={}, messageType={}, messageName={}, clientLocationUri={}",
-                            engineId, message.getType(), message.getName(), clientLocationUri);
-                    // 如果无法回传，继续尝试路由到Extension（如果目的地是Extension的话）
-                }
-            } else {
-                log.warn("Engine: 未找到客户端Location URI [{}] 对应的服务器端Channel ID，无法回传数据消息。", clientLocationUri);
-            }
+        // 如果消息带有客户端Location URI，则路由到ClientConnectionExtension
+        if (clientLocationUri != null && channelId != null) {
+            log.debug(
+                    "Engine: 数据消息带有客户端Location URI，路由到ClientConnectionExtension. clientLocationUri: {}, channelId: {}, messageName: {}",
+                    clientLocationUri, channelId, message.getName());
+            // 设置目标为ClientConnectionExtension
+            message.setDestinationLocations(List.of(Location.builder()
+                    .appUri("system-app") // ClientConnectionExtension位于系统图
+                    .graphId("system-graph")
+                    .extensionName(ClientConnectionExtension.NAME)
+                    .build()));
+            // 将消息重新提交到Engine队列，由ClientConnectionExtension处理
+            submitMessage(message); // 这里不会引起循环，因为ClientConnectionExtension会直接写出到Channel
+            return; // 消息已处理，不再进行常规图内路由
         }
 
         // 如果没有明确的客户端Location URI，或者无法通过Channel回传，则按照常规路由到Extension
@@ -1134,9 +1174,17 @@ public final class Engine implements MessageSubmitter {
 
         // 如果PathOut关联了channelId，则将结果回传给客户端
         if (pathOut.getChannelId() != null) {
-            log.debug("Engine: EACH_OK_AND_ERROR通过Channel回传. ChannelId: {}, Result: {}", pathOut.getChannelId(),
+            // 路由到ClientConnectionExtension
+            commandResult.setProperty(MessageConstants.PROPERTY_CLIENT_CHANNEL_ID, pathOut.getChannelId());
+            commandResult.setDestinationLocations(List.of(Location.builder()
+                    .appUri("system-app")
+                    .graphId("system-graph")
+                    .extensionName(ClientConnectionExtension.NAME)
+                    .build()));
+            submitMessage(commandResult);
+            log.debug("Engine: EACH_OK_AND_ERROR命令结果路由到ClientConnectionExtension. ChannelId: {}, Result: {}",
+                    pathOut.getChannelId(),
                     commandResult); // 新增日志
-            sendMessageToChannel(pathOut.getChannelId(), commandResult);
         }
     }
 
@@ -1170,9 +1218,16 @@ public final class Engine implements MessageSubmitter {
 
             log.debug("命令结果已回溯: engineId={}, originalCommandId={}, parentCommandId={}",
                     engineId, commandResult.getCommandId(), pathOut.getParentCommandId());
-        } else if (pathOut.getChannelId() != null) { // 如果是根命令，且有ChannelId，直接通过Channel回传最终结果
-            log.debug("Engine: 根命令结果通过Channel回传. ChannelId: {}, Result: {}", pathOut.getChannelId(), commandResult); // 新增日志
-            sendMessageToChannel(pathOut.getChannelId(), commandResult);
+        } else if (pathOut.getChannelId() != null) { // 如果是根命令，且有ChannelId，路由到ClientConnectionExtension
+            commandResult.setProperty(MessageConstants.PROPERTY_CLIENT_CHANNEL_ID, pathOut.getChannelId());
+            commandResult.setDestinationLocations(List.of(Location.builder()
+                    .appUri("system-app")
+                    .graphId("system-graph")
+                    .extensionName(ClientConnectionExtension.NAME)
+                    .build()));
+            submitMessage(commandResult);
+            log.debug("Engine: 根命令结果路由到ClientConnectionExtension. ChannelId: {}, Result: {}", pathOut.getChannelId(),
+                    commandResult); // 新增日志
         }
     }
 
@@ -1288,40 +1343,6 @@ public final class Engine implements MessageSubmitter {
         channelMap.remove(channelId);
     }
 
-    /**
-     * 注册客户端Location URI与其对应的服务器端Channel ID的映射。
-     *
-     * @param clientLocationUri 客户端Location的URI字符串
-     * @param serverChannelId   对应的服务器端Netty Channel ID
-     */
-    public void registerClientLocationToChannel(String clientLocationUri, String serverChannelId) {
-        if (clientLocationUri == null || clientLocationUri.isEmpty() || serverChannelId == null
-                || serverChannelId.isEmpty()) {
-            log.warn("尝试注册空的或无效的客户端Location URI或服务器端Channel ID");
-            return;
-        }
-        clientLocationUriToChannelIdMap.put(clientLocationUri, serverChannelId);
-        log.debug("Engine: 客户端Location URI [{}] 已注册到 Channel ID [{}]", clientLocationUri, serverChannelId); // Debug log
-    }
-
-    /**
-     * 注销客户端Location URI与对应的服务器端Channel ID的映射。
-     *
-     * @param clientLocationUri 客户端Location的URI字符串
-     */
-    public void unregisterClientLocationToChannel(String clientLocationUri) {
-        if (clientLocationUri == null || clientLocationUri.isEmpty()) {
-            log.warn("尝试注销空的或无效的客户端Location URI");
-            return;
-        }
-        String removedChannelId = clientLocationUriToChannelIdMap.remove(clientLocationUri);
-        if (removedChannelId != null) {
-            log.debug("Engine: 客户端Location URI [{}] 已从 Channel ID [{}] 注销", clientLocationUri, removedChannelId);
-        } else {
-            log.warn("Engine: 尝试注销不存在的客户端Location URI: {}", clientLocationUri);
-        }
-    }
-
     // Getter方法
 
     public String getEngineId() {
@@ -1362,6 +1383,15 @@ public final class Engine implements MessageSubmitter {
      */
     public int getQueueCapacity() {
         return inboundMessageQueue.capacity();
+    }
+
+    /**
+     * 获取ClientConnectionExtension实例。
+     *
+     * @return ClientConnectionExtension实例
+     */
+    public ClientConnectionExtension getClientConnectionExtension() {
+        return clientConnectionExtension;
     }
 
     /**

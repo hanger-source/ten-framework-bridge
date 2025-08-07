@@ -1,36 +1,36 @@
 package com.tenframework.server.handler;
 
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-
 import com.tenframework.core.engine.Engine;
+import com.tenframework.core.extension.ClientConnectionExtension;
 import com.tenframework.core.message.Message;
 import com.tenframework.core.message.MessageType;
-import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import lombok.extern.slf4j.Slf4j;
 
-import static com.tenframework.core.message.MessageConstants.PROPERTY_CLIENT_CHANNEL_ID;
+import static com.tenframework.core.message.MessageConstants.PROPERTY_CLIENT_LOCATION_URI;
 
 @Slf4j
 public class WebSocketMessageFrameHandler extends SimpleChannelInboundHandler<Message> {
 
-    // 维护 ChannelId 到 Channel 的映射，以便在Engine处理完消息后回传
-    private static final Map<String, Channel> activeChannels = new ConcurrentHashMap<>();
     private final Engine engine;
+    private final ClientConnectionExtension clientConnectionExtension;
 
     public WebSocketMessageFrameHandler(Engine engine) {
         this.engine = engine;
+        this.clientConnectionExtension = engine.getClientConnectionExtension(); // 获取ClientConnectionExtension实例
     }
 
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, Message msg) {
         // 获取当前 Channel 的 ID，并作为临时属性添加到消息中
         String channelId = ctx.channel().id().asShortText();
-        msg.setProperty(PROPERTY_CLIENT_CHANNEL_ID, channelId); // 使用常量
+        String clientLocationUri = msg.getProperty(PROPERTY_CLIENT_LOCATION_URI, String.class); // 获取客户端Location URI
 
-        boolean submitted = engine.submitMessage(msg);
+        // 交给ClientConnectionExtension处理入站消息，它会负责注册映射并添加必要属性
+        Message processedMsg = clientConnectionExtension.handleInboundClientMessage(msg, channelId, clientLocationUri);
+
+        boolean submitted = engine.submitMessage(processedMsg);
         if (!submitted) {
             // TODO: 处理回压，例如队列满时的策略
             if (msg.getType() == MessageType.COMMAND) {
@@ -52,7 +52,6 @@ public class WebSocketMessageFrameHandler extends SimpleChannelInboundHandler<Me
     @Override
     public void channelActive(ChannelHandlerContext ctx) throws Exception {
         String channelId = ctx.channel().id().asShortText();
-        activeChannels.put(channelId, ctx.channel()); // 注册 Channel
         engine.addChannel(ctx.channel()); // 将Channel添加到Engine的Channel管理中
         log.info("WebSocket client connected: {}, channelId={}", ctx.channel().remoteAddress(), channelId);
         super.channelActive(ctx);
@@ -61,8 +60,8 @@ public class WebSocketMessageFrameHandler extends SimpleChannelInboundHandler<Me
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
         String channelId = ctx.channel().id().asShortText();
-        activeChannels.remove(channelId); // 移除 Channel
         engine.removeChannel(channelId); // 从Engine的Channel管理中移除
+        clientConnectionExtension.removeClientChannelMapping(channelId); // 通知ClientConnectionExtension移除映射
         log.info("WebSocket client disconnected: {}, channelId={}", ctx.channel().remoteAddress(), channelId);
         super.channelInactive(ctx);
     }

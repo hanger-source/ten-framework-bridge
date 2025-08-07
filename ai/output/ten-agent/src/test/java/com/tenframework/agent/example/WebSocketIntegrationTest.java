@@ -15,11 +15,14 @@ import com.tenframework.core.Location;
 import com.tenframework.core.engine.Engine;
 import com.tenframework.core.extension.BaseExtension;
 import com.tenframework.core.extension.SimpleEchoExtension;
+import com.tenframework.core.extension.ClientConnectionExtension; // 新增导入
 import com.tenframework.core.graph.GraphInstance;
+import com.tenframework.core.graph.GraphConfig;
+import com.tenframework.core.graph.GraphLoader;
 import com.tenframework.core.message.Command;
 import com.tenframework.core.message.Data;
 import com.tenframework.core.message.Message;
-import com.tenframework.core.message.MessageConstants;
+import com.tenframework.core.message.MessageConstants; // 新增导入
 import com.tenframework.server.TenServer;
 import com.tenframework.server.handler.ByteBufToWebSocketFrameEncoder;
 import com.tenframework.server.handler.WebSocketFrameToByteBufDecoder;
@@ -70,7 +73,6 @@ public class WebSocketIntegrationTest {
     private TenServer tenServer; // 使用TenServer
     private EventLoopGroup clientGroup;
     private SimpleEchoExtension echoExtension;
-    private BaseExtension tcpClientExtension;
 
     @BeforeEach
     void setUp() throws Exception {
@@ -90,27 +92,6 @@ public class WebSocketIntegrationTest {
         // 初始化Extension实例 (如果这些Extension只在测试代码中模拟 Engine.submitMessage，
         // 那么它们可能不需要实际注册到 Engine，除非测试涉及到 Engine 内部对它们的调用)
         echoExtension = new SimpleEchoExtension();
-        tcpClientExtension = new BaseExtension() {
-            @Override
-            protected void handleCommand(com.tenframework.core.message.Command command,
-                    com.tenframework.core.extension.ExtensionContext context) {
-            }
-
-            @Override
-            protected void handleData(com.tenframework.core.message.Data data,
-                    com.tenframework.core.extension.ExtensionContext context) {
-            }
-
-            @Override
-            protected void handleAudioFrame(com.tenframework.core.message.AudioFrame audioFrame,
-                    com.tenframework.core.extension.ExtensionContext context) {
-            }
-
-            @Override
-            protected void handleVideoFrame(com.tenframework.core.message.VideoFrame videoFrame,
-                    com.tenframework.core.extension.ExtensionContext context) {
-            }
-        };
     }
 
     @AfterEach
@@ -139,42 +120,29 @@ public class WebSocketIntegrationTest {
 
         // 1. 模拟发送 start_graph 命令来启动图实例
         // 构建图的JSON结构（作为ObjectNode）
-        ObjectNode graphJsonNode = objectMapper.createObjectNode();
-        graphJsonNode.put("graph_id", graphId);
-        // 定义节点
-        com.fasterxml.jackson.databind.node.ArrayNode nodesArray = objectMapper.createArrayNode(); // 更改为ArrayNode
-        nodesArray.add(objectMapper.createObjectNode()
-                .put("name", "SimpleEcho")
-                .put("type", "com.tenframework.core.extension.SimpleEchoExtension"));
-        nodesArray.add(objectMapper.createObjectNode()
-                .put("name", "tcp-client-extension")
-                .put("type", "com.tenframework.core.extension.SimpleEchoExtension")); // Revert to SimpleEchoExtension
 
-        graphJsonNode.set("nodes", nodesArray); // 将 ArrayNode 设置为 nodes
+        // 从JSON文件加载图配置
+        String graphConfigPath = "src/test/resources/test_websocket_echo_graph.json";
+        GraphConfig graphConfig = GraphLoader.loadGraphConfigFromFile(graphConfigPath);
+        // 确保graphId与测试用例中生成的UUID一致
+        graphConfig.setGraphId(graphId);
+        graphConfig.setAppUri(appUri);
 
-        // 定义连接
-        com.fasterxml.jackson.databind.node.ArrayNode connections = objectMapper.createArrayNode();
-        // 添加从客户端到SimpleEcho的连接
-        connections.add(objectMapper.createObjectNode()
-                .put("source", "tcp-client-extension") // 模拟客户端消息的sourceLocation.extensionName()，与testData保持一致
-                .set("destinations", objectMapper.createArrayNode()
-                        .add("SimpleEcho"))); // 目的地是SimpleEchoExtension，直接添加字符串
+        String graphJson = objectMapper.writeValueAsString(graphConfig); // 将GraphConfig对象转换为JSON字符串
 
-        graphJsonNode.set("connections", connections);
-
-        log.info("WebSocket测试图配置: {}", graphJsonNode.toPrettyString());
+        log.info("WebSocket测试图配置: {}", graphJson);
 
         Command startGraphCommand = Command.builder()
                 .name("start_graph")
                 .commandId(UUID.randomUUID().toString())
                 .properties(new HashMap<>() {
-                    { // 使用HashMap来构建properties
+                    {
                         put("graph_id", graphId);
                         put("app_uri", appUri);
-                        put("graph_json", graphJsonNode.toString()); // 将ObjectNode转换为String
+                        put("graph_json", graphJson);
                     }
                 })
-                .sourceLocation(new Location("test://client", graphId, "client"))
+                .sourceLocation(new Location(MessageConstants.APP_URI_SYSTEM, null, ClientConnectionExtension.NAME))
                 .destinationLocations(List.of(new Location(appUri, graphId, "engine")))
                 .build();
         engine.submitMessage(startGraphCommand);
@@ -211,7 +179,7 @@ public class WebSocketIntegrationTest {
                         put("app_uri", appUri);
                     }
                 })
-                .sourceLocation(new Location("test://client", graphId, "client"))
+                .sourceLocation(new Location(MessageConstants.APP_URI_SYSTEM, null, ClientConnectionExtension.NAME))
                 .destinationLocations(List.of(new Location(appUri, graphId, "engine")))
                 .build();
         engine.submitMessage(stopGraphCommand);
@@ -257,7 +225,7 @@ public class WebSocketIntegrationTest {
 
         Data testData = Data.json(messageName, objectMapper.writeValueAsString(payload));
         Location clientSourceLocation = Location.builder().appUri("test-client").graphId(graphId)
-                .extensionName("tcp-client-extension").build();
+                .extensionName(null).build(); // 客户端不再有固定的extensionName，而是通过URI标识
         testData.setSourceLocation(clientSourceLocation);
         testData.setDestinationLocations(
                 Collections.singletonList(Location.builder().appUri("test-app").graphId(graphId)
