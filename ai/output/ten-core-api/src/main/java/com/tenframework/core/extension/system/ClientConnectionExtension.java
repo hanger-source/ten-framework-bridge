@@ -22,12 +22,10 @@ import lombok.extern.slf4j.Slf4j;
 public class ClientConnectionExtension implements Extension {
 
     public static final String NAME = "client-connection-extension";
-
-    private final Engine engine; // 新增Engine引用
-
     // 存储客户端Location URI到Channel ID的映射 (这是全局的，由所有实例共享)
     // 用于处理入站消息的首次映射，以及通用地查找channelId
     private static final ConcurrentMap<String, String> clientLocationUriToChannelIdMap = new ConcurrentHashMap<>();
+    private final Engine engine; // 新增Engine引用
     // 此ClientConnectionExtension实例所代表的客户端连接的上下文信息
     private String clientLocationUri;
     private String clientAppUri;
@@ -41,27 +39,27 @@ public class ClientConnectionExtension implements Extension {
     @Override
     public void onConfigure(AsyncExtensionEnv context) {
         // 从Extension的配置属性中获取并存储客户端上下文信息
-        this.clientLocationUri = context.getPropertyString(MessageConstants.PROPERTY_CLIENT_LOCATION_URI).orElse(null);
-        this.clientAppUri = context.getPropertyString(MessageConstants.PROPERTY_CLIENT_APP_URI).orElse(null);
-        this.clientGraphId = context.getPropertyString(MessageConstants.PROPERTY_CLIENT_GRAPH_ID).orElse(null);
-        this.channelId = context.getPropertyString(MessageConstants.PROPERTY_CLIENT_CHANNEL_ID).orElse(null);
+        clientLocationUri = context.getPropertyString(MessageConstants.PROPERTY_CLIENT_LOCATION_URI).orElse(null);
+        clientAppUri = context.getPropertyString(MessageConstants.PROPERTY_CLIENT_APP_URI).orElse(null);
+        clientGraphId = context.getPropertyString(MessageConstants.PROPERTY_CLIENT_GRAPH_ID).orElse(null);
+        channelId = context.getPropertyString(MessageConstants.PROPERTY_CLIENT_CHANNEL_ID).orElse(null);
 
-        if (this.clientLocationUri != null && this.channelId != null) {
+        if (clientLocationUri != null && channelId != null) {
             // 将此ClientConnectionExtension实例代表的客户端连接信息注册到全局映射中
-            clientLocationUriToChannelIdMap.put(this.clientLocationUri, this.channelId);
+            clientLocationUriToChannelIdMap.put(clientLocationUri, channelId);
             log.info(
                     "ClientConnectionExtension configured and mapped: clientLocationUri={}, channelId={}, clientAppUri={}, clientGraphId={}",
-                    this.clientLocationUri, this.channelId, this.clientAppUri, this.clientGraphId);
+                clientLocationUri, channelId, clientAppUri, clientGraphId);
         } else {
             log.warn(
                     "ClientConnectionExtension configured without complete client context: clientLocationUri={}, channelId={}",
-                    this.clientLocationUri, this.channelId);
+                clientLocationUri, channelId);
         }
     }
 
     @Override
     public String getAppUri() {
-        return MessageConstants.APP_URI_SYSTEM; // ClientConnectionExtension属于系统应用
+        return clientAppUri;
     }
 
     @Override
@@ -86,22 +84,22 @@ public class ClientConnectionExtension implements Extension {
             context.sendCommand(message);
             log.debug(
                     "ClientConnectionExtension: 重新提交客户端命令消息到Engine进行图内路由. commandName={}, clientLocationUri={}",
-                    message.getName(), this.clientLocationUri); // 使用实例变量进行日志记录
+                message.getName(), clientLocationUri); // 使用实例变量进行日志记录
         } else {
             // 这是从其他Extension路由到此的命令消息，意味着需要回传给客户端
             // 直接使用此ClientConnectionExtension实例自身维护的客户端上下文信息
-            if (this.clientLocationUri != null && this.channelId != null) {
-                Channel targetChannel = engine.getChannel(this.channelId).orElse(null);
+            if (clientLocationUri != null && channelId != null) {
+                Channel targetChannel = engine.getChannel(channelId).orElse(null);
                 if (targetChannel != null && targetChannel.isActive()) {
                     log.debug(
                             "ClientConnectionExtension: 回传命令消息到客户端Channel. clientLocationUri: {}, channelId: {}, commandName: {}",
-                            this.clientLocationUri, this.channelId, message.getName());
+                        clientLocationUri, channelId, message.getName());
                     targetChannel.writeAndFlush(message);
                 } else {
                     log.warn(
                             "ClientConnectionExtension: 无法回传命令消息，客户端Channel不存在或不活跃. clientLocationUri: {}, channelId: {}, commandName: {}",
-                            this.clientLocationUri, this.channelId, message.getName());
-                    removeClientChannelMapping(this.channelId); // 清理失效映射
+                        clientLocationUri, channelId, message.getName());
+                    removeClientChannelMapping(channelId); // 清理失效映射
                 }
             } else {
                 log.warn(
@@ -137,23 +135,23 @@ public class ClientConnectionExtension implements Extension {
             context.sendData(message);
             log.debug(
                     "ClientConnectionExtension: 重新提交客户端数据消息到Engine进行图内路由. name={}, clientLocationUri={}",
-                    message.getName(), this.clientLocationUri); // 使用实例变量进行日志记录
+                message.getName(), clientLocationUri); // 使用实例变量进行日志记录
 
         } else {
             // 这是从其他Extension路由到此的数据消息，意味着需要回传给客户端
             // 直接使用此ClientConnectionExtension实例自身维护的客户端上下文信息
-            if (this.clientLocationUri != null && this.channelId != null) {
-                Channel targetChannel = engine.getChannel(this.channelId).orElse(null);
+            if (clientLocationUri != null && channelId != null) {
+                Channel targetChannel = engine.getChannel(channelId).orElse(null);
                 if (targetChannel != null && targetChannel.isActive()) {
                     log.debug(
                             "ClientConnectionExtension: 回传数据消息到客户端Channel. clientLocationUri: {}, channelId: {}, messageName: {}",
-                            this.clientLocationUri, this.channelId, message.getName());
+                        clientLocationUri, channelId, message.getName());
                     targetChannel.writeAndFlush(message);
                 } else {
                     log.warn(
                             "ClientConnectionExtension: 无法回传数据消息，客户端Channel不存在或不活跃. clientLocationUri: {}, channelId: {}, messageName: {}",
-                            this.clientLocationUri, this.channelId, message.getName());
-                    removeClientChannelMapping(this.channelId); // 清理失效映射
+                        clientLocationUri, channelId, message.getName());
+                    removeClientChannelMapping(channelId); // 清理失效映射
                 }
             } else {
                 log.warn(
@@ -187,18 +185,18 @@ public class ClientConnectionExtension implements Extension {
     @Override
     public void onCommandResult(CommandResult commandResult, AsyncExtensionEnv context) {
         // 直接使用此ClientConnectionExtension实例自身维护的客户端上下文信息
-        if (this.clientLocationUri != null && this.channelId != null) {
-            Channel targetChannel = engine.getChannel(this.channelId).orElse(null);
+        if (clientLocationUri != null && channelId != null) {
+            Channel targetChannel = engine.getChannel(channelId).orElse(null);
             if (targetChannel != null && targetChannel.isActive()) {
                 log.debug(
                         "ClientConnectionExtension: 回传命令结果消息到客户端Channel. clientLocationUri: {}, channelId: {}, commandId: {}",
-                        this.clientLocationUri, this.channelId, commandResult.getCommandId());
+                    clientLocationUri, channelId, commandResult.getCommandId());
                 targetChannel.writeAndFlush(commandResult);
             } else {
                 log.warn(
                         "ClientConnectionExtension: 无法回传命令结果消息，客户端Channel不存在或不活跃. clientLocationUri: {}, channelId: {}, commandId: {}",
-                        this.clientLocationUri, this.channelId, commandResult.getCommandId());
-                removeClientChannelMapping(this.channelId);
+                    clientLocationUri, channelId, commandResult.getCommandId());
+                removeClientChannelMapping(channelId);
             }
         } else {
             log.warn(

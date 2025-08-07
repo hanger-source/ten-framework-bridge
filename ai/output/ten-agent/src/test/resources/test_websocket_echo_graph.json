@@ -1,5 +1,5 @@
 {
-  "graph_id": "test-websocket-echo-graph",
+  "graph_name": "test-websocket-echo-graph",
   "nodes": [
     {
       "name": "client-connection-extension"
@@ -13,7 +13,7 @@
     {
       "source": "client-connection-extension",
       "destinations": ["SimpleEcho"],
-      "type": "DATA"
+      "type": "data"
     }
   ]
 }

@@ -25,7 +25,6 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public final class Data extends AbstractMessage {
 
-    // 将data字段从byte[]改回ByteBuf，并恢复Jackson自定义序列化/反序列化注解
     @JsonProperty("data")
     @JsonSerialize(using = ByteBufSerializer.class)
     @JsonDeserialize(using = ByteBufDeserializer.class)
@@ -57,7 +56,7 @@ public final class Data extends AbstractMessage {
     @JsonCreator
     public Data(
             @JsonProperty("name") String name,
-        @JsonProperty("data") ByteBuf data, // 参数类型改为ByteBuf
+        @JsonProperty("data") ByteBuf data,
             @JsonProperty("is_eof") Boolean isEof,
             @JsonProperty("content_type") String contentType,
             @JsonProperty("encoding") String encoding,
@@ -72,7 +71,7 @@ public final class Data extends AbstractMessage {
         if (timestamp != null) {
             setTimestamp(timestamp);
         }
-        this.data = data != null ? data.retain() : Unpooled.EMPTY_BUFFER; // 赋值ByteBuf，并调用retain()
+        this.data = data != null ? data.retain() : Unpooled.EMPTY_BUFFER;
         this.isEof = isEof != null ? isEof : false;
         this.contentType = contentType;
         this.encoding = encoding;

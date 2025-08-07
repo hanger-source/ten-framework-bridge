@@ -1,24 +1,18 @@
 package com.tenframework.core.graph;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
-import lombok.Data;
-
 import java.util.List;
 import java.util.Map;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+import lombok.Data;
 
 @Data
 public class GraphConfig {
     /**
-     * 图的唯一ID
+     * 图的名称
      */
-    @JsonProperty("graph_id")
-    private String graphId;
-
-    /**
-     * 应用的URI，例如 "test-app"
-     */
-    @JsonProperty("app_uri")
-    private String appUri;
+    @JsonProperty("graph_name")
+    private String graphName;
 
     /**
      * 预定义的图配置，键为图ID

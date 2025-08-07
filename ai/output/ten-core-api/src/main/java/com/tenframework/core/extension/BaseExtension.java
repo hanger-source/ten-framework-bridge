@@ -338,29 +338,26 @@ public abstract class BaseExtension implements Extension {
         }
 
         if (type == String.class) {
-            return type.cast(context.getPropertyString(key).orElse((String) defaultValue));
+            return (T) context.getPropertyString(key).orElse((String) defaultValue);
         } else if (type == Integer.class) {
-            return type.cast(context.getPropertyInt(key).orElse((Integer) defaultValue));
+            return (T) context.getPropertyInt(key).orElse((Integer) defaultValue);
         } else if (type == Boolean.class) {
-            return type.cast(context.getPropertyBool(key).orElse((Boolean) defaultValue));
+            return (T) context.getPropertyBool(key).orElse((Boolean) defaultValue);
         } else if (type == Float.class) {
-            return type.cast(context.getPropertyFloat(key).orElse((Float) defaultValue));
-        } else if (type == Double.class) { // 尝试将Float转换为Double，如果需要
-            Optional<Float> floatValue = context.getPropertyFloat(key);
-            if (floatValue.isPresent()) {
-                return type.cast((Double) floatValue.get().doubleValue());
-            }
-        } else if (type == Long.class) { // 增加对Long类型的支持
-            Optional<Integer> intValue = context.getPropertyInt(key); // 尝试从int获取，或者需要新的getPropertyLong
-            if (intValue.isPresent()) {
-                return type.cast((Long) intValue.get().longValue());
-            }
+            return (T) context.getPropertyFloat(key).orElse((Float) defaultValue);
+        } else if (type == Double.class) {
+            // 如果需要支持Double类型，应该在AsyncExtensionEnv中添加getPropertyDouble方法
+            // 或者通过getPropertyToJson获取String后，自行进行JSON反序列化
+            // 目前保持原样，让它返回defaultValue
+        } else if (type == Long.class) {
+            // 如果需要支持Long类型，应该在AsyncExtensionEnv中添加getPropertyLong方法
+            // 或者通过getPropertyToJson获取String后，自行进行JSON反序列化
+            // 目前保持原样，让它返回defaultValue
         }
         // 如果是Map或其他复杂对象，通常它们被存储为JSON字符串。
         // 这里需要将JSON字符串反序列化为T。
         // 但由于当前AsyncExtensionEnv没有提供从JSON直接反序列化为Map的方法，
         // 并且为了避免引入ObjectMapper的直接依赖，暂时只处理基本类型。
-        // 如果需要，可以在这里调用getPropertyToJson并手动反序列化，但这会增加getConfig的复杂性。
         // 或者，可以由调用者自行获取JSON字符串后反序列化。
         log.warn("BaseExtension: 不支持的配置类型或配置未找到，返回默认值: key={}, type={}", key, type.getName());
         return defaultValue;

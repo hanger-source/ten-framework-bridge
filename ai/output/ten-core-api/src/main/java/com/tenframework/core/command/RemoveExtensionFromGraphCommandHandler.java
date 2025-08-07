@@ -1,5 +1,9 @@
 package com.tenframework.core.command;
 
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+
 import com.tenframework.core.engine.Engine;
 import com.tenframework.core.extension.system.ClientConnectionExtension;
 import com.tenframework.core.graph.GraphInstance;
@@ -9,11 +13,6 @@ import com.tenframework.core.message.Location;
 import com.tenframework.core.message.MessageConstants;
 import lombok.extern.slf4j.Slf4j;
 
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-
 /**
  * 处理 "remove_extension_from_graph" 命令的处理器。
  */
@@ -21,7 +20,7 @@ import java.util.concurrent.CompletableFuture;
 public class RemoveExtensionFromGraphCommandHandler implements InternalCommandHandler {
 
     @Override
-    public void handle(Command command, Engine engine, CompletableFuture<Object> resultFuture) {
+    public void handle(Command command, Engine engine) {
         String graphId = (String) command.getProperties().get("graph_id");
         String extensionName = (String) command.getProperties().get("extension_name");
         String appUri = (String) command.getProperties().get("app_uri");
@@ -61,14 +60,7 @@ public class RemoveExtensionFromGraphCommandHandler implements InternalCommandHa
 
         result.setSourceLocation(Location.builder().appUri(appUri).graphId(graphId).extensionName("engine").build());
         result.setDestinationLocations(Collections.singletonList(command.getSourceLocation()));
-
-        if (resultFuture != null && !resultFuture.isDone()) {
-            if (result.isSuccess()) {
-                resultFuture.complete(result.getResult());
-            } else {
-                resultFuture.completeExceptionally(new RuntimeException(result.getError()));
-            }
-        } else if (associatedChannelId != null) {
+        if (associatedChannelId != null) {
             // Fallback: 如果没有CompletableFuture，且有ChannelId，则通过ClientConnectionExtension回传
             result.setProperty(MessageConstants.PROPERTY_CLIENT_CHANNEL_ID, associatedChannelId);
             Location clientLoc = command.getProperty(MessageConstants.PROPERTY_CLIENT_APP_URI, String.class) != null

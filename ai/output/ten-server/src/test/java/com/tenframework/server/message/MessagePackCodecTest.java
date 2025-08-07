@@ -41,8 +41,8 @@ public class MessagePackCodecTest {
     @Test
     void testCommandCodec() {
         Command originalCommand = Command.builder().name("test_command")
-                .commandId("cmd-123")
-                .parentCommandId("parent-456")
+                .commandId(java.util.UUID.randomUUID().getMostSignificantBits()) // 转换为long类型
+                .parentCommandId(java.util.UUID.randomUUID().getMostSignificantBits()) // 转换为long类型
                 .sourceLocation(new Location("app-1", "graph-1", "ext-src"))
                 .destinationLocations(Collections.singletonList(new Location("app-2", "graph-2", "ext-dest")))
                 .args(new HashMap<>() {
@@ -215,13 +215,14 @@ public class MessagePackCodecTest {
 
     @Test
     void testCommandResultCodec() {
-        CommandResult originalResult = CommandResult.success("cmd-result-id", new HashMap<>() {
-            {
-                put("status", "OK"); // 将"ok"改为"OK"
-                put("value", 100);
-                put("data", new ArrayList<String>(Collections.singletonList("item1"))); // 添加data键
-            }
-        });
+        CommandResult originalResult = CommandResult.success(java.util.UUID.randomUUID().getMostSignificantBits(),
+                new HashMap<>() {
+                    {
+                        put("status", "OK"); // 将"ok"改为"OK"
+                        put("value", 100);
+                        put("data", new ArrayList<String>(Collections.singletonList("item1"))); // 添加data键
+                    }
+                });
         originalResult.setFinal(false); // 确保isFinal为false，以便后续验证深拷贝
         originalResult.setError("original error");
         originalResult.setErrorCode(null);

@@ -1,56 +1,47 @@
 package com.tenframework.core.engine;
 
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Stream;
 
+import com.tenframework.core.command.AddExtensionToGraphCommandHandler;
+import com.tenframework.core.command.InternalCommandHandler;
+import com.tenframework.core.command.InternalCommandType;
+import com.tenframework.core.command.RemoveExtensionFromGraphCommandHandler;
+import com.tenframework.core.command.StartGraphCommandHandler;
+import com.tenframework.core.command.StopGraphCommandHandler;
 import com.tenframework.core.extension.Extension;
 import com.tenframework.core.extension.system.ClientConnectionExtension;
-import com.tenframework.core.graph.ConnectionConfig;
-import com.tenframework.core.graph.GraphConfig;
 import com.tenframework.core.graph.GraphInstance;
-import com.tenframework.core.graph.GraphLoader;
-import com.tenframework.core.graph.NodeConfig;
 import com.tenframework.core.message.AudioFrame;
 import com.tenframework.core.message.Command;
 import com.tenframework.core.message.CommandResult;
 import com.tenframework.core.message.Data;
 import com.tenframework.core.message.Location;
 import com.tenframework.core.message.Message;
-import com.tenframework.core.message.MessageConstants;
 import com.tenframework.core.message.MessageType;
 import com.tenframework.core.message.VideoFrame;
-import com.tenframework.core.path.DataInPath;
-import com.tenframework.core.path.ResultReturnPolicy;
-import com.tenframework.core.server.ChannelDisconnectedException;
+import com.tenframework.core.path.PathManager;
+import com.tenframework.core.path.PathOut;
+import com.tenframework.core.route.RouteManager;
 import io.netty.channel.Channel;
 import lombok.extern.slf4j.Slf4j;
 import org.agrona.concurrent.IdleStrategy;
 import org.agrona.concurrent.ManyToOneConcurrentArrayQueue;
 import org.agrona.concurrent.SleepingIdleStrategy;
-import com.tenframework.core.path.PathManager;
-import com.tenframework.core.path.PathOut;
-import com.tenframework.core.route.RouteManager; // 新增导入
-import com.tenframework.core.command.InternalCommandHandler; // Add this import
-import com.tenframework.core.command.InternalCommandType;
-import com.tenframework.core.command.StartGraphCommandHandler;
-import com.tenframework.core.command.StopGraphCommandHandler;
-import com.tenframework.core.command.AddExtensionToGraphCommandHandler;
-import com.tenframework.core.command.RemoveExtensionFromGraphCommandHandler;
 
 import static java.util.concurrent.Executors.newSingleThreadExecutor;
-import java.util.HashMap;
 
 /**
  * TEN框架的核心Engine实现
@@ -115,13 +106,11 @@ public final class Engine implements MessageSubmitter, CommandSubmitter { // 实
     private final RouteManager routeManager;
 
     private final Map<String, InternalCommandHandler> internalCommandHandlers;
-
-    private volatile Thread coreThread;
-
     /**
      * 维护命令ID到CompletableFuture的映射，用于异步返回命令结果给调用方
      */
     private final ConcurrentMap<Long, CompletableFuture<Object>> commandFutures = new ConcurrentHashMap<>();
+    private volatile Thread coreThread;
 
     /**
      * 构造函数
@@ -153,16 +142,16 @@ public final class Engine implements MessageSubmitter, CommandSubmitter { // 实
         graphInstances = new ConcurrentHashMap<>();
 
         // 初始化PathManager
-        this.pathManager = new PathManager(this);
+        pathManager = new PathManager(this);
 
         // 初始化ClientConnectionExtension
-        this.clientConnectionExtension = new ClientConnectionExtension(this);
+        clientConnectionExtension = new ClientConnectionExtension(this);
 
         // 初始化RouteManager
-        this.routeManager = new RouteManager(graphInstances);
+        routeManager = new RouteManager(graphInstances);
 
         // 初始化内部命令处理器
-        this.internalCommandHandlers = new HashMap<>();
+        internalCommandHandlers = new HashMap<>();
         internalCommandHandlers.put(InternalCommandType.START_GRAPH.getCommandName(), new StartGraphCommandHandler());
         internalCommandHandlers.put(InternalCommandType.STOP_GRAPH.getCommandName(), new StopGraphCommandHandler());
         internalCommandHandlers.put(InternalCommandType.ADD_EXTENSION_TO_GRAPH.getCommandName(),
@@ -273,23 +262,18 @@ public final class Engine implements MessageSubmitter, CommandSubmitter { // 实
      */
     @Override
     public boolean submitMessage(Message message) {
-        return submitMessage(message, null);
-    }
-
-    /**
-     * 向Engine提交消息（非阻塞）
-     * 由Netty线程或Extension虚拟线程调用
-     *
-     * @param message   要处理的消息
-     * @param channelId 可选的Channel ID，如果消息来自特定Channel
-     * @return true如果成功提交，false如果队列已满
-     */
-    @Override
-    public boolean submitMessage(Message message, String channelId) {
         if (state.get() != EngineState.RUNNING) {
             log.warn("Engine未在运行状态，拒绝消息: engineId={}, messageType={}",
-                    engineId, message.getType());
-            return false; // 返回false
+                engineId, message.getType());
+            return false;
+        }
+
+        if (message.getType() == MessageType.COMMAND
+            && Stream.of(InternalCommandType.values()).noneMatch(type -> type.name().equals(message.getName()))) {
+            Command command = (Command)message;
+            command.setCommandId(Command.generateCommandId());
+            CompletableFuture<Object> future = new CompletableFuture<>();
+            commandFutures.put(command.getCommandId(), future);
         }
 
         // 使用Agrona队列的非阻塞offer方法
@@ -298,15 +282,8 @@ public final class Engine implements MessageSubmitter, CommandSubmitter { // 实
         if (!success) {
             // 队列满了，根据消息类型决定处理策略
             handleQueueFullback(message);
-        } else if (channelId != null && message.getType() == MessageType.COMMAND) {
-            // 如果是来自客户端的Command消息，将其channelId关联到PathOut
-            // 注意：PathOut在processCommand中创建并关联channelId，这里仅处理队列满的情况
-            // 为Command添加一个临时属性，携带channelId，以便processCommand能够获取
-            if (message.getProperties() != null) {
-                message.getProperties().put("__channel_id__", channelId);
-            }
         }
-        return success; // 返回boolean
+        return true;
     }
 
     /**
@@ -428,23 +405,19 @@ public final class Engine implements MessageSubmitter, CommandSubmitter { // 实
      * @param message 命令消息
      */
     private void processCommand(Message message) {
-        if (!(message instanceof Command)) {
+        if (!(message instanceof Command command)) {
             log.warn("收到非Command类型的消息在processCommand中: engineId={}, messageType={}",
                     engineId, message.getType());
             return;
         }
-        Command command = (Command) message; // 显式类型转换
 
         log.debug("处理命令消息: engineId={}, commandName={}, commandId={}",
                 engineId, command.getName(), command.getCommandId());
 
         InternalCommandHandler handler = internalCommandHandlers.get(command.getName());
         if (handler != null) {
-            // 对于内部命令，如果它也需要返回结果，那么Future应该已经由调用方提供
-            // 这里我们假定内部命令处理器会自行完成结果，或者通过其自身的机制处理回调
-            // 因此，我们不需要在这里传递Engine的CompletableFuture
-            handler.handle(command, this, commandFutures.get(command.getCommandId())); // 传递可能存在的Future
-            return; // 内部命令已处理
+            handler.handle(command, this);
+            return;
         }
 
         // 1. 获取消息的源GraphId
@@ -495,7 +468,7 @@ public final class Engine implements MessageSubmitter, CommandSubmitter { // 实
         // 为每个目标Extension分发消息
         for (Location targetLocation : targetLocations) {
             // 获取目标Extension实例
-            final Extension currentTargetExtension = graphInstance.getExtension(targetLocation.extensionName())
+            Extension currentTargetExtension = graphInstance.getExtension(targetLocation.extensionName())
                     .orElse(null);
             if (currentTargetExtension == null) {
                 log.warn("Engine: 目标Extension未找到: {}. 无法分发命令: {}", targetLocation.extensionName(), command.getName());
@@ -509,7 +482,7 @@ public final class Engine implements MessageSubmitter, CommandSubmitter { // 实
             }
 
             Command messageToSend = command; // 默认使用原始消息
-            final Command finalMessageToSend;
+            Command finalMessageToSend;
             if (targetLocations.size() > 1) {
                 try {
                     // 只有在需要分发到多个目的地时才克隆消息
@@ -537,15 +510,16 @@ public final class Engine implements MessageSubmitter, CommandSubmitter { // 实
             // resultFuture可能为null，例如Engine内部发起的命令，或者队列满时被丢弃的命令
             // 对于非内部命令，如果Future为null，则表示逻辑错误或被提前处理
 
-            // 创建PathOut记录命令路径，以便后续结果回溯
-            // PathOut中的resultFuture现在是Engine管理的CompletableFuture<Object>
-            pathManager.createOutPath(finalMessageToSend.getCommandId(),
-                    finalMessageToSend.getParentCommandId(),
-                    finalMessageToSend.getName(), finalMessageToSend.getSourceLocation(),
-                    targetLocation,
-                    resultFuture, // 传递Engine管理的CompletableFuture
-                    ResultReturnPolicy.FIRST_ERROR_OR_LAST_OK,
-                    associatedChannelId);
+            // PathOut的创建已移至Engine.submitMessage(Message,
+            // String)方法中，以确保其在命令进入Engine时就创建并关联CompletableFuture。
+            // 这里的PathOut是为Command命令创建的，而Data消息的PathIn在processData中创建。
+            // pathManager.createOutPath(finalMessageToSend.getCommandId(),
+            // finalMessageToSend.getParentCommandId(),
+            // finalMessageToSend.getName(), finalMessageToSend.getSourceLocation(),
+            // targetLocation,
+            // resultFuture, // 传递Engine管理的CompletableFuture
+            // ResultReturnPolicy.FIRST_ERROR_OR_LAST_OK,
+            // associatedChannelId);
 
             log.debug("Engine: 关联Command {} 到 Channel {}", finalMessageToSend.getCommandId(), associatedChannelId); // 新增日志
 
@@ -560,7 +534,7 @@ public final class Engine implements MessageSubmitter, CommandSubmitter { // 实
                         finalMessageToSend.getCommandId());
             } catch (Exception e) {
                 log.error("Engine: 调用Extension的onCommand方法异常. Extension: {}, CommandType: {}",
-                        targetLocation.extensionName(), finalMessageToSend.getType().name(), e);
+                    targetLocation.extensionName(), finalMessageToSend.getType().getValue(), e);
                 // 在Extension处理异常时，也需要回溯错误结果
                 // 异常时直接完成Future，不需要通过pathManager.handleResultReturnPolicy
                 if (resultFuture != null && !resultFuture.isDone()) {
@@ -622,6 +596,10 @@ public final class Engine implements MessageSubmitter, CommandSubmitter { // 实
                         associatedFuture.completeExceptionally(new RuntimeException(
                                 "Command execution failed: " + commandResult.getError()));
                     }
+                    // 发送CommandResult回客户端
+                    if (pathOut.getChannelId() != null) {
+                        sendMessageToChannel(pathOut.getChannelId(), commandResult);
+                    }
                     log.debug("Engine: 命令结果Future已完成. CommandId: {}", commandId);
                 } else {
                     log.warn("Engine: 命令结果Future已完成，但收到重复的最终结果或错误结果: commandId={}", commandId);
@@ -680,39 +658,6 @@ public final class Engine implements MessageSubmitter, CommandSubmitter { // 实
             return;
         }
 
-        // --- 新增 DataInPath 处理 --- (从 handleInboundDataMessageFromClient 迁移过来)
-        // 如果 Data 消息是来自客户端的 (通过 ClientConnectionExtension 的 Location 识别)
-        if (message.getSourceLocation() != null &&
-                ClientConnectionExtension.NAME.equals(message.getSourceLocation().extensionName())) {
-            // 从 properties 中获取 clientLocation 和 channelId
-            String associatedChannelId = (String) message.getProperty(MessageConstants.PROPERTY_CLIENT_CHANNEL_ID,
-                    String.class);
-            String clientLocationUri = message.getProperty(MessageConstants.PROPERTY_CLIENT_LOCATION_URI, String.class);
-            String clientAppUri = message.getProperty(MessageConstants.PROPERTY_CLIENT_APP_URI, String.class);
-            String clientGraphId = message.getProperty(MessageConstants.PROPERTY_CLIENT_GRAPH_ID, String.class);
-
-            if (associatedChannelId != null && clientLocationUri != null && clientAppUri != null
-                    && clientGraphId != null) {
-                Location clientLoc = new Location(clientAppUri, clientGraphId, ClientConnectionExtension.NAME);
-                // 生成唯一的 dataPathId
-                UUID dataPathId = UUID.randomUUID();
-                // 创建 DataInPath 实例并存储客户端上下文
-                pathManager.createInPath(dataPathId, clientLoc, associatedChannelId);
-
-                // 将 dataPathId 附加到 Data 消息的 properties 中，以便后续 Extension 能够关联
-                message.setProperty(MessageConstants.PROPERTY_DATA_PATH_ID, dataPathId.toString());
-
-                // 移除临时属性，它们已存储在 DataInPath 中
-                message.getProperties().remove(MessageConstants.PROPERTY_CLIENT_CHANNEL_ID);
-                message.getProperties().remove(MessageConstants.PROPERTY_CLIENT_LOCATION_URI);
-                message.getProperties().remove(MessageConstants.PROPERTY_CLIENT_APP_URI);
-                message.getProperties().remove(MessageConstants.PROPERTY_CLIENT_GRAPH_ID);
-
-                // 将 Data 消息的 destinationLocations 设置为 null，让 Engine 根据图连接路由
-                message.setDestinationLocations(null); // 或根据 GraphConfig 默认目的地
-            }
-        }
-
         // 3. 解析消息的实际目的地列表，委托给RouteManager
         log.debug("Engine: 正在解析数据消息目标Extension. GraphId: {}, MessageName: {}", sourceGraphId, message.getName());
         List<Location> targetLocations = routeManager.resolveMessageDestinations(message);
@@ -726,7 +671,7 @@ public final class Engine implements MessageSubmitter, CommandSubmitter { // 实
         // 为每个目标Extension分发消息
         for (Location targetLocation : targetLocations) {
             // 获取目标Extension实例
-            final Extension currentTargetExtension = graphInstance.getExtension(targetLocation.extensionName())
+            Extension currentTargetExtension = graphInstance.getExtension(targetLocation.extensionName())
                     .orElse(null);
             if (currentTargetExtension == null) {
                 log.warn("Engine: 目标Extension未找到: {}. 无法分发数据消息: {}", targetLocation.extensionName(), message.getName());
@@ -734,7 +679,7 @@ public final class Engine implements MessageSubmitter, CommandSubmitter { // 实
             }
 
             // 克隆消息，确保每个Extension接收到独立副本
-            final Message finalMessageToSend;
+            Message finalMessageToSend;
             if (targetLocations.size() > 1) {
                 try {
                     finalMessageToSend = message.clone();
@@ -769,7 +714,7 @@ public final class Engine implements MessageSubmitter, CommandSubmitter { // 实
                         engineId, targetLocation.extensionName(), finalMessageToSend.getName());
             } catch (Exception e) {
                 log.error("Engine: 调用Extension的onData/onAudioFrame/onVideoFrame方法异常. Extension: {}, MessageType: {}",
-                        targetLocation.extensionName(), finalMessageToSend.getType().name(), e);
+                    targetLocation.extensionName(), finalMessageToSend.getType().getValue(), e);
             }
         }
     }

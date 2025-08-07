@@ -1,30 +1,30 @@
 package com.tenframework.core.graph;
 
-import com.tenframework.core.extension.EngineAsyncExtensionEnv; // 修改导入
-import com.tenframework.core.extension.Extension;
-import com.tenframework.core.extension.ExtensionMetrics;
-import com.tenframework.core.engine.MessageSubmitter;
-import com.tenframework.core.engine.CommandSubmitter; // 添加CommandSubmitter导入
-import com.tenframework.core.message.Message;
-import com.tenframework.core.message.Location;
-import lombok.Getter;
-import lombok.extern.slf4j.Slf4j;
-
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.stream.Collectors;
-import com.tenframework.core.message.MessageConstants; // 新增导入
+
+import com.tenframework.core.engine.CommandSubmitter;
+import com.tenframework.core.engine.MessageSubmitter;
+import com.tenframework.core.extension.EngineAsyncExtensionEnv;
+import com.tenframework.core.extension.Extension;
+import com.tenframework.core.extension.ExtensionMetrics;
+import com.tenframework.core.message.Command;
+import com.tenframework.core.message.CommandResult;
+import com.tenframework.core.message.Message;
+import com.tenframework.core.message.MessageConstants;
+import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
 import org.mvel2.MVEL;
 import org.mvel2.integration.VariableResolverFactory;
 import org.mvel2.integration.impl.MapVariableResolverFactory;
-import com.tenframework.core.message.Command; // 新增导入
-import com.tenframework.core.message.CommandResult; // 新增导入
 
-import static java.util.stream.Collectors.*;
+import static java.util.Collections.emptyList;
+import static java.util.Collections.emptyMap;
+import static java.util.stream.Collectors.groupingBy;
+import static java.util.stream.Collectors.toList;
 
 /**
  * 表示一个运行时消息处理图的实例。
@@ -35,7 +35,7 @@ import static java.util.stream.Collectors.*;
 public class GraphInstance {
     private final String graphId;
     private final String appUri;
-    private final MessageSubmitter messageSubmitter; // 替换为MessageSubmitter接口
+    private final MessageSubmitter messageSubmitter;
 
     /**
      * 该图实例下的Extension注册表，使用extensionName作为键
@@ -45,7 +45,7 @@ public class GraphInstance {
     /**
      * 该图实例下的ExtensionContext实例注册表，与Extension一一对应
      */
-    private final Map<String, EngineAsyncExtensionEnv> extensionContextRegistry; // 修改类型声明
+    private final Map<String, EngineAsyncExtensionEnv> asyncExtensionEnvRegistry; // 修改类型声明
 
     /**
      * 该图实例下的ExtensionMetrics实例注册表，与Extension一一对应
@@ -64,15 +64,15 @@ public class GraphInstance {
         this.graphId = graphId;
         this.appUri = appUri;
         this.messageSubmitter = messageSubmitter;
-        this.extensionRegistry = new ConcurrentHashMap<>();
-        this.extensionContextRegistry = new ConcurrentHashMap<>();
-        this.extensionMetricsRegistry = new ConcurrentHashMap<>();
+        extensionRegistry = new ConcurrentHashMap<>();
+        asyncExtensionEnvRegistry = new ConcurrentHashMap<>();
+        extensionMetricsRegistry = new ConcurrentHashMap<>();
 
         // 根据graphConfig构建连接路由表
-        this.connectionRoutes = graphConfig.getConnections() != null ? graphConfig.getConnections().stream()
-                .collect(groupingBy(ConnectionConfig::getSource)) : Collections.emptyMap();
+        connectionRoutes = graphConfig.getConnections() != null ? graphConfig.getConnections().stream()
+            .collect(groupingBy(ConnectionConfig::getSource)) : emptyMap();
 
-        log.info("GraphInstance创建: graphId={}, appUri={}, 连接数={}", graphId, appUri, connectionRoutes.size());
+        log.info("GraphInstance创建: graphId={}, appUri={}, connections={}", graphId, appUri, connectionRoutes.size());
     }
 
     /**
@@ -124,7 +124,7 @@ public class GraphInstance {
 
         // 注册Extension、Context和Metrics
         extensionRegistry.put(extensionName, extension);
-        extensionContextRegistry.put(extensionName, context);
+        asyncExtensionEnvRegistry.put(extensionName, context);
         extensionMetricsRegistry.put(extensionName, metrics);
 
         // 调用Extension生命周期方法
@@ -173,7 +173,7 @@ public class GraphInstance {
                     graphId, extensionName, "onConfigure/onInit/onStart", e);
             // 清理已注册的资源
             extensionRegistry.remove(extensionName);
-            extensionContextRegistry.remove(extensionName);
+            asyncExtensionEnvRegistry.remove(extensionName);
             if (context != null) {
                 context.close();
             }
@@ -197,7 +197,7 @@ public class GraphInstance {
         }
 
         Extension extension = extensionRegistry.remove(extensionName);
-        EngineAsyncExtensionEnv context = extensionContextRegistry.remove(extensionName); // 修改类型
+        EngineAsyncExtensionEnv context = asyncExtensionEnvRegistry.remove(extensionName); // 修改类型
         ExtensionMetrics metrics = extensionMetricsRegistry.remove(extensionName);
 
         if (extension == null) {
@@ -261,7 +261,7 @@ public class GraphInstance {
         }
 
         Extension extension = extensionRegistry.remove(extensionName);
-        EngineAsyncExtensionEnv context = extensionContextRegistry.remove(extensionName); // 修改类型
+        EngineAsyncExtensionEnv context = asyncExtensionEnvRegistry.remove(extensionName); // 修改类型
         ExtensionMetrics metrics = extensionMetricsRegistry.remove(extensionName);
 
         if (extension == null) {
@@ -326,7 +326,7 @@ public class GraphInstance {
      * @return ExtensionContext实例的Optional，如果不存在则为空
      */
     public Optional<EngineAsyncExtensionEnv> getExtensionContext(String extensionName) { // 修改返回类型
-        return Optional.ofNullable(extensionContextRegistry.get(extensionName));
+        return Optional.ofNullable(asyncExtensionEnvRegistry.get(extensionName));
     }
 
     /**
@@ -336,7 +336,7 @@ public class GraphInstance {
         log.info("开始清理GraphInstance下的所有Extension资源: graphId={}, extensionCount={}", graphId, extensionRegistry.size());
 
         // 关闭所有ExtensionContext
-        extensionContextRegistry.values().forEach(context -> {
+        asyncExtensionEnvRegistry.values().forEach(context -> {
             try {
                 context.close();
             } catch (Exception e) {
@@ -346,7 +346,7 @@ public class GraphInstance {
 
         // 清空注册表
         extensionRegistry.clear();
-        extensionContextRegistry.clear();
+        asyncExtensionEnvRegistry.clear();
         extensionMetricsRegistry.clear();
 
         log.info("GraphInstance下所有Extension资源清理完成: graphId={}", graphId);
@@ -361,14 +361,14 @@ public class GraphInstance {
      */
     public List<String> resolveDestinations(Message message) {
         if (message == null || message.getSourceLocation() == null) {
-            return Collections.emptyList();
+            return emptyList();
         }
 
         String sourceExtensionName = message.getSourceLocation().extensionName();
         List<ConnectionConfig> connectionsFromSource = connectionRoutes.get(sourceExtensionName);
 
         if (connectionsFromSource == null || connectionsFromSource.isEmpty()) {
-            return Collections.emptyList(); // 没有定义从该源Extension发出的连接
+            return emptyList();
         }
 
         List<ConnectionConfig> potentialConnections = new java.util.ArrayList<>();
@@ -391,9 +391,9 @@ public class GraphInstance {
         // 1. 筛选出所有潜在的匹配连接
         for (ConnectionConfig connection : connectionsFromSource) {
             // --- 新增：检查连接类型是否与消息类型匹配 ---
-            if (!connection.getType().equals(message.getType().name())) {
+            if (!connection.getType().equals(message.getType().getValue())) {
                 log.debug("连接类型与消息类型不匹配，跳过连接: graphId={}, source={}, connectionType={}, messageType={}",
-                        graphId, sourceExtensionName, connection.getType(), message.getType().name());
+                    graphId, sourceExtensionName, connection.getType(), message.getType().getValue());
                 continue; // 跳过此连接
             }
             // --- 结束新增 ---
@@ -427,7 +427,7 @@ public class GraphInstance {
         }
 
         if (potentialConnections.isEmpty()) {
-            return Collections.emptyList(); // 没有匹配的连接
+            return emptyList(); // 没有匹配的连接
         }
 
         // 2. 根据优先级选择连接 (如果不是广播模式)
@@ -681,7 +681,7 @@ public class GraphInstance {
             } else if (message.getName() != null) {
                 messageId = message.getName();
             } else {
-                messageId = message.getType().name();
+                messageId = message.getType().getValue();
             }
             log.error("评估MVEL条件表达式失败: condition={}, 消息ID={}", condition, messageId, e);
             return false;

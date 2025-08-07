@@ -1,24 +1,18 @@
 package com.tenframework.server.message;
 
+import java.util.List;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.module.SimpleModule;
-import io.netty.buffer.ByteBuf;
+import com.tenframework.core.message.Message;
+import com.tenframework.core.message.MessageUtils;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.MessageToMessageEncoder;
-import org.msgpack.core.MessageBufferPacker;
-import org.msgpack.jackson.dataformat.MessagePackFactory;
-import org.msgpack.core.MessagePack;
-import org.msgpack.core.ExtensionTypeHeader;
-import io.netty.handler.codec.http.websocketx.BinaryWebSocketFrame; // 新增导入
-import com.tenframework.core.message.Message; // 新增导入
-import com.tenframework.core.message.MessageUtils; // 新增导入
-import com.tenframework.server.message.TenMessagePackMapperProvider;
-import com.tenframework.core.message.Data; // 确保导入 Data 类
-
+import io.netty.handler.codec.http.websocketx.BinaryWebSocketFrame;
 import lombok.extern.slf4j.Slf4j;
-
-import java.util.List; // 新增导入
+import org.msgpack.core.ExtensionTypeHeader;
+import org.msgpack.core.MessageBufferPacker;
+import org.msgpack.core.MessagePack;
 
 /**
  * TEN框架消息编码器，将内部Message对象编码为MsgPack格式的字节流
@@ -73,7 +67,7 @@ public class MessageEncoder extends MessageToMessageEncoder<Message> { // 修改
             out.add(new BinaryWebSocketFrame(Unpooled.wrappedBuffer(finalBytes)));
         } catch (Exception e) {
             log.error("消息编码失败: type={}, name={}", msg.getType(), msg.getName(), e);
-            throw e; // 重新抛出异常，由调用方处理
+            throw e;
         }
     }
 }

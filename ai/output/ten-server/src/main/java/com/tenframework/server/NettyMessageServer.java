@@ -4,8 +4,6 @@ import java.util.concurrent.CompletableFuture;
 
 import com.tenframework.core.engine.Engine;
 import com.tenframework.server.handler.ByteBufToWebSocketFrameEncoder;
-import com.tenframework.server.handler.HttpCommandInboundHandler;
-import com.tenframework.server.handler.HttpCommandResultOutboundHandler;
 import com.tenframework.server.handler.HttpRequestLogger;
 import com.tenframework.server.handler.WebSocketFrameToByteBufDecoder;
 import com.tenframework.server.handler.WebSocketMessageFrameHandler;
@@ -51,14 +49,12 @@ public class NettyMessageServer {
                     .channel(NioServerSocketChannel.class)
                     .childHandler(new ChannelInitializer<SocketChannel>() {
                         @Override
-                        protected void initChannel(SocketChannel ch) throws Exception {
+                        protected void initChannel(SocketChannel ch) {
                             ch.pipeline().addLast(new HttpServerCodec());
                             ch.pipeline().addLast(new HttpObjectAggregator(65536));
                             ch.pipeline().addLast("httpRequestLogger", new HttpRequestLogger()); // Add HTTP request
                                                                                                  // logger
                             ch.pipeline().addLast(new WebSocketServerProtocolHandler("/websocket"));
-                            ch.pipeline().addLast(new HttpCommandResultOutboundHandler());
-                            ch.pipeline().addLast(new HttpCommandInboundHandler(engine));
                             ch.pipeline().addLast(new WebSocketFrameToByteBufDecoder());
                             ch.pipeline().addLast(new WebSocketMessageDecoder());
                             ch.pipeline().addLast(new WebSocketMessageFrameHandler(engine));

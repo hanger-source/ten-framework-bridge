@@ -53,7 +53,7 @@ class EchoExtensionTest {
                 CompletableFuture<CommandResult> startGraphFuture = new CompletableFuture<>(); // 为start_graph命令创建Future
                 Command startGraphCommand = Command.builder()
                                 .name("start_graph")
-                                .commandId(java.util.UUID.randomUUID().toString())
+                                .commandId(java.util.UUID.randomUUID().getMostSignificantBits())
                                 .properties(Map.of(
                                                 "graph_id", graphId,
                                                 "app_uri", appUri,
@@ -97,7 +97,7 @@ class EchoExtensionTest {
                 CompletableFuture<CommandResult> stopGraphFuture = new CompletableFuture<>();
                 Command stopGraphCommand = Command.builder()
                                 .name("stop_graph")
-                                .commandId(java.util.UUID.randomUUID().toString())
+                                .commandId(java.util.UUID.randomUUID().getMostSignificantBits())
                                 .properties(Map.of("graph_id", graphId, "app_uri", appUri,
                                                 "__result_future__", stopGraphFuture))
                                 .sourceLocation(new Location("test://client", graphId, "client"))
@@ -121,7 +121,7 @@ class EchoExtensionTest {
                 CompletableFuture<CommandResult> startGraphFuture = new CompletableFuture<>();
                 Command startGraphCommand = Command.builder()
                                 .name("start_graph")
-                                .commandId(java.util.UUID.randomUUID().toString())
+                                .commandId(java.util.UUID.randomUUID().getMostSignificantBits())
                                 .properties(Map.of(
                                                 "graph_id", graphId,
                                                 "app_uri", appUri,
@@ -153,7 +153,7 @@ class EchoExtensionTest {
                 CompletableFuture<CommandResult> stopGraphFuture = new CompletableFuture<>();
                 Command stopGraphCommand = Command.builder()
                                 .name("stop_graph")
-                                .commandId(java.util.UUID.randomUUID().toString())
+                                .commandId(java.util.UUID.randomUUID().getMostSignificantBits())
                                 .properties(Map.of("graph_id", graphId, "app_uri", appUri,
                                                 "__result_future__", stopGraphFuture))
                                 .sourceLocation(new Location("test://client", graphId, "client"))
@@ -177,7 +177,7 @@ class EchoExtensionTest {
                 CompletableFuture<CommandResult> startGraphFuture = new CompletableFuture<>();
                 Command startGraphCommand = Command.builder()
                                 .name("start_graph")
-                                .commandId(java.util.UUID.randomUUID().toString())
+                                .commandId(java.util.UUID.randomUUID().getMostSignificantBits())
                                 .properties(Map.of(
                                                 "graph_id", graphId,
                                                 "app_uri", appUri,
@@ -201,7 +201,7 @@ class EchoExtensionTest {
                 CompletableFuture<CommandResult> stopGraphFuture = new CompletableFuture<>();
                 Command stopGraphCommand = Command.builder()
                                 .name("stop_graph")
-                                .commandId(java.util.UUID.randomUUID().toString())
+                                .commandId(java.util.UUID.randomUUID().getMostSignificantBits())
                                 .properties(Map.of("graph_id", graphId, "app_uri", appUri,
                                                 "__result_future__", stopGraphFuture))
                                 .sourceLocation(new Location("test://client", graphId, "client"))
@@ -225,7 +225,7 @@ class EchoExtensionTest {
                 CompletableFuture<CommandResult> startGraphFuture = new CompletableFuture<>();
                 Command startGraphCommand = Command.builder()
                                 .name("start_graph")
-                                .commandId(java.util.UUID.randomUUID().toString())
+                                .commandId(java.util.UUID.randomUUID().getMostSignificantBits())
                                 .properties(Map.of(
                                                 "graph_id", graphId,
                                                 "app_uri", appUri,
@@ -276,7 +276,7 @@ class EchoExtensionTest {
                 CompletableFuture<CommandResult> startGraphFuture = new CompletableFuture<>();
                 Command startGraphCommand = Command.builder()
                                 .name("start_graph")
-                                .commandId(java.util.UUID.randomUUID().toString())
+                                .commandId(java.util.UUID.randomUUID().getMostSignificantBits())
                                 .properties(Map.of(
                                                 "graph_id", graphId,
                                                 "app_uri", appUri,
@@ -312,7 +312,7 @@ class EchoExtensionTest {
                 CompletableFuture<CommandResult> stopGraphFuture = new CompletableFuture<>();
                 Command stopGraphCommand = Command.builder()
                                 .name("stop_graph")
-                                .commandId(java.util.UUID.randomUUID().toString())
+                                .commandId(java.util.UUID.randomUUID().getMostSignificantBits())
                                 .properties(Map.of("graph_id", graphId, "app_uri", appUri,
                                                 "__result_future__", stopGraphFuture))
                                 .sourceLocation(new Location("test://client", graphId, "client"))
@@ -336,7 +336,7 @@ class EchoExtensionTest {
                 CompletableFuture<CommandResult> startGraphFuture = new CompletableFuture<>();
                 Command startGraphCommand = Command.builder()
                                 .name("start_graph")
-                                .commandId(java.util.UUID.randomUUID().toString())
+                                .commandId(java.util.UUID.randomUUID().getMostSignificantBits())
                                 .properties(Map.of(
                                                 "graph_id", graphId,
                                                 "app_uri", appUri,
@@ -365,21 +365,21 @@ class EchoExtensionTest {
                 var context = contextOpt.get();
 
                 // 测试属性访问
-                assertEquals("test_string", context.getProperty("string.property", String.class).orElse(null));
-                assertEquals(42, context.getProperty("int.property", Integer.class).orElse(null));
-                assertEquals(true, context.getProperty("boolean.property", Boolean.class).orElse(null));
+                assertEquals("test_string", context.getPropertyString("string.property").orElse(null));
+                assertEquals(42, context.getPropertyInt("int.property").orElse(null));
+                assertEquals(true, context.getPropertyBool("boolean.property").orElse(null));
 
                 // 测试不存在的属性
-                assertTrue(context.getProperty("non.existent", String.class).isEmpty());
+                assertTrue(context.isPropertyExist("non.existent")); // 应该使用isPropertyExist来判断是否存在
 
                 // 测试类型不匹配
-                assertTrue(context.getProperty("string.property", Integer.class).isEmpty());
+                assertTrue(context.getPropertyInt("string.property").isEmpty()); // 期望类型为Integer，实际为String，应为空
 
                 // 2. 模拟发送 stop_graph 命令
                 CompletableFuture<CommandResult> stopGraphFuture = new CompletableFuture<>();
                 Command stopGraphCommand = Command.builder()
                                 .name("stop_graph")
-                                .commandId(java.util.UUID.randomUUID().toString())
+                                .commandId(java.util.UUID.randomUUID().getMostSignificantBits())
                                 .properties(Map.of("graph_id", graphId, "app_uri", appUri,
                                                 "__result_future__", stopGraphFuture))
                                 .sourceLocation(new Location("test://client", graphId, "client"))

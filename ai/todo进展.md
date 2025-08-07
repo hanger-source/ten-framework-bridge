@@ -1,17 +1,32 @@
 # 前情提要
 
-最终目的：拆解出 ten-framework中 命令、数据驱动的部分，得到一个引擎能够支持实时对话的核心运行时，将一个非 Java 项目的核心功能迁移为一个结构清晰、语义对等、符合 Java 编程范式的 Java 项目，具备可读性、可维护性、开源质量。
+## 最终目的
 
-关于最终目的：这是一项极其复杂的任务，你只需要记住它不是一蹴而就的
+拆解出 ten-framework中 命令、数据驱动的部分，得到一个引擎能够支持实时对话的核心运行时，将一个非 Java 项目的核心功能迁移为一个结构清晰、语义对等、符合 Java 编程范式的 Java 项目，具备可读性、可维护性、开源质量。
 
-阅读目录：core
-输出目录（最终目的的结果输出）: ai/output
-思考目录: ai/thinking
-关键方案目录: ai/thinking/output
+## 关于最终目的：这是一项极其复杂的任务，你只需要记住它不是一蹴而就的
 
-实施角色：you（ai）
+## 阅读目录：core
 
-建议：
+## 输出目录（最终目的的结果输出）: ai/output
+
+## 思考目录: ai/thinking
+
+## 关键方案目录: ai/thinking/output
+
+## python/c ten 框架目录（如果需要阅读源码，查阅这些目录）
+
+- runtime Python 接口定义：ai_agents/agents/ten_packages/system/ten_runtime_python/interface/ten_runtime
+- ten env api抽象base定义：ai_agents/agents/ten_packages/system/ten_ai_base/interface/ten_ai_base
+- core: 核心目录
+- python runtime内部 c头文件: core/include_internal/ten_runtime/binding/python
+- python runtime内部 实现: core/src/ten_runtime/binding/python
+- 扩展 c: core/include_internal/ten_runtime/extension
+- 扩展 c实现: core/src/ten_runtime/extension
+
+## 实施角色：you（ai）
+
+## 建议：
 
 反复提醒你：每次新阶段的代码实施前和实施后 必须重新阅读温习思考输出目录中的文档，避免思路过于缥
 你需要 阅读 ai/thinking中的 不只是output 检查上一阶段是否符合预期
@@ -21,16 +36,19 @@
 > todo可以随着进程的推荐进行 更新调整删减补充，因此如果发现阶段执行不合预期，及时补充修复todo
 > 审查时 如果没有问题，可以快速跳过，不需要解释 提高效率
 
-代码编写：
+## 代码编写：
+
 使用lombok减少公式代码，以及减少一些样板代码，使用中文注释，使用stream 等特性减少代码复杂性
 写代码优先写接口、类型、方法签名、类型、枚举等 实现应该放在最终所有的组件结构成型后再决定
 
-TODO:
+## TODO:
+
 给你的建议：建议你做一个庞大的繁杂的todo 而不是简单的线性的todo
 你的todo 缺少了对于实际可运行的前瞻性 短期不需要考虑监控部署，开发环境有一个可运行的机制
 没有所谓短中长期方案，只是繁杂todo分多个阶段 每个阶段又要拆分多个子阶段 子阶段有需要嵌套
 
-阶段执行:
+## 阶段执行:
+
 每个阶段执行前必须重新阅读并检索 思考目录、关键方案目录
 每个阶段执行完之前让我纠错 如果我不满意阶段无法通过 例如可能遗漏核心依赖、核心接口、核心类导致后续阶段整体出现偏差
 

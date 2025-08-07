@@ -70,7 +70,7 @@ class MessageSystemTest {
     @DisplayName("测试CommandResult消息功能")
     void testCommandResultMessage() {
         // 创建成功结果
-        CommandResult success = CommandResult.success("cmd-123");
+        CommandResult success = CommandResult.success(java.util.UUID.randomUUID().getMostSignificantBits());
         success.setResultValue("result", "success");
 
         assertTrue(success.isSuccess());
@@ -83,14 +83,16 @@ class MessageSystemTest {
         assertEquals("success", result.get());
 
         // 创建错误结果
-        CommandResult error = CommandResult.error("cmd-456", "Something went wrong", 500);
+        CommandResult error = CommandResult.error(java.util.UUID.randomUUID().getMostSignificantBits(),
+                "Something went wrong", 500);
         assertFalse(error.isSuccess());
         assertTrue(error.isError());
         assertEquals("Something went wrong", error.getError());
         assertEquals(500, error.getErrorCode());
 
         // 创建流式结果
-        CommandResult streaming = CommandResult.streaming("cmd-789", Map.of("chunk", "data"));
+        CommandResult streaming = CommandResult.streaming(java.util.UUID.randomUUID().getMostSignificantBits(),
+                Map.of("chunk", "data"));
         assertFalse(streaming.isFinal());
     }
 

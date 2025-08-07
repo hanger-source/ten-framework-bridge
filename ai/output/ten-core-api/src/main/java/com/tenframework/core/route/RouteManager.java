@@ -2,23 +2,14 @@ package com.tenframework.core.route;
 
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
-import java.util.Optional;
 import java.util.concurrent.ConcurrentMap;
 
-import com.tenframework.core.engine.Engine;
-import com.tenframework.core.engine.MessageSubmitter;
-import com.tenframework.core.extension.Extension;
-import com.tenframework.core.graph.ConnectionConfig;
 import com.tenframework.core.graph.GraphInstance;
-import com.tenframework.core.message.AudioFrame;
-import com.tenframework.core.message.Command;
-import com.tenframework.core.message.CommandResult;
-import com.tenframework.core.message.Data;
 import com.tenframework.core.message.Location;
 import com.tenframework.core.message.Message;
-import com.tenframework.core.message.VideoFrame;
 import lombok.extern.slf4j.Slf4j;
+
+import static java.util.stream.Collectors.toList;
 
 /**
  * 路由管理器，负责消息在Engine内部的图实例之间的路由。
@@ -67,6 +58,6 @@ public class RouteManager {
                         .graphId(currentGraphInstance.getGraphId())
                         .extensionName(extensionName)
                         .build())
-                .collect(java.util.stream.Collectors.toList());
+            .collect(toList());
     }
 }

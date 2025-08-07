@@ -5,9 +5,9 @@ import java.util.Map;
 import java.util.UUID;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.tenframework.core.message.Location;
 import com.tenframework.core.message.Command;
 import com.tenframework.core.message.Data;
+import com.tenframework.core.message.Location;
 import com.tenframework.core.message.MessageType;
 import io.netty.buffer.ByteBuf;
 import io.netty.handler.codec.http.websocketx.BinaryWebSocketFrame;
@@ -40,8 +40,8 @@ public class MessageCodecTest {
         params.put("key3", true);
 
         Command originalCommand = Command.builder()
-                .commandId(UUID.randomUUID().toString())
-                .parentCommandId(UUID.randomUUID().toString())
+            .commandId(UUID.randomUUID().getMostSignificantBits())
+            .parentCommandId(UUID.randomUUID().getMostSignificantBits())
                 .sourceLocation(source)
                 .destinationLocations(java.util.Collections.singletonList(destination))
                 .name("testCommand")
