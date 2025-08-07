@@ -224,15 +224,18 @@ public class WebSocketIntegrationTest {
         handler.handshakeFuture().sync();
 
         Data testData = Data.json(messageName, objectMapper.writeValueAsString(payload));
-        Location clientSourceLocation = Location.builder().appUri("test-client").graphId(graphId)
-                .extensionName(null).build(); // 客户端不再有固定的extensionName，而是通过URI标识
+        // 客户端不再有固定的extensionName，而是通过ClientConnectionExtension代理
+        Location clientSourceLocation = Location.builder()
+                .appUri(MessageConstants.APP_URI_SYSTEM) // 客户端消息的源URI指向系统应用
+                .graphId(null) // 系统图没有业务graphId
+                .extensionName(ClientConnectionExtension.NAME) // 客户端消息的源Extension指向ClientConnectionExtension
+                .build();
         testData.setSourceLocation(clientSourceLocation);
-        testData.setDestinationLocations(
-                Collections.singletonList(Location.builder().appUri("test-app").graphId(graphId)
-                        .extensionName("SimpleEcho").build()));
 
-        // Add the client location URI to the message properties
-        testData.setProperty(MessageConstants.PROPERTY_CLIENT_LOCATION_URI, clientSourceLocation.toString()); // 新增这行
+        // 添加客户端的Channel ID到消息属性中
+        String clientChannelId = ch.id().asShortText(); // 获取客户端Channel ID
+        testData.setProperty(MessageConstants.PROPERTY_CLIENT_LOCATION_URI, clientSourceLocation.getAppUri()); // 使用getAppUri()获取URI
+        testData.setProperty(MessageConstants.PROPERTY_CLIENT_CHANNEL_ID, clientChannelId); // 新增这行
 
         handler.sendMessage(testData).sync();
 

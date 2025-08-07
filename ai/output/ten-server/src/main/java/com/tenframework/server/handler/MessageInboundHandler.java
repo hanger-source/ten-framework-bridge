@@ -1,6 +1,7 @@
 package com.tenframework.server.handler;
 
 import com.tenframework.core.engine.Engine;
+import com.tenframework.core.extension.ClientConnectionExtension;
 import com.tenframework.core.message.Message;
 import com.tenframework.core.message.MessageConstants;
 import io.netty.channel.ChannelHandlerContext;
@@ -17,18 +18,20 @@ public class MessageInboundHandler extends SimpleChannelInboundHandler<Message> 
 
     private static final Logger logger = LoggerFactory.getLogger(MessageInboundHandler.class);
     private final Engine engine;
+    private final ClientConnectionExtension clientConnectionExtension;
 
     // 添加一个本地映射，用于在channelInactive时清理
     private final Map<String, String> clientChannelIdToLocationUriMap = new ConcurrentHashMap<>();
 
     public MessageInboundHandler(Engine engine) {
         this.engine = engine;
+        this.clientConnectionExtension = engine.getClientConnectionExtension();
     }
 
     @Override
     public void channelActive(ChannelHandlerContext ctx) throws Exception {
-        // Channel激活时，注册到Engine的channelMap，以便Engine能够向其发送消息
-        engine.addChannel(ctx.channel()); // 注册Channel
+        // Channel激活时，Engine负责管理Channel，ClientConnectionExtension不需要直接注册Channel
+        engine.addChannel(ctx.channel()); // 注册Channel到Engine
         logger.info("MessageInboundHandler: Channel active, registered channel: {}", ctx.channel().id().asShortText());
         super.channelActive(ctx);
     }
@@ -36,50 +39,34 @@ public class MessageInboundHandler extends SimpleChannelInboundHandler<Message> 
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
         // 当Channel不活跃时，从Engine中移除此Channel
-        engine.removeChannel(ctx.channel().id().asShortText()); // 移除Channel
-        logger.info("MessageInboundHandler: Channel inactive, unregistered channel: {}",
-                ctx.channel().id().asShortText());
+        String channelId = ctx.channel().id().asShortText();
+        engine.removeChannel(channelId); // 移除Channel
+        logger.info("MessageInboundHandler: Channel inactive, unregistered channel: {}", channelId);
 
-        // 同时，从Engine的clientLocationUriToChannelIdMap中移除所有与此Channel ID相关的客户端Location URI
-        // 遍历本地映射，找到与当前Channel ID关联的Location URI并注销
-        List<String> locationsToUnregister = new ArrayList<>();
-        clientChannelIdToLocationUriMap.forEach((channelId, locationUri) -> {
-            if (channelId.equals(ctx.channel().id().asShortText())) {
-                locationsToUnregister.add(locationUri);
-            }
-        });
-        locationsToUnregister.forEach(engine::unregisterClientLocationToChannel);
-        locationsToUnregister.forEach(clientChannelIdToLocationUriMap::remove); // 从本地映射中移除
-        logger.info("MessageInboundHandler: Unregistered {} client locations associated with channel: {}",
-                locationsToUnregister.size(), ctx.channel().id().asShortText());
+        // 通知ClientConnectionExtension移除所有与此Channel ID相关的客户端Location URI
+        clientConnectionExtension.removeClientChannelMapping(channelId); // 通知ClientConnectionExtension清理映射
+        logger.info("MessageInboundHandler: Notified ClientConnectionExtension to remove mappings for channel: {}",
+                channelId);
 
         super.channelInactive(ctx);
     }
 
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, Message msg) throws Exception {
-        // 首次接收到业务消息时，如果它来自客户端且有源Location，则注册客户端Channel
+        // 首次接收到业务消息时，如果它来自客户端且有源Location，则将客户端信息添加到消息属性中
         if (msg.getSourceLocation() != null &&
                 (MessageConstants.APP_URI_TEST_CLIENT.equals(msg.getSourceLocation().appUri()) ||
                         MessageConstants.APP_URI_HTTP_CLIENT.equals(msg.getSourceLocation().appUri()))) {
             String clientLocationUri = msg.getSourceLocation().toString();
-            String serverChannelId = ctx.channel().id().asShortText();
+            String channelId = ctx.channel().id().asShortText();
 
-            // 注册客户端Location URI到服务器端Channel ID的映射
-            engine.registerClientLocationToChannel(clientLocationUri, serverChannelId);
-            // 维护本地映射，用于在channelInactive时清理
-            clientChannelIdToLocationUriMap.put(serverChannelId, clientLocationUri);
+            // 将客户端Location URI和Channel ID添加到消息属性中，以便Engine在回传时使用
+            // ClientConnectionExtension会在处理入站消息时建立这些映射
+            msg.setProperty(MessageConstants.PROPERTY_CLIENT_LOCATION_URI, clientLocationUri);
+            msg.setProperty(MessageConstants.PROPERTY_CLIENT_CHANNEL_ID, channelId);
 
-            logger.info("MessageInboundHandler: Registered client location URI [{}] to server channel ID [{}]",
-                    clientLocationUri, serverChannelId);
-
-            // 将客户端Location URI添加到消息属性中，以便Engine在回传时使用
-            if (msg.getProperties() == null) {
-                msg.setProperties(new java.util.HashMap<>());
-            }
-            // 不再添加 __client_channel_id__，而是添加 __client_location_uri__
-            msg.getProperties().put(MessageConstants.PROPERTY_CLIENT_LOCATION_URI, clientLocationUri);
-            logger.debug("MessageInboundHandler: Added __client_location_uri__ to message: {}", clientLocationUri);
+            logger.debug("MessageInboundHandler: Added client_location_uri [{}] and client_channel_id [{}] to message",
+                    clientLocationUri, channelId);
 
         }
 

@@ -75,7 +75,7 @@
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
-            <version>1.18.30</version>
+            <version>1.18.36</version>
             <scope>provided</scope>
         </dependency>
 
@@ -130,12 +130,19 @@
                     <target>21</target>
                     <release>21</release>
                     <compilerArgs>
-                        <arg>--enable-preview</arg>
+                        <arg>--enable-preview</arg> <!-- 重新启用预览功能 -->
                         <arg>--add-opens</arg>
                         <arg>java.base/jdk.internal.misc=ALL-UNNAMED</arg>
                         <arg>--add-opens</arg>
                         <arg>java.base/java.util.zip=ALL-UNNAMED</arg>
                     </compilerArgs>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <version>1.18.36</version> <!-- 显式指定版本 -->
+                        </path>
+                    </annotationProcessorPaths>
                 </configuration>
             </plugin>
             <plugin>

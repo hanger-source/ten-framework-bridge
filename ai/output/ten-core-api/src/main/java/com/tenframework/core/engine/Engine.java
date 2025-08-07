@@ -407,11 +407,12 @@ public final class Engine implements MessageSubmitter {
      * @param message 命令消息
      */
     private void processCommand(Message message) {
-        if (!(message instanceof Command command)) {
+        if (!(message instanceof Command)) {
             log.warn("收到非Command类型的消息在processCommand中: engineId={}, messageType={}",
                     engineId, message.getType());
             return;
         }
+        Command command = (Command) message; // 显式类型转换
 
         log.debug("处理命令消息: engineId={}, commandName={}, commandId={}",
                 engineId, command.getName(), command.getCommandId());
@@ -1061,21 +1062,24 @@ public final class Engine implements MessageSubmitter {
                         engineId, targetExtensionName, messageToSend.getName());
                 switch (messageToSend.getType()) {
                     case DATA -> {
-                        if (messageToSend instanceof Data data) {
+                        if (messageToSend instanceof Data) {
+                            Data data = (Data) messageToSend; // 显式类型转换
                             extension.onData(data, context);
                             log.debug("Extension处理数据完成: engineId={}, extensionName={}, messageName={}",
                                     engineId, targetExtensionName, data.getName());
                         }
                     }
                     case AUDIO_FRAME -> {
-                        if (messageToSend instanceof AudioFrame audioFrame) {
+                        if (messageToSend instanceof AudioFrame) {
+                            AudioFrame audioFrame = (AudioFrame) messageToSend; // 显式类型转换
                             extension.onAudioFrame(audioFrame, context);
                             log.debug("Extension处理音频帧完成: engineId={}, extensionName={}, messageName={}",
                                     engineId, targetExtensionName, audioFrame.getName());
                         }
                     }
                     case VIDEO_FRAME -> {
-                        if (messageToSend instanceof VideoFrame videoFrame) {
+                        if (messageToSend instanceof VideoFrame) {
+                            VideoFrame videoFrame = (VideoFrame) messageToSend; // 显式类型转换
                             extension.onVideoFrame(videoFrame, context);
                             log.debug("Extension处理视频帧完成: engineId={}, extensionName={}, messageName={}",
                                     engineId, targetExtensionName, videoFrame.getName());
