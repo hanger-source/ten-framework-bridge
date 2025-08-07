@@ -1,19 +1,26 @@
 package com.tenframework.core.extension;
 
-import com.tenframework.core.message.Command;
-import com.tenframework.core.message.CommandResult;
-import com.tenframework.core.message.Data;
-import com.tenframework.core.message.AudioFrame;
-import com.tenframework.core.message.VideoFrame;
-import lombok.extern.slf4j.Slf4j;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.*;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
-import com.tenframework.core.extension.AsyncExtensionEnv;
+
+import com.tenframework.core.message.AudioFrame;
+import com.tenframework.core.message.Command;
+import com.tenframework.core.message.CommandResult;
+import com.tenframework.core.message.Data;
+import com.tenframework.core.message.VideoFrame;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * LLM基础抽象类
@@ -58,44 +65,44 @@ public abstract class AbstractLLMExtension implements Extension {
     }
 
     @Override
-    public void onConfigure(AsyncExtensionEnv context) {
-        this.extensionName = context.getExtensionName();
-        this.metrics.setExtensionContext(context); // 设置 AsyncExtensionEnv 到 metrics 中
+    public void onConfigure(AsyncExtensionEnv env) {
+        this.extensionName = env.getExtensionName();
+        this.metrics.setExtensionContext(env); // 设置 AsyncExtensionEnv 到 metrics 中
         log.info("LLM扩展配置阶段: extensionName={}", extensionName);
-        onLLMConfigure(context);
+        onLLMConfigure(env);
     }
 
     @Override
-    public void onInit(AsyncExtensionEnv context) {
+    public void onInit(AsyncExtensionEnv env) {
         log.info("LLM扩展初始化阶段: extensionName={}", extensionName);
-        onLLMInit(context);
+        onLLMInit(env);
     }
 
     @Override
-    public void onStart(AsyncExtensionEnv context) {
+    public void onStart(AsyncExtensionEnv env) {
         log.info("LLM扩展启动阶段: extensionName={}", extensionName);
         this.isRunning = true;
         this.interrupted.set(false);
 
         // 启动处理队列
-        startProcessingQueue(context);
-        onLLMStart(context);
+        startProcessingQueue(env);
+        onLLMStart(env);
     }
 
     @Override
-    public void onStop(AsyncExtensionEnv context) {
+    public void onStop(AsyncExtensionEnv env) {
         log.info("LLM扩展停止阶段: extensionName={}", extensionName);
         this.isRunning = false;
 
         // 停止处理队列
         stopProcessingQueue();
-        onLLMStop(context);
+        onLLMStop(env);
     }
 
     @Override
-    public void onDeinit(AsyncExtensionEnv context) {
+    public void onDeinit(AsyncExtensionEnv env) {
         log.info("LLM扩展清理阶段: extensionName={}", extensionName);
-        onLLMDeinit(context);
+        onLLMDeinit(env);
 
         // 关闭执行器
         processingExecutor.shutdown();
@@ -110,7 +117,7 @@ public abstract class AbstractLLMExtension implements Extension {
     }
 
     @Override
-    public void onCommand(Command command, AsyncExtensionEnv context) {
+    public void onCommand(Command command, AsyncExtensionEnv env) {
         if (!isRunning) {
             log.warn("LLM扩展未运行，忽略命令: extensionName={}, commandName={}",
                     extensionName, command.getName());
@@ -119,7 +126,7 @@ public abstract class AbstractLLMExtension implements Extension {
 
         long startTime = System.currentTimeMillis();
         try {
-            handleLLMCommand(command, context);
+            handleLLMCommand(command, env);
             metrics.recordCommand();
             long duration = System.currentTimeMillis() - startTime;
             metrics.recordConfigure(duration);
@@ -127,12 +134,12 @@ public abstract class AbstractLLMExtension implements Extension {
             log.error("LLM扩展命令处理异常: extensionName={}, commandName={}",
                     extensionName, command.getName(), e);
             metrics.recordCommandError(e.getMessage());
-            sendErrorResult(command, context, "LLM命令处理异常: " + e.getMessage());
+            sendErrorResult(command, env, "LLM命令处理异常: " + e.getMessage());
         }
     }
 
     @Override
-    public void onData(Data data, AsyncExtensionEnv context) {
+    public void onData(Data data, AsyncExtensionEnv env) {
         if (!isRunning) {
             log.warn("LLM扩展未运行，忽略数据: extensionName={}, dataName={}",
                     extensionName, data.getName());
@@ -142,7 +149,7 @@ public abstract class AbstractLLMExtension implements Extension {
         long startTime = System.currentTimeMillis();
         try {
             // 将数据加入处理队列
-            LLMInputItem inputItem = new LLMInputItem(data, context);
+            LLMInputItem inputItem = new LLMInputItem(data, env);
             boolean queued = processingQueue.offer(inputItem);
             if (!queued) {
                 log.warn("LLM处理队列已满，丢弃数据: extensionName={}, dataName={}",
@@ -161,7 +168,7 @@ public abstract class AbstractLLMExtension implements Extension {
     }
 
     @Override
-    public void onAudioFrame(AudioFrame audioFrame, AsyncExtensionEnv context) {
+    public void onAudioFrame(AudioFrame audioFrame, AsyncExtensionEnv env) {
         if (!isRunning) {
             log.warn("LLM扩展未运行，忽略音频帧: extensionName={}, frameName={}",
                     extensionName, audioFrame.getName());
@@ -175,7 +182,7 @@ public abstract class AbstractLLMExtension implements Extension {
     }
 
     @Override
-    public void onVideoFrame(VideoFrame videoFrame, AsyncExtensionEnv context) {
+    public void onVideoFrame(VideoFrame videoFrame, AsyncExtensionEnv env) {
         if (!isRunning) {
             log.warn("LLM扩展未运行，忽略视频帧: extensionName={}, frameName={}",
                     extensionName, videoFrame.getName());

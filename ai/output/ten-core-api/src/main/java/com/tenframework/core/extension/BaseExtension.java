@@ -1,19 +1,24 @@
 package com.tenframework.core.extension;
 
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+
+import com.tenframework.core.message.AudioFrame;
 import com.tenframework.core.message.Command;
 import com.tenframework.core.message.CommandResult;
 import com.tenframework.core.message.Data;
-import com.tenframework.core.message.AudioFrame;
 import com.tenframework.core.message.VideoFrame;
 import lombok.extern.slf4j.Slf4j;
-
-import java.util.Map;
-import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicInteger;
-import com.tenframework.core.extension.AsyncExtensionEnv;
-import java.util.Optional;
 
 /**
  * 基础Extension抽象类
@@ -88,37 +93,37 @@ public abstract class BaseExtension implements Extension {
     // ==================== 自动生命周期管理 ====================
 
     @Override
-    public void onConfigure(AsyncExtensionEnv context) {
-        this.context = context;
-        this.extensionName = context.getExtensionName();
-        this.appUri = context.getAppUri(); // 从 context 中获取 appUri
-        this.metrics.setExtensionContext(context); // 设置ExtensionContext到metrics中
+    public void onConfigure(AsyncExtensionEnv env) {
+        this.context = env;
+        this.extensionName = env.getExtensionName();
+        this.appUri = env.getAppUri(); // 从 context 中获取 appUri
+        this.metrics.setExtensionContext(env); // 设置ExtensionContext到metrics中
 
         // 自动配置加载
-        loadConfiguration(context);
+        loadConfiguration(env);
 
         // 启动内置组件
         startBuiltInComponents();
 
         // 调用子类配置
-        onExtensionConfigure(context);
+        onExtensionConfigure(env);
 
         log.info("Extension配置完成: extensionName={}", extensionName);
     }
 
     @Override
-    public void onInit(AsyncExtensionEnv context) {
+    public void onInit(AsyncExtensionEnv env) {
         // 自动初始化内置组件
         initializeBuiltInComponents();
 
         // 调用子类初始化
-        onExtensionInit(context);
+        onExtensionInit(env);
 
         log.info("Extension初始化完成: extensionName={}", extensionName);
     }
 
     @Override
-    public void onStart(AsyncExtensionEnv context) {
+    public void onStart(AsyncExtensionEnv env) {
         this.isRunning = true;
         this.isHealthy = true;
 
@@ -129,13 +134,13 @@ public abstract class BaseExtension implements Extension {
         startHealthCheck();
 
         // 调用子类启动
-        onExtensionStart(context);
+        onExtensionStart(env);
 
         log.info("Extension启动完成: extensionName={}", extensionName);
     }
 
     @Override
-    public void onStop(AsyncExtensionEnv context) {
+    public void onStop(AsyncExtensionEnv env) {
         this.isRunning = false;
 
         // 停止任务执行器
@@ -145,15 +150,15 @@ public abstract class BaseExtension implements Extension {
         stopHealthCheck();
 
         // 调用子类停止
-        onExtensionStop(context);
+        onExtensionStop(env);
 
         log.info("Extension停止完成: extensionName={}", extensionName);
     }
 
     @Override
-    public void onDeinit(AsyncExtensionEnv context) {
+    public void onDeinit(AsyncExtensionEnv env) {
         // 调用子类清理
-        onExtensionDeinit(context);
+        onExtensionDeinit(env);
 
         // 自动清理资源
         cleanupResources();
@@ -164,7 +169,7 @@ public abstract class BaseExtension implements Extension {
     // ==================== 自动消息处理 ====================
 
     @Override
-    public void onCommand(Command command, AsyncExtensionEnv context) {
+    public void onCommand(Command command, AsyncExtensionEnv env) {
         if (!isRunning) {
             log.warn("Extension未运行，忽略命令: extensionName={}, commandName={}",
                     extensionName, command.getName());
@@ -179,7 +184,7 @@ public abstract class BaseExtension implements Extension {
         executeWithRetry(() -> {
             long startTime = System.nanoTime(); // 记录开始时间
             try {
-                handleCommand(command, context);
+                handleCommand(command, env);
             } finally {
                 metrics.recordMessageProcessingTime(System.nanoTime() - startTime); // 记录处理时间
             }
@@ -187,7 +192,7 @@ public abstract class BaseExtension implements Extension {
     }
 
     @Override
-    public void onData(Data data, AsyncExtensionEnv context) {
+    public void onData(Data data, AsyncExtensionEnv env) {
         if (!isRunning) {
             log.warn("Extension未运行，忽略数据: extensionName={}, dataName={}",
                     extensionName, data.getName());
@@ -202,7 +207,7 @@ public abstract class BaseExtension implements Extension {
         submitTask(() -> {
             long startTime = System.nanoTime(); // 记录开始时间
             try {
-                handleData(data, context);
+                handleData(data, env);
             } finally {
                 metrics.recordMessageProcessingTime(System.nanoTime() - startTime); // 记录处理时间
             }
@@ -210,7 +215,7 @@ public abstract class BaseExtension implements Extension {
     }
 
     @Override
-    public void onAudioFrame(AudioFrame audioFrame, AsyncExtensionEnv context) {
+    public void onAudioFrame(AudioFrame audioFrame, AsyncExtensionEnv env) {
         if (!isRunning) {
             log.warn("Extension未运行，忽略音频帧: extensionName={}, frameName={}",
                     extensionName, audioFrame.getName());
@@ -225,7 +230,7 @@ public abstract class BaseExtension implements Extension {
         submitTask(() -> {
             long startTime = System.nanoTime(); // 记录开始时间
             try {
-                handleAudioFrame(audioFrame, context);
+                handleAudioFrame(audioFrame, env);
             } finally {
                 metrics.recordMessageProcessingTime(System.nanoTime() - startTime); // 记录处理时间
             }
@@ -233,7 +238,7 @@ public abstract class BaseExtension implements Extension {
     }
 
     @Override
-    public void onVideoFrame(VideoFrame videoFrame, AsyncExtensionEnv context) {
+    public void onVideoFrame(VideoFrame videoFrame, AsyncExtensionEnv env) {
         if (!isRunning) {
             log.warn("Extension未运行，忽略视频帧: extensionName={}, frameName={}",
                     extensionName, videoFrame.getName());
@@ -248,7 +253,7 @@ public abstract class BaseExtension implements Extension {
         submitTask(() -> {
             long startTime = System.nanoTime(); // 记录开始时间
             try {
-                handleVideoFrame(videoFrame, context);
+                handleVideoFrame(videoFrame, env);
             } finally {
                 metrics.recordMessageProcessingTime(System.nanoTime() - startTime); // 记录处理时间
             }

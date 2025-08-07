@@ -1,13 +1,12 @@
 package com.tenframework.core.extension;
 
-import com.tenframework.core.message.Command;
-import com.tenframework.core.message.CommandResult;
-import lombok.extern.slf4j.Slf4j;
-
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import com.tenframework.core.extension.AsyncExtensionEnv;
+
+import com.tenframework.core.message.Command;
+import com.tenframework.core.message.CommandResult;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * 工具提供者基础抽象类
@@ -28,42 +27,42 @@ public abstract class AbstractToolProvider implements Extension {
     protected List<ToolMetadata> availableTools;
 
     @Override
-    public void onConfigure(AsyncExtensionEnv context) {
-        this.extensionName = context.getExtensionName();
+    public void onConfigure(AsyncExtensionEnv env) {
+        this.extensionName = env.getExtensionName();
         // 配置属性将在子类中通过getProperty方法获取
         log.info("工具提供者配置阶段: extensionName={}", extensionName);
-        onToolProviderConfigure(context);
+        onToolProviderConfigure(env);
     }
 
     @Override
-    public void onInit(AsyncExtensionEnv context) {
+    public void onInit(AsyncExtensionEnv env) {
         log.info("工具提供者初始化阶段: extensionName={}", extensionName);
         this.availableTools = initializeTools();
-        onToolProviderInit(context);
+        onToolProviderInit(env);
     }
 
     @Override
-    public void onStart(AsyncExtensionEnv context) {
+    public void onStart(AsyncExtensionEnv env) {
         log.info("工具提供者启动阶段: extensionName={}", extensionName);
         this.isRunning = true;
-        onToolProviderStart(context);
+        onToolProviderStart(env);
     }
 
     @Override
-    public void onStop(AsyncExtensionEnv context) {
+    public void onStop(AsyncExtensionEnv env) {
         log.info("工具提供者停止阶段: extensionName={}", extensionName);
         this.isRunning = false;
-        onToolProviderStop(context);
+        onToolProviderStop(env);
     }
 
     @Override
-    public void onDeinit(AsyncExtensionEnv context) {
+    public void onDeinit(AsyncExtensionEnv env) {
         log.info("工具提供者清理阶段: extensionName={}", extensionName);
-        onToolProviderDeinit(context);
+        onToolProviderDeinit(env);
     }
 
     @Override
-    public void onCommand(Command command, AsyncExtensionEnv context) {
+    public void onCommand(Command command, AsyncExtensionEnv env) {
         if (!isRunning) {
             log.warn("工具提供者未运行，忽略命令: extensionName={}, commandName={}",
                     extensionName, command.getName());
@@ -76,17 +75,17 @@ public abstract class AbstractToolProvider implements Extension {
         // 使用虚拟线程处理工具命令
         CompletableFuture.runAsync(() -> {
             try {
-                handleToolCommand(command, context);
+                handleToolCommand(command, env);
             } catch (Exception e) {
                 log.error("工具提供者命令处理异常: extensionName={}, commandName={}",
                         extensionName, command.getName(), e);
-                sendErrorResult(command, context, "工具执行异常: " + e.getMessage());
+                sendErrorResult(command, env, "工具执行异常: " + e.getMessage());
             }
-        }, context.getVirtualThreadExecutor());
+        }, env.getVirtualThreadExecutor());
     }
 
     @Override
-    public void onData(com.tenframework.core.message.Data data, AsyncExtensionEnv context) {
+    public void onData(com.tenframework.core.message.Data data, AsyncExtensionEnv env) {
         if (!isRunning) {
             log.warn("工具提供者未运行，忽略数据: extensionName={}, dataName={}",
                     extensionName, data.getName());
@@ -98,16 +97,16 @@ public abstract class AbstractToolProvider implements Extension {
         // 异步处理数据
         CompletableFuture.runAsync(() -> {
             try {
-                handleToolData(data, context);
+                handleToolData(data, env);
             } catch (Exception e) {
                 log.error("工具提供者数据处理异常: extensionName={}, dataName={}",
                         extensionName, data.getName(), e);
             }
-        }, context.getVirtualThreadExecutor());
+        }, env.getVirtualThreadExecutor());
     }
 
     @Override
-    public void onAudioFrame(com.tenframework.core.message.AudioFrame audioFrame, AsyncExtensionEnv context) {
+    public void onAudioFrame(com.tenframework.core.message.AudioFrame audioFrame, AsyncExtensionEnv env) {
         if (!isRunning) {
             log.warn("工具提供者未运行，忽略音频帧: extensionName={}, frameName={}",
                     extensionName, audioFrame.getName());
@@ -119,16 +118,16 @@ public abstract class AbstractToolProvider implements Extension {
         // 异步处理音频帧
         CompletableFuture.runAsync(() -> {
             try {
-                handleToolAudioFrame(audioFrame, context);
+                handleToolAudioFrame(audioFrame, env);
             } catch (Exception e) {
                 log.error("工具提供者音频帧处理异常: extensionName={}, frameName={}",
                         extensionName, audioFrame.getName(), e);
             }
-        }, context.getVirtualThreadExecutor());
+        }, env.getVirtualThreadExecutor());
     }
 
     @Override
-    public void onVideoFrame(com.tenframework.core.message.VideoFrame videoFrame, AsyncExtensionEnv context) {
+    public void onVideoFrame(com.tenframework.core.message.VideoFrame videoFrame, AsyncExtensionEnv env) {
         if (!isRunning) {
             log.warn("工具提供者未运行，忽略视频帧: extensionName={}, frameName={}",
                     extensionName, videoFrame.getName());
@@ -140,12 +139,12 @@ public abstract class AbstractToolProvider implements Extension {
         // 异步处理视频帧
         CompletableFuture.runAsync(() -> {
             try {
-                handleToolVideoFrame(videoFrame, context);
+                handleToolVideoFrame(videoFrame, env);
             } catch (Exception e) {
                 log.error("工具提供者视频帧处理异常: extensionName={}, frameName={}",
                         extensionName, videoFrame.getName(), e);
             }
-        }, context.getVirtualThreadExecutor());
+        }, env.getVirtualThreadExecutor());
     }
 
     /**

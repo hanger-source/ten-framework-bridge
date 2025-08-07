@@ -4,7 +4,6 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 
-import com.tenframework.core.extension.AsyncExtensionEnv;
 import com.tenframework.core.message.AudioFrame;
 import com.tenframework.core.message.Command;
 import com.tenframework.core.message.CommandResult;
@@ -43,17 +42,17 @@ public class EchoExtension implements Extension {
     }
 
     @Override
-    public void onConfigure(AsyncExtensionEnv context) {
-        this.extensionName = context.getExtensionName();
+    public void onConfigure(AsyncExtensionEnv env) {
+        this.extensionName = env.getExtensionName();
         log.info("EchoExtension配置阶段: extensionName={}", extensionName);
 
         // 获取配置属性示例
-        context.getPropertyString("echo.prefix") // 替换为getPropertyString
+        env.getPropertyString("echo.prefix") // 替换为getPropertyString
                 .ifPresent(prefix -> log.info("EchoExtension配置前缀: {}", prefix));
     }
 
     @Override
-    public void onInit(AsyncExtensionEnv context) {
+    public void onInit(AsyncExtensionEnv env) {
         log.info("EchoExtension初始化阶段: extensionName={}", extensionName);
 
         // 模拟一些初始化工作
@@ -65,25 +64,25 @@ public class EchoExtension implements Extension {
     }
 
     @Override
-    public void onStart(AsyncExtensionEnv context) {
+    public void onStart(AsyncExtensionEnv env) {
         log.info("EchoExtension启动阶段: extensionName={}", extensionName);
         this.isRunning = true;
     }
 
     @Override
-    public void onStop(AsyncExtensionEnv context) {
+    public void onStop(AsyncExtensionEnv env) {
         log.info("EchoExtension停止阶段: extensionName={}", extensionName);
         this.isRunning = false;
     }
 
     @Override
-    public void onDeinit(AsyncExtensionEnv context) {
+    public void onDeinit(AsyncExtensionEnv env) {
         log.info("EchoExtension清理阶段: extensionName={}", extensionName);
         log.info("EchoExtension统计信息: 处理消息总数={}", messageCount);
     }
 
     @Override
-    public void onCommand(Command command, AsyncExtensionEnv context) {
+    public void onCommand(Command command, AsyncExtensionEnv env) {
         if (!isRunning) {
             log.warn("EchoExtension未运行，忽略命令: extensionName={}, commandName={}",
                     extensionName, command.getName());
@@ -95,7 +94,7 @@ public class EchoExtension implements Extension {
                 extensionName, command.getName(), command.getCommandId());
 
         // 使用虚拟线程处理命令（模拟异步操作）
-        ExecutorService executor = context.getVirtualThreadExecutor();
+        ExecutorService executor = env.getVirtualThreadExecutor();
         CompletableFuture.runAsync(() -> {
             try {
                 // 模拟一些处理时间
@@ -110,7 +109,7 @@ public class EchoExtension implements Extension {
                 result.setName("echo_result");
 
                 // 发送结果
-                context.sendResult(result); // 移除返回值检查
+                env.sendResult(result); // 移除返回值检查
                 log.debug("EchoExtension命令处理完成: extensionName={}, commandName={}",
                         extensionName, command.getName());
 
@@ -126,7 +125,7 @@ public class EchoExtension implements Extension {
     }
 
     @Override
-    public void onData(Data data, AsyncExtensionEnv context) {
+    public void onData(Data data, AsyncExtensionEnv env) {
         if (!isRunning) {
             log.warn("EchoExtension未运行，忽略数据: extensionName={}, dataName={}",
                     extensionName, data.getName());
@@ -138,7 +137,7 @@ public class EchoExtension implements Extension {
                 extensionName, data.getName(), data.getDataBytes().length);
 
         // 使用虚拟线程处理数据
-        ExecutorService executor = context.getVirtualThreadExecutor();
+        ExecutorService executor = env.getVirtualThreadExecutor();
         CompletableFuture.runAsync(() -> {
             try {
                 // 模拟数据处理时间
@@ -157,7 +156,7 @@ public class EchoExtension implements Extension {
                 }
 
                 // 发送回显数据
-                context.sendData(echoData); // 将sendMessage替换为sendData，并移除返回值检查
+                env.sendData(echoData); // 将sendMessage替换为sendData，并移除返回值检查
                 log.debug("EchoExtension数据处理完成: extensionName={}, dataName={}",
                         extensionName, data.getName());
 
@@ -169,7 +168,7 @@ public class EchoExtension implements Extension {
     }
 
     @Override
-    public void onAudioFrame(AudioFrame audioFrame, AsyncExtensionEnv context) {
+    public void onAudioFrame(AudioFrame audioFrame, AsyncExtensionEnv env) {
         if (!isRunning) {
             log.warn("EchoExtension未运行，忽略音频帧: extensionName={}, frameName={}",
                     extensionName, audioFrame.getName());
@@ -186,7 +185,7 @@ public class EchoExtension implements Extension {
     }
 
     @Override
-    public void onVideoFrame(VideoFrame videoFrame, AsyncExtensionEnv context) {
+    public void onVideoFrame(VideoFrame videoFrame, AsyncExtensionEnv env) {
         if (!isRunning) {
             log.warn("EchoExtension未运行，忽略视频帧: extensionName={}, frameName={}",
                     extensionName, videoFrame.getName());

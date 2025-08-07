@@ -31,6 +31,12 @@ public class StartGraphCommandHandler implements InternalCommandHandler {
         Object graphJsonObj = command.getProperties().get("graph_json");
         String associatedChannelId = (String) command.getProperties().get("__channel_id__");
 
+        // 从原始命令中获取客户端上下文属性
+        String clientLocationUriFromCommand = command.getProperty(MessageConstants.PROPERTY_CLIENT_LOCATION_URI,
+                String.class);
+        String clientAppUriFromCommand = command.getProperty(MessageConstants.PROPERTY_CLIENT_APP_URI, String.class);
+        String clientGraphIdFromCommand = command.getProperty(MessageConstants.PROPERTY_CLIENT_GRAPH_ID, String.class);
+
         log.info("Engine收到start_graph命令: graphId={}, appUri={}", graphId, appUri);
 
         CommandResult result;
@@ -74,9 +80,37 @@ public class StartGraphCommandHandler implements InternalCommandHandler {
                                             "Extension class does not implement Extension interface: " + extensionType);
                                 }
                                 Extension extension = (Extension) instance;
-                                newGraphInstance.registerExtension(extensionName, extension, nodeProperties);
-                                log.info("Extension已注册到图: graphId={}, extensionName={}, extensionType={}",
-                                        graphId, extensionName, extensionType);
+
+                                // 如果是ClientConnectionExtension，则注入客户端上下文属性
+                                if (ClientConnectionExtension.class.getName().equals(extensionType)) {
+                                    Map<String, Object> clientConnectionProperties = new java.util.HashMap<>(
+                                            nodeProperties != null ? nodeProperties : Collections.emptyMap());
+                                    if (clientLocationUriFromCommand != null) {
+                                        clientConnectionProperties.put(MessageConstants.PROPERTY_CLIENT_LOCATION_URI,
+                                                clientLocationUriFromCommand);
+                                    }
+                                    if (clientAppUriFromCommand != null) {
+                                        clientConnectionProperties.put(MessageConstants.PROPERTY_CLIENT_APP_URI,
+                                                clientAppUriFromCommand);
+                                    }
+                                    if (clientGraphIdFromCommand != null) {
+                                        clientConnectionProperties.put(MessageConstants.PROPERTY_CLIENT_GRAPH_ID,
+                                                clientGraphIdFromCommand);
+                                    }
+                                    if (associatedChannelId != null) {
+                                        clientConnectionProperties.put(MessageConstants.PROPERTY_CLIENT_CHANNEL_ID,
+                                                associatedChannelId);
+                                    }
+                                    newGraphInstance.registerExtension(extensionName, extension,
+                                            clientConnectionProperties);
+                                    log.info(
+                                            "ClientConnectionExtension已注册到图，并注入客户端上下文: graphId={}, extensionName={}, clientLocationUri={}",
+                                            graphId, extensionName, clientLocationUriFromCommand);
+                                } else {
+                                    newGraphInstance.registerExtension(extensionName, extension, nodeProperties);
+                                    log.info("Extension已注册到图: graphId={}, extensionName={}, extensionType={}",
+                                            graphId, extensionName, extensionType);
+                                }
                             } catch (Exception e) {
                                 log.error("实例化或注册Extension失败: graphId={}, extensionType={}, extensionName={}",
                                         graphId, extensionType, extensionName, e);

@@ -1,12 +1,11 @@
 package com.tenframework.core.extension;
 
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+
 import com.tenframework.core.message.Command;
 import com.tenframework.core.message.CommandResult;
 import lombok.extern.slf4j.Slf4j;
-
-import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-import com.tenframework.core.extension.AsyncExtensionEnv;
 
 /**
  * 控制器/注入器基础抽象类
@@ -26,41 +25,41 @@ public abstract class AbstractController implements Extension {
     protected Map<String, Object> configuration;
 
     @Override
-    public void onConfigure(AsyncExtensionEnv context) {
-        this.extensionName = context.getExtensionName();
+    public void onConfigure(AsyncExtensionEnv env) {
+        this.extensionName = env.getExtensionName();
         // 配置属性将在子类中通过getProperty方法获取
         log.info("控制器配置阶段: extensionName={}", extensionName);
-        onControllerConfigure(context);
+        onControllerConfigure(env);
     }
 
     @Override
-    public void onInit(AsyncExtensionEnv context) {
+    public void onInit(AsyncExtensionEnv env) {
         log.info("控制器初始化阶段: extensionName={}", extensionName);
-        onControllerInit(context);
+        onControllerInit(env);
     }
 
     @Override
-    public void onStart(AsyncExtensionEnv context) {
+    public void onStart(AsyncExtensionEnv env) {
         log.info("控制器启动阶段: extensionName={}", extensionName);
         this.isRunning = true;
-        onControllerStart(context);
+        onControllerStart(env);
     }
 
     @Override
-    public void onStop(AsyncExtensionEnv context) {
+    public void onStop(AsyncExtensionEnv env) {
         log.info("控制器停止阶段: extensionName={}", extensionName);
         this.isRunning = false;
-        onControllerStop(context);
+        onControllerStop(env);
     }
 
     @Override
-    public void onDeinit(AsyncExtensionEnv context) {
+    public void onDeinit(AsyncExtensionEnv env) {
         log.info("控制器清理阶段: extensionName={}", extensionName);
-        onControllerDeinit(context);
+        onControllerDeinit(env);
     }
 
     @Override
-    public void onCommand(Command command, AsyncExtensionEnv context) {
+    public void onCommand(Command command, AsyncExtensionEnv env) {
         if (!isRunning) {
             log.warn("控制器未运行，忽略命令: extensionName={}, commandName={}",
                     extensionName, command.getName());
@@ -73,17 +72,17 @@ public abstract class AbstractController implements Extension {
         // 使用虚拟线程处理控制器命令
         CompletableFuture.runAsync(() -> {
             try {
-                handleControllerCommand(command, context);
+                handleControllerCommand(command, env);
             } catch (Exception e) {
                 log.error("控制器命令处理异常: extensionName={}, commandName={}",
                         extensionName, command.getName(), e);
-                sendErrorResult(command, context, "控制器处理异常: " + e.getMessage());
+                sendErrorResult(command, env, "控制器处理异常: " + e.getMessage());
             }
-        }, context.getVirtualThreadExecutor());
+        }, env.getVirtualThreadExecutor());
     }
 
     @Override
-    public void onData(com.tenframework.core.message.Data data, AsyncExtensionEnv context) {
+    public void onData(com.tenframework.core.message.Data data, AsyncExtensionEnv env) {
         if (!isRunning) {
             log.warn("控制器未运行，忽略数据: extensionName={}, dataName={}",
                     extensionName, data.getName());
@@ -92,11 +91,11 @@ public abstract class AbstractController implements Extension {
 
         log.debug("控制器收到数据: extensionName={}, dataName={}",
                 extensionName, data.getName());
-        handleControllerData(data, context);
+        handleControllerData(data, env);
     }
 
     @Override
-    public void onAudioFrame(com.tenframework.core.message.AudioFrame audioFrame, AsyncExtensionEnv context) {
+    public void onAudioFrame(com.tenframework.core.message.AudioFrame audioFrame, AsyncExtensionEnv env) {
         if (!isRunning) {
             log.warn("控制器未运行，忽略音频帧: extensionName={}, frameName={}",
                     extensionName, audioFrame.getName());
@@ -105,11 +104,11 @@ public abstract class AbstractController implements Extension {
 
         log.debug("控制器收到音频帧: extensionName={}, frameName={}",
                 extensionName, audioFrame.getName());
-        handleControllerAudioFrame(audioFrame, context);
+        handleControllerAudioFrame(audioFrame, env);
     }
 
     @Override
-    public void onVideoFrame(com.tenframework.core.message.VideoFrame videoFrame, AsyncExtensionEnv context) {
+    public void onVideoFrame(com.tenframework.core.message.VideoFrame videoFrame, AsyncExtensionEnv env) {
         if (!isRunning) {
             log.warn("控制器未运行，忽略视频帧: extensionName={}, frameName={}",
                     extensionName, videoFrame.getName());
@@ -118,7 +117,7 @@ public abstract class AbstractController implements Extension {
 
         log.debug("控制器收到视频帧: extensionName={}, frameName={}",
                 extensionName, videoFrame.getName());
-        handleControllerVideoFrame(videoFrame, context);
+        handleControllerVideoFrame(videoFrame, env);
     }
 
     /**

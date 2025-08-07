@@ -1,17 +1,12 @@
 package com.tenframework.core.extension;
 
+import java.util.Map;
+
 import com.tenframework.core.message.AudioFrame;
 import com.tenframework.core.message.Command;
+import com.tenframework.core.message.CommandResult;
 import com.tenframework.core.message.Data;
 import com.tenframework.core.message.VideoFrame;
-import com.tenframework.core.extension.AsyncExtensionEnv;
-import com.tenframework.core.message.CommandResult;
-// import com.tenframework.core.message.StatusCode; // 移除StatusCode导入
-import com.tenframework.core.util.JsonUtils;
-import com.fasterxml.jackson.core.JsonProcessingException;
-
-import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 
 /**
  * 抽象的AI服务中心Extension，提供了AI服务相关Extension的通用逻辑。
@@ -29,57 +24,57 @@ public abstract class AbstractAIServiceHub extends BaseExtension {
     }
 
     @Override
-    public void onConfigure(AsyncExtensionEnv context) {
-        super.onConfigure(context);
-        onAIServiceConfigure(context);
+    public void onConfigure(AsyncExtensionEnv env) {
+        super.onConfigure(env);
+        onAIServiceConfigure(env);
     }
 
     @Override
-    public void onInit(AsyncExtensionEnv context) {
-        super.onInit(context);
-        onAIServiceInit(context);
+    public void onInit(AsyncExtensionEnv env) {
+        super.onInit(env);
+        onAIServiceInit(env);
     }
 
     @Override
-    public void onStart(AsyncExtensionEnv context) {
-        super.onStart(context);
-        onAIServiceStart(context);
+    public void onStart(AsyncExtensionEnv env) {
+        super.onStart(env);
+        onAIServiceStart(env);
     }
 
     @Override
-    public void onStop(AsyncExtensionEnv context) {
-        super.onStop(context);
-        onAIServiceStop(context);
+    public void onStop(AsyncExtensionEnv env) {
+        super.onStop(env);
+        onAIServiceStop(env);
     }
 
     @Override
-    public void onDeinit(AsyncExtensionEnv context) {
-        super.onDeinit(context);
-        onAIServiceDeinit(context);
+    public void onDeinit(AsyncExtensionEnv env) {
+        super.onDeinit(env);
+        onAIServiceDeinit(env);
     }
 
     @Override
-    public void onCommand(Command command, AsyncExtensionEnv context) {
-        super.onCommand(command, context);
-        handleAIServiceCommand(command, context);
+    public void onCommand(Command command, AsyncExtensionEnv env) {
+        super.onCommand(command, env);
+        handleAIServiceCommand(command, env);
     }
 
     @Override
-    public void onData(Data data, AsyncExtensionEnv context) {
-        super.onData(data, context);
-        handleAIServiceData(data, context);
+    public void onData(Data data, AsyncExtensionEnv env) {
+        super.onData(data, env);
+        handleAIServiceData(data, env);
     }
 
     @Override
-    public void onAudioFrame(AudioFrame audioFrame, AsyncExtensionEnv context) {
-        super.onAudioFrame(audioFrame, context);
-        handleAIServiceAudioFrame(audioFrame, context);
+    public void onAudioFrame(AudioFrame audioFrame, AsyncExtensionEnv env) {
+        super.onAudioFrame(audioFrame, env);
+        handleAIServiceAudioFrame(audioFrame, env);
     }
 
     @Override
-    public void onVideoFrame(VideoFrame videoFrame, AsyncExtensionEnv context) {
-        super.onVideoFrame(videoFrame, context);
-        handleAIServiceVideoFrame(videoFrame, context);
+    public void onVideoFrame(VideoFrame videoFrame, AsyncExtensionEnv env) {
+        super.onVideoFrame(videoFrame, env);
+        handleAIServiceVideoFrame(videoFrame, env);
     }
 
     protected abstract void onAIServiceConfigure(AsyncExtensionEnv context);
