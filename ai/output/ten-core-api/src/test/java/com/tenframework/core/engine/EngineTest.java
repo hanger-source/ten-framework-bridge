@@ -1,14 +1,11 @@
 package com.tenframework.core.engine;
 
-import com.tenframework.core.Location;
+import com.tenframework.core.message.Location;
 import com.tenframework.core.message.Command;
-import com.tenframework.core.message.Data;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.AfterEach;
 import static org.junit.jupiter.api.Assertions.*;
-
-import java.util.concurrent.TimeUnit;
 
 /**
  * Engine核心功能测试

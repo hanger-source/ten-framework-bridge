@@ -1,6 +1,6 @@
 package com.tenframework.core.path;
 
-import com.tenframework.core.Location;
+import com.tenframework.core.message.Location;
 import com.tenframework.core.message.CommandResult;
 import lombok.Builder;
 import lombok.Getter;
@@ -10,7 +10,6 @@ import lombok.experimental.SuperBuilder;
 
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.function.Consumer;
 
 /**
  * 命令输出路径
@@ -25,7 +24,7 @@ public class PathOut extends AbstractPath {
     /**
      * 用于处理命令结果的回调函数（Java中的CompletableFuture）
      */
-    private transient CompletableFuture<CommandResult> resultFuture;
+    private transient CompletableFuture<Object> resultFuture;
 
     /**
      * 与此PathOut关联的Netty Channel的唯一ID，用于将结果回传给特定客户端
@@ -50,8 +49,8 @@ public class PathOut extends AbstractPath {
     @Builder.Default
     private ResultReturnPolicy returnPolicy = ResultReturnPolicy.FIRST_ERROR_OR_LAST_OK;
 
-    public PathOut(UUID commandId, UUID parentCommandId, String commandName, Location sourceLocation,
-            Location destinationLocation, CompletableFuture<CommandResult> resultFuture,
+    public PathOut(long commandId, long parentCommandId, String commandName, Location sourceLocation,
+            Location destinationLocation, CompletableFuture<Object> resultFuture,
             ResultReturnPolicy returnPolicy, String channelId) {
         super();
         this.commandId = commandId;

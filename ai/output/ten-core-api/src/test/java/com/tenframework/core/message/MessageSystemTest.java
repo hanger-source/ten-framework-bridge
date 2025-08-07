@@ -1,6 +1,5 @@
 package com.tenframework.core.message;
 
-import com.tenframework.core.Location;
 import io.netty.buffer.Unpooled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;

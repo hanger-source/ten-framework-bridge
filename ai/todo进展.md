@@ -140,3 +140,9 @@ TODO:
 4.5.2 编写 Kubernetes 部署清单（Deployment, Service, Ingress）。
 4.5.3 建立 CI/CD 流水线，实现自动化构建、测试和部署。
 4.5.4 编写运维脚本和工具，简化日常管理。
+2.1.6.1 Engine重构，独立routeManager [in_progress]
+2.1.6.2 Engine重构，独立PatheManager [in_progress]
+2.1.6.3 Engine重构，独立InternalCommnadHandler
+2.1.6.4 完善pathIn、pathOut
+2.1.6.5 ExtensionContext 升级为 AsyncExtensionContext
+✅ 2.1.6.6 深度理解 常量PROPERTY_CLIENT_LOCATION_URI、PROPERTY_CLIENT_CHANNEL_ID、PROPERTY_DATA_PATH_ID、PROPERTY_CLIENT_APP_URI、PROPERTY_CLIENT_GRAPH_ID 常量之间的关系，以及在项目中的具体错误使用

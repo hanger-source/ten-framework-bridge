@@ -8,7 +8,7 @@ import java.util.concurrent.TimeUnit;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.tenframework.core.Location;
+import com.tenframework.core.message.Location;
 import com.tenframework.core.engine.Engine;
 import com.tenframework.core.extension.SimpleEchoExtension;
 import com.tenframework.core.message.Command;

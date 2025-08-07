@@ -5,7 +5,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.tenframework.core.Location;
+import com.tenframework.core.message.Location;
 import com.tenframework.core.message.Command;
 import com.tenframework.core.message.Data;
 import com.tenframework.core.message.MessageType;

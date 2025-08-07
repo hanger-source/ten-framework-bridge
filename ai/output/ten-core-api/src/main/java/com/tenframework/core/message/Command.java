@@ -9,9 +9,8 @@ import lombok.EqualsAndHashCode;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.*;
-import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.List;
-import com.tenframework.core.Location;
 
 /**
  * 命令消息类
@@ -24,10 +23,10 @@ import com.tenframework.core.Location;
 public final class Command extends AbstractMessage {
 
     @JsonProperty("cmd_id")
-    private String commandId;
+    private long commandId;
 
     @JsonProperty("parent_cmd_id")
-    private String parentCommandId;
+    private long parentCommandId;
 
     @JsonProperty("args")
     private Map<String, Object> args;
@@ -48,8 +47,8 @@ public final class Command extends AbstractMessage {
     @Builder
     @JsonCreator
     public Command(
-            @JsonProperty("cmd_id") String commandId,
-            @JsonProperty("parent_cmd_id") String parentCommandId,
+            @JsonProperty("cmd_id") long commandId,
+            @JsonProperty("parent_cmd_id") long parentCommandId,
             @JsonProperty("name") String name,
             @JsonProperty("args") Map<String, Object> args,
             @JsonProperty("source_location") Location sourceLocation,
@@ -63,7 +62,7 @@ public final class Command extends AbstractMessage {
         if (timestamp != null) {
             setTimestamp(timestamp); // 设置从AbstractMessage继承的timestamp
         }
-        this.commandId = commandId != null ? commandId : generateCommandId();
+        this.commandId = commandId != 0 ? commandId : generateCommandId();
         this.parentCommandId = parentCommandId;
         this.args = args != null ? new HashMap<>(args) : new HashMap<>();
     }
@@ -79,10 +78,13 @@ public final class Command extends AbstractMessage {
     }
 
     /**
-     * 生成UUID格式的命令ID
+     * 生成long格式的命令ID，使用UUID的最不重要位或最重要位来确保唯一性，模仿C/Python的uint64_t
      */
-    public static String generateCommandId() {
-        return UUID.randomUUID().toString();
+    public static long generateCommandId() {
+        // 使用UUID的两个64位部分中的一个，或者简单地使用随机长整数
+        // 这里使用getMostSignificantBits()，因为它与Python/C中常见的UUID到long转换方式一致
+        // 也可以考虑 ThreadLocalRandom.current().nextLong() 但UUID提供更强的唯一性
+        return UUID.randomUUID().getMostSignificantBits();
     }
 
     @Override
@@ -162,35 +164,15 @@ public final class Command extends AbstractMessage {
      * 如果命令ID为空，则生成一个新的
      */
     public void generateCommandIdIfEmpty() {
-        if (commandId == null || commandId.trim().isEmpty()) {
+        if (commandId == 0) { // 使用0作为默认无效值
             commandId = generateCommandId();
         }
-    }
-
-    /**
-     * 获取UUID格式的命令ID
-     *
-     * @return UUID格式的命令ID，如果无效则抛出IllegalArgumentException
-     */
-    @JsonIgnore
-    public UUID getCommandIdAsUUID() {
-        return UUID.fromString(commandId);
-    }
-
-    /**
-     * 获取UUID格式的父命令ID
-     *
-     * @return UUID格式的父命令ID，如果为空或无效则返回null或抛出IllegalArgumentException
-     */
-    @JsonIgnore
-    public UUID getParentCommandIdAsUUID() {
-        return parentCommandId != null && !parentCommandId.isEmpty() ? UUID.fromString(parentCommandId) : null;
     }
 
     @Override
     public boolean checkIntegrity() {
         return super.checkIntegrity() &&
-                MessageUtils.validateStringField(commandId, "命令ID") &&
+                commandId != 0 && // 命令ID不能为0
                 MessageUtils.validateStringField(getName(), "命令名称");
     }
 
@@ -201,7 +183,7 @@ public final class Command extends AbstractMessage {
 
     @Override
     public String toDebugString() {
-        return String.format("Command[id=%s, parent=%s, name=%s, args=%d, src=%s, dest=%s]",
+        return String.format("Command[id=%d, parent=%d, name=%s, args=%d, src=%s, dest=%s]",
                 commandId,
                 parentCommandId,
                 getName(),

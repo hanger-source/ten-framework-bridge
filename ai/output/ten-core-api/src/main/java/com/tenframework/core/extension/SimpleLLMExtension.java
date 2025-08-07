@@ -9,9 +9,9 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
-import com.tenframework.core.Location; // 导入Location类
+import com.tenframework.core.message.Location; // 导入Location类
+import com.tenframework.core.extension.AsyncExtensionEnv;
 
 /**
  * 简单的LLM扩展示例
@@ -43,7 +43,7 @@ public class SimpleLLMExtension extends BaseExtension {
     }
 
     @Override
-    protected void handleCommand(Command command, ExtensionContext context) {
+    protected void handleCommand(Command command, AsyncExtensionEnv context) {
         String commandName = command.getName();
 
         switch (commandName) {
@@ -62,7 +62,7 @@ public class SimpleLLMExtension extends BaseExtension {
     }
 
     @Override
-    protected void handleData(Data data, ExtensionContext context) {
+    protected void handleData(Data data, AsyncExtensionEnv context) {
         // LLM扩展处理数据消息（如用户输入）
         String dataName = data.getName();
         String dataContent = new String(data.getDataBytes());
@@ -79,13 +79,13 @@ public class SimpleLLMExtension extends BaseExtension {
     }
 
     @Override
-    protected void handleAudioFrame(AudioFrame audioFrame, ExtensionContext context) {
+    protected void handleAudioFrame(AudioFrame audioFrame, AsyncExtensionEnv context) {
         // LLM扩展通常不直接处理音频帧
         log.debug("LLM收到音频帧: {} ({} bytes)", audioFrame.getName(), audioFrame.getDataSize());
     }
 
     @Override
-    protected void handleVideoFrame(VideoFrame videoFrame, ExtensionContext context) {
+    protected void handleVideoFrame(VideoFrame videoFrame, AsyncExtensionEnv context) {
         // LLM扩展通常不直接处理视频帧
         log.debug("LLM收到视频帧: {} ({}x{})", videoFrame.getName(),
                 videoFrame.getWidth(), videoFrame.getHeight());
@@ -93,7 +93,7 @@ public class SimpleLLMExtension extends BaseExtension {
 
     // 可选：自定义配置
     @Override
-    protected void onExtensionConfigure(ExtensionContext context) {
+    protected void onExtensionConfigure(AsyncExtensionEnv context) {
         // 从配置中读取LLM参数
         apiKey = getConfig("api_key", String.class, "");
         model = getConfig("model", String.class, "gpt-3.5-turbo");
@@ -103,7 +103,7 @@ public class SimpleLLMExtension extends BaseExtension {
 
     // 可选：自定义初始化
     @Override
-    protected void onExtensionInit(ExtensionContext context) {
+    protected void onExtensionInit(AsyncExtensionEnv context) {
         // 初始化LLM扩展
         isInitialized = true;
         log.info("LLM扩展初始化完成");
@@ -111,21 +111,21 @@ public class SimpleLLMExtension extends BaseExtension {
 
     // 可选：自定义启动
     @Override
-    protected void onExtensionStart(ExtensionContext context) {
+    protected void onExtensionStart(AsyncExtensionEnv context) {
         // 启动LLM扩展
         log.info("LLM扩展启动完成");
     }
 
     // 可选：自定义停止
     @Override
-    protected void onExtensionStop(ExtensionContext context) {
+    protected void onExtensionStop(AsyncExtensionEnv context) {
         // 停止LLM扩展
         log.info("LLM扩展停止完成");
     }
 
     // 可选：自定义清理
     @Override
-    protected void onExtensionDeinit(ExtensionContext context) {
+    protected void onExtensionDeinit(AsyncExtensionEnv context) {
         // 清理LLM扩展
         isInitialized = false;
         sessionHistory.clear();
@@ -143,7 +143,7 @@ public class SimpleLLMExtension extends BaseExtension {
     /**
      * 处理工具注册
      */
-    private void handleToolRegister(Command command, ExtensionContext context) {
+    private void handleToolRegister(Command command, AsyncExtensionEnv context) {
         try {
             // 解析工具元数据
             ToolMetadata toolMetadata = parseToolMetadata(command);
@@ -153,35 +153,36 @@ public class SimpleLLMExtension extends BaseExtension {
             CommandResult result = CommandResult.success(command.getCommandId(),
                     Map.of("tool_name", toolMetadata.getName(), "status", "registered"));
             result.setSourceLocation(getCurrentLocation()); // 设置sourceLocation
-            sendResult(result);
+            context.sendResult(result); // 移除 .join()
 
             log.info("工具注册成功: {}", toolMetadata.getName());
         } catch (Exception e) {
             log.error("工具注册失败", e);
             CommandResult errorResult = CommandResult.error(command.getCommandId(), "工具注册失败: " + e.getMessage());
             errorResult.setSourceLocation(getCurrentLocation()); // 设置sourceLocation
-            sendResult(errorResult);
+            context.sendResult(errorResult); // 移除 .join()
         }
     }
 
     /**
      * 处理聊天完成调用
      */
-    private void handleChatCompletionCall(Command command, ExtensionContext context) {
+    private void handleChatCompletionCall(Command command, AsyncExtensionEnv context) {
         try {
             String sessionId = command.getArg("session_id", String.class).orElse("default");
             String userInput = command.getArg("user_input", String.class).orElse("");
+            long commandId = command.getCommandId(); // 获取原始命令ID
 
             // 异步处理聊天完成
             submitTask(() -> {
                 try {
-                    processChatCompletion(sessionId, userInput, context);
+                    processChatCompletion(sessionId, userInput, commandId, context); // 传递commandId
                 } catch (Exception e) {
                     log.error("聊天完成处理失败", e);
-                    CommandResult errorResult = CommandResult.error(command.getCommandId(),
+                    CommandResult errorResult = CommandResult.error(commandId, // 使用传入的commandId
                             "聊天完成处理失败: " + e.getMessage());
                     errorResult.setSourceLocation(getCurrentLocation()); // 设置sourceLocation
-                    sendResult(errorResult);
+                    context.sendResult(errorResult); // 移除 .join()
                 }
             });
 
@@ -189,14 +190,14 @@ public class SimpleLLMExtension extends BaseExtension {
             log.error("聊天完成调用失败", e);
             CommandResult errorResult = CommandResult.error(command.getCommandId(), "聊天完成调用失败: " + e.getMessage());
             errorResult.setSourceLocation(getCurrentLocation()); // 设置sourceLocation
-            sendResult(errorResult);
+            context.sendResult(errorResult); // 移除 .join()
         }
     }
 
     /**
      * 处理刷新命令
      */
-    private void handleFlush(Command command, ExtensionContext context) {
+    private void handleFlush(Command command, AsyncExtensionEnv context) {
         try {
             String sessionId = command.getArg("session_id", String.class).orElse("default");
 
@@ -207,21 +208,21 @@ public class SimpleLLMExtension extends BaseExtension {
             CommandResult result = CommandResult.success(command.getCommandId(),
                     Map.of("session_id", sessionId, "status", "flushed"));
             result.setSourceLocation(getCurrentLocation()); // 设置sourceLocation
-            sendResult(result);
+            context.sendResult(result); // 移除 .join()
 
             log.info("会话刷新成功: {}", sessionId);
         } catch (Exception e) {
             log.error("会话刷新失败", e);
             CommandResult errorResult = CommandResult.error(command.getCommandId(), "会话刷新失败: " + e.getMessage());
             errorResult.setSourceLocation(getCurrentLocation()); // 设置sourceLocation
-            sendResult(errorResult);
+            context.sendResult(errorResult); // 移除 .join()
         }
     }
 
     /**
      * 处理用户输入
      */
-    private void processUserInput(String userInput, ExtensionContext context) {
+    private void processUserInput(String userInput, AsyncExtensionEnv context) {
         // 模拟LLM处理用户输入
         String response = generateResponse(userInput);
 
@@ -233,7 +234,7 @@ public class SimpleLLMExtension extends BaseExtension {
     /**
      * 处理聊天完成
      */
-    private void processChatCompletion(String sessionId, String userInput, ExtensionContext context) {
+    private void processChatCompletion(String sessionId, String userInput, long commandId, AsyncExtensionEnv context) {
         // 更新会话历史
         updateSessionHistory(sessionId, "user", userInput);
 
@@ -248,10 +249,10 @@ public class SimpleLLMExtension extends BaseExtension {
         sendTextOutput("\n", true); // 结束标记
 
         // 发送完成结果
-        CommandResult finalResult = CommandResult.success("chat_completion",
+        CommandResult finalResult = CommandResult.success(commandId, // 使用传入的commandId
                 Map.of("session_id", sessionId, "response", response));
         finalResult.setSourceLocation(getCurrentLocation()); // 设置sourceLocation
-        sendResult(finalResult);
+        context.sendResult(finalResult); // 移除 .join()
     }
 
     /**
@@ -277,7 +278,7 @@ public class SimpleLLMExtension extends BaseExtension {
                 "text", text,
                 "end_of_segment", isFinal));
         textData.setSourceLocation(getCurrentLocation()); // 设置sourceLocation
-        sendMessage(textData);
+        sendMessage(textData); // 移除 .join()
     }
 
     /**

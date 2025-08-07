@@ -9,10 +9,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.AfterEach;
 
 import java.util.Map;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.List;
-import com.tenframework.core.Location;
+import com.tenframework.core.message.Location;
 import com.tenframework.core.graph.GraphInstance;
 import com.tenframework.core.message.CommandResult;
 import java.util.concurrent.CompletableFuture;
@@ -82,7 +81,7 @@ class EchoExtensionTest {
 
                 // 验证Extension已注册
                 assertTrue(graphInstance.getExtension(EXTENSION_NAME).isPresent(), "Extension应该存在");
-                assertTrue(graphInstance.getExtensionContext(EXTENSION_NAME).isPresent(), "ExtensionContext应该存在");
+                assertTrue(graphInstance.getExtensionContext(EXTENSION_NAME).isPresent(), "AsyncExtensionEnv应该存在");
                 assertEquals(1, graphInstance.getExtensionRegistry().size(), "Extension数量应该为1");
 
                 // 注销Extension
@@ -91,7 +90,7 @@ class EchoExtensionTest {
 
                 // 验证Extension已注销
                 assertFalse(graphInstance.getExtension(EXTENSION_NAME).isPresent(), "Extension应该不存在");
-                assertFalse(graphInstance.getExtensionContext(EXTENSION_NAME).isPresent(), "ExtensionContext应该不存在");
+                assertFalse(graphInstance.getExtensionContext(EXTENSION_NAME).isPresent(), "AsyncExtensionEnv应该不存在");
                 assertEquals(0, graphInstance.getExtensionRegistry().size(), "Extension数量应该为0");
 
                 // 2. 模拟发送 stop_graph 命令
@@ -327,8 +326,8 @@ class EchoExtensionTest {
         }
 
         @Test
-        @DisplayName("测试ExtensionContext属性访问")
-        void testExtensionContextPropertyAccess() throws InterruptedException, java.util.concurrent.ExecutionException,
+        @DisplayName("测试AsyncExtensionEnv属性访问")
+        void testAsyncExtensionEnvPropertyAccess() throws InterruptedException, java.util.concurrent.ExecutionException,
                         java.util.concurrent.TimeoutException {
                 String graphId = "test-graph-" + java.util.UUID.randomUUID().toString();
                 String appUri = "test://app";
@@ -361,7 +360,7 @@ class EchoExtensionTest {
                 graphInstance.registerExtension(EXTENSION_NAME, echoExtension, properties); // 注册Extension到GraphInstance
 
                 var contextOpt = graphInstance.getExtensionContext(EXTENSION_NAME);
-                assertTrue(contextOpt.isPresent(), "ExtensionContext应该存在");
+                assertTrue(contextOpt.isPresent(), "AsyncExtensionEnv应该存在");
 
                 var context = contextOpt.get();
 

@@ -1,12 +1,10 @@
 package com.tenframework.core.path;
 
-import com.tenframework.core.Location;
+import com.tenframework.core.message.Location;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.experimental.SuperBuilder;
-
-import java.util.UUID;
 
 /**
  * 命令输入路径
@@ -25,7 +23,7 @@ public class PathIn extends AbstractPath {
 
     // TODO: 可能需要添加其他属性，如结果转换策略等
 
-    public PathIn(UUID commandId, UUID parentCommandId, String commandName, Location sourceLocation,
+    public PathIn(long commandId, long parentCommandId, String commandName, Location sourceLocation,
             Location destinationLocation) {
         super();
         this.commandId = commandId;

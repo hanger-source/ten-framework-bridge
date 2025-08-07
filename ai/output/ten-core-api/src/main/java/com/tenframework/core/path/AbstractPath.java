@@ -1,6 +1,6 @@
 package com.tenframework.core.path;
 
-import com.tenframework.core.Location;
+import com.tenframework.core.message.Location;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.experimental.SuperBuilder;
@@ -21,12 +21,12 @@ public abstract class AbstractPath {
     /**
      * 命令ID，唯一标识一个命令实例
      */
-    protected UUID commandId;
+    protected long commandId;
 
     /**
      * 父命令ID，用于命令链的追溯
      */
-    protected UUID parentCommandId;
+    protected long parentCommandId;
 
     /**
      * 原始命令名称

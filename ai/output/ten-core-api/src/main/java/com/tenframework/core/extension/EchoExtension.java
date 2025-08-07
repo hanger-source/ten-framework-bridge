@@ -4,6 +4,7 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 
+import com.tenframework.core.extension.AsyncExtensionEnv;
 import com.tenframework.core.message.AudioFrame;
 import com.tenframework.core.message.Command;
 import com.tenframework.core.message.CommandResult;
@@ -42,17 +43,17 @@ public class EchoExtension implements Extension {
     }
 
     @Override
-    public void onConfigure(ExtensionContext context) {
+    public void onConfigure(AsyncExtensionEnv context) {
         this.extensionName = context.getExtensionName();
         log.info("EchoExtension配置阶段: extensionName={}", extensionName);
 
         // 获取配置属性示例
-        context.getProperty("echo.prefix", String.class)
+        context.getPropertyString("echo.prefix") // 替换为getPropertyString
                 .ifPresent(prefix -> log.info("EchoExtension配置前缀: {}", prefix));
     }
 
     @Override
-    public void onInit(ExtensionContext context) {
+    public void onInit(AsyncExtensionEnv context) {
         log.info("EchoExtension初始化阶段: extensionName={}", extensionName);
 
         // 模拟一些初始化工作
@@ -64,25 +65,25 @@ public class EchoExtension implements Extension {
     }
 
     @Override
-    public void onStart(ExtensionContext context) {
+    public void onStart(AsyncExtensionEnv context) {
         log.info("EchoExtension启动阶段: extensionName={}", extensionName);
         this.isRunning = true;
     }
 
     @Override
-    public void onStop(ExtensionContext context) {
+    public void onStop(AsyncExtensionEnv context) {
         log.info("EchoExtension停止阶段: extensionName={}", extensionName);
         this.isRunning = false;
     }
 
     @Override
-    public void onDeinit(ExtensionContext context) {
+    public void onDeinit(AsyncExtensionEnv context) {
         log.info("EchoExtension清理阶段: extensionName={}", extensionName);
         log.info("EchoExtension统计信息: 处理消息总数={}", messageCount);
     }
 
     @Override
-    public void onCommand(Command command, ExtensionContext context) {
+    public void onCommand(Command command, AsyncExtensionEnv context) {
         if (!isRunning) {
             log.warn("EchoExtension未运行，忽略命令: extensionName={}, commandName={}",
                     extensionName, command.getName());
@@ -109,14 +110,9 @@ public class EchoExtension implements Extension {
                 result.setName("echo_result");
 
                 // 发送结果
-                boolean success = context.sendResult(result);
-                if (success) {
-                    log.debug("EchoExtension命令处理完成: extensionName={}, commandName={}",
-                            extensionName, command.getName());
-                } else {
-                    log.error("EchoExtension发送命令结果失败: extensionName={}, commandName={}",
-                            extensionName, command.getName());
-                }
+                context.sendResult(result); // 移除返回值检查
+                log.debug("EchoExtension命令处理完成: extensionName={}, commandName={}",
+                        extensionName, command.getName());
 
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
@@ -130,7 +126,7 @@ public class EchoExtension implements Extension {
     }
 
     @Override
-    public void onData(Data data, ExtensionContext context) {
+    public void onData(Data data, AsyncExtensionEnv context) {
         if (!isRunning) {
             log.warn("EchoExtension未运行，忽略数据: extensionName={}, dataName={}",
                     extensionName, data.getName());
@@ -161,14 +157,9 @@ public class EchoExtension implements Extension {
                 }
 
                 // 发送回显数据
-                boolean success = context.sendMessage(echoData);
-                if (success) {
-                    log.debug("EchoExtension数据处理完成: extensionName={}, dataName={}",
-                            extensionName, data.getName());
-                } else {
-                    log.error("EchoExtension发送数据失败: extensionName={}, dataName={}",
-                            extensionName, data.getName());
-                }
+                context.sendData(echoData); // 将sendMessage替换为sendData，并移除返回值检查
+                log.debug("EchoExtension数据处理完成: extensionName={}, dataName={}",
+                        extensionName, data.getName());
 
             } catch (Exception e) {
                 log.error("EchoExtension数据处理异常: extensionName={}, dataName={}",
@@ -178,7 +169,7 @@ public class EchoExtension implements Extension {
     }
 
     @Override
-    public void onAudioFrame(AudioFrame audioFrame, ExtensionContext context) {
+    public void onAudioFrame(AudioFrame audioFrame, AsyncExtensionEnv context) {
         if (!isRunning) {
             log.warn("EchoExtension未运行，忽略音频帧: extensionName={}, frameName={}",
                     extensionName, audioFrame.getName());
@@ -195,7 +186,7 @@ public class EchoExtension implements Extension {
     }
 
     @Override
-    public void onVideoFrame(VideoFrame videoFrame, ExtensionContext context) {
+    public void onVideoFrame(VideoFrame videoFrame, AsyncExtensionEnv context) {
         if (!isRunning) {
             log.warn("EchoExtension未运行，忽略视频帧: extensionName={}, frameName={}",
                     extensionName, videoFrame.getName());

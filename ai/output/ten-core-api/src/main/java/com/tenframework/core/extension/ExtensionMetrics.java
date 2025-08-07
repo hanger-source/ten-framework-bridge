@@ -5,6 +5,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.Gauge;
+import com.tenframework.core.extension.AsyncExtensionEnv;
 
 /**
  * Extension性能指标收集类
@@ -13,7 +14,7 @@ import com.codahale.metrics.Gauge;
 public class ExtensionMetrics {
 
     private final MetricRegistry metricsRegistry;
-    private volatile ExtensionContext context; // 新增字段，用于存储ExtensionContext
+    private volatile AsyncExtensionEnv context; // 新增字段，用于存储ExtensionContext
 
     public ExtensionMetrics(String extensionName) {
         this.extensionName = extensionName;
@@ -61,7 +62,7 @@ public class ExtensionMetrics {
         activeThreadsGauge = metricsRegistry.gauge(MetricRegistry.name(extensionName, "performance", "activeThreads"),
                 () -> () -> {
                     // TODO: 获取实际活跃线程数
-                    // 从ExtensionContext获取实际活跃的虚拟线程任务数
+                    // 从AsyncExtensionEnv获取实际活跃的虚拟线程任务数
                     if (context != null) {
                         return context.getActiveVirtualThreadCount();
                     }
@@ -79,8 +80,8 @@ public class ExtensionMetrics {
                 });
     }
 
-    // 新增setter方法，在ExtensionContext可用时设置
-    public void setExtensionContext(ExtensionContext context) {
+    // 新增setter方法，在AsyncExtensionEnv可用时设置
+    public void setExtensionContext(AsyncExtensionEnv context) {
         this.context = context;
     }
 

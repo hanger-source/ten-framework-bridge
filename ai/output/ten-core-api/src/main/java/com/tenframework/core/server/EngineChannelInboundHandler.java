@@ -23,11 +23,8 @@ public class EngineChannelInboundHandler extends SimpleChannelInboundHandler<Mes
         log.debug("EngineChannelInboundHandler: 收到消息，提交到Engine. messageType={}, messageName={}",
                 msg.getType(), msg.getName());
         // 将消息提交给Engine处理，并带上Channel ID
-        boolean success = engine.submitMessage(msg, ctx.channel().id().asShortText());
-        if (!success) {
-            log.warn("EngineChannelInboundHandler: 提交消息到Engine失败，队列可能已满. messageType={}, messageName={}",
-                    msg.getType(), msg.getName());
-        }
+        engine.submitMessage(msg, ctx.channel().id().asShortText()); // 移除对返回值的捕获
+        // Engine内部的handleQueueFullback方法已经处理了队列满的情况，不需要在这里重复判断
     }
 
     @Override

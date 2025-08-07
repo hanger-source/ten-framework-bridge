@@ -1,8 +1,8 @@
 package com.tenframework.server.handler;
 
-import com.tenframework.core.Location;
+import com.tenframework.core.message.Location;
 import com.tenframework.core.engine.Engine;
-import com.tenframework.core.extension.ClientConnectionExtension;
+import com.tenframework.core.extension.system.ClientConnectionExtension;
 import com.tenframework.core.message.Message;
 import com.tenframework.core.message.MessageConstants;
 import com.tenframework.core.message.MessageType;
@@ -10,21 +10,19 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import lombok.extern.slf4j.Slf4j;
 
-import static com.tenframework.core.message.MessageConstants.PROPERTY_CLIENT_APP_URI;
-import static com.tenframework.core.message.MessageConstants.PROPERTY_CLIENT_GRAPH_ID;
 import static com.tenframework.core.message.MessageConstants.PROPERTY_CLIENT_LOCATION_URI;
 
 @Slf4j
 public class WebSocketMessageFrameHandler extends SimpleChannelInboundHandler<Message> {
 
     private final Engine engine;
+
     public WebSocketMessageFrameHandler(Engine engine) {
         this.engine = engine;
     }
 
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, Message msg) {
-        // 获取当前 Channel 的 ID，并作为临时属性添加到消息中
         String channelId = ctx.channel().id().asShortText();
         String clientLocationUri = msg.getProperty(PROPERTY_CLIENT_LOCATION_URI, String.class); // 获取客户端Location URI
         String clientGraphId = msg.getProperty(PROPERTY_CLIENT_GRAPH_ID, String.class);
@@ -37,9 +35,10 @@ public class WebSocketMessageFrameHandler extends SimpleChannelInboundHandler<Me
                 msg.setProperty(MessageConstants.PROPERTY_CLIENT_CHANNEL_ID, channelId);
                 // client过来的数据 自动根据 clientGraphId 进行路由 默认交给 ClientConnectionExtension
                 msg.setDestinationLocation(new Location(PROPERTY_CLIENT_APP_URI, clientGraphId,
-                    ClientConnectionExtension.NAME));
+                        ClientConnectionExtension.NAME));
             } else {
-                log.warn("WebSocketMessageFrameHandler: 入站消息缺少PROPERTY_CLIENT_GRAPH_ID: messageType={}, channelId={}, clientLocationUri={}",
+                log.warn(
+                        "WebSocketMessageFrameHandler: 入站消息缺少PROPERTY_CLIENT_GRAPH_ID: messageType={}, channelId={}, clientLocationUri={}",
                         msg.getType(), channelId, clientLocationUri);
             }
         } else {
@@ -80,8 +79,6 @@ public class WebSocketMessageFrameHandler extends SimpleChannelInboundHandler<Me
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
         String channelId = ctx.channel().id().asShortText();
         engine.removeChannel(channelId); // 从Engine的Channel管理中移除
-        // clientConnectionExtension.removeClientChannelMapping(channelId); //
-        // 移除此行，由Engine的removeChannel处理
         log.info("WebSocket client disconnected: {}, channelId={}", ctx.channel().remoteAddress(), channelId);
         super.channelInactive(ctx);
     }

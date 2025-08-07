@@ -6,6 +6,7 @@ import com.tenframework.core.message.Data;
 import com.tenframework.core.message.AudioFrame;
 import com.tenframework.core.message.VideoFrame;
 import lombok.extern.slf4j.Slf4j;
+import com.tenframework.core.extension.AsyncExtensionEnv;
 
 import java.util.List;
 import java.util.Map;
@@ -31,7 +32,7 @@ public class SimpleToolExtension extends BaseExtension {
     private static final String TOOL_DESCRIPTION = "A simple calculator tool for basic arithmetic operations";
 
     @Override
-    protected void handleCommand(Command command, ExtensionContext context) {
+    protected void handleCommand(Command command, AsyncExtensionEnv context) {
         String commandName = command.getName();
 
         switch (commandName) {
@@ -47,26 +48,26 @@ public class SimpleToolExtension extends BaseExtension {
     }
 
     @Override
-    protected void handleData(Data data, ExtensionContext context) {
+    protected void handleData(Data data, AsyncExtensionEnv context) {
         // 工具扩展通常不处理数据消息
         log.debug("工具扩展收到数据: {}", data.getName());
     }
 
     @Override
-    protected void handleAudioFrame(AudioFrame audioFrame, ExtensionContext context) {
+    protected void handleAudioFrame(AudioFrame audioFrame, AsyncExtensionEnv context) {
         // 工具扩展通常不处理音频帧
         log.debug("工具扩展收到音频帧: {}", audioFrame.getName());
     }
 
     @Override
-    protected void handleVideoFrame(VideoFrame videoFrame, ExtensionContext context) {
+    protected void handleVideoFrame(VideoFrame videoFrame, AsyncExtensionEnv context) {
         // 工具扩展通常不处理视频帧
         log.debug("工具扩展收到视频帧: {}", videoFrame.getName());
     }
 
     // 可选：自定义配置
     @Override
-    protected void onExtensionConfigure(ExtensionContext context) {
+    protected void onExtensionConfigure(AsyncExtensionEnv context) {
         // 从配置中读取API密钥
         apiKey = getConfig("api_key", String.class, "");
         log.info("工具扩展配置完成: apiKey={}", apiKey.isEmpty() ? "未设置" : "已设置");
@@ -74,7 +75,7 @@ public class SimpleToolExtension extends BaseExtension {
 
     // 可选：自定义初始化
     @Override
-    protected void onExtensionInit(ExtensionContext context) {
+    protected void onExtensionInit(AsyncExtensionEnv context) {
         // 初始化工具扩展
         isInitialized = true;
         log.info("工具扩展初始化完成");
@@ -82,21 +83,21 @@ public class SimpleToolExtension extends BaseExtension {
 
     // 可选：自定义启动
     @Override
-    protected void onExtensionStart(ExtensionContext context) {
+    protected void onExtensionStart(AsyncExtensionEnv context) {
         // 启动工具扩展
         log.info("工具扩展启动完成");
     }
 
     // 可选：自定义停止
     @Override
-    protected void onExtensionStop(ExtensionContext context) {
+    protected void onExtensionStop(AsyncExtensionEnv context) {
         // 停止工具扩展
         log.info("工具扩展停止完成");
     }
 
     // 可选：自定义清理
     @Override
-    protected void onExtensionDeinit(ExtensionContext context) {
+    protected void onExtensionDeinit(AsyncExtensionEnv context) {
         // 清理工具扩展
         isInitialized = false;
         log.info("工具扩展清理完成");
@@ -112,7 +113,7 @@ public class SimpleToolExtension extends BaseExtension {
     /**
      * 处理工具注册
      */
-    private void handleToolRegister(Command command, ExtensionContext context) {
+    private void handleToolRegister(Command command, AsyncExtensionEnv context) {
         try {
             // 创建工具元数据
             ToolMetadata toolMetadata = createToolMetadata();
@@ -120,19 +121,19 @@ public class SimpleToolExtension extends BaseExtension {
             // 发送工具注册结果
             CommandResult result = CommandResult.success(command.getCommandId(),
                     Map.of("tool_name", toolMetadata.getName(), "status", "registered"));
-            sendResult(result);
+            sendResult(result); // 移除.join()
 
             log.info("工具注册成功: {}", toolMetadata.getName());
         } catch (Exception e) {
             log.error("工具注册失败", e);
-            sendResult(CommandResult.error(command.getCommandId(), "工具注册失败: " + e.getMessage()));
+            sendResult(CommandResult.error(command.getCommandId(), "工具注册失败: " + e.getMessage())); // 移除.join()
         }
     }
 
     /**
      * 处理工具调用
      */
-    private void handleToolCall(Command command, ExtensionContext context) {
+    private void handleToolCall(Command command, AsyncExtensionEnv context) {
         try {
             String toolName = command.getArg("name", String.class).orElse("");
             Map<String, Object> args = command.getArgs();
@@ -144,16 +145,16 @@ public class SimpleToolExtension extends BaseExtension {
                 // 发送工具执行结果
                 CommandResult cmdResult = CommandResult.success(command.getCommandId(),
                         Map.of("tool_name", toolName, "result", result));
-                sendResult(cmdResult);
+                sendResult(cmdResult); // 移除.join()
 
                 log.info("工具调用成功: {} = {}", toolName, result);
             } else {
                 log.warn("未知工具: {}", toolName);
-                sendResult(CommandResult.error(command.getCommandId(), "未知工具: " + toolName));
+                sendResult(CommandResult.error(command.getCommandId(), "未知工具: " + toolName)); // 移除.join()
             }
         } catch (Exception e) {
             log.error("工具调用失败", e);
-            sendResult(CommandResult.error(command.getCommandId(), "工具调用失败: " + e.getMessage()));
+            sendResult(CommandResult.error(command.getCommandId(), "工具调用失败: " + e.getMessage())); // 移除.join()
         }
     }
 

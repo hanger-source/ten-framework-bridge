@@ -12,6 +12,8 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicInteger;
+import com.tenframework.core.extension.AsyncExtensionEnv;
+import java.util.Optional;
 
 /**
  * 基础Extension抽象类
@@ -33,8 +35,8 @@ public abstract class BaseExtension implements Extension {
     protected String extensionName;
     protected boolean isRunning = false;
     protected Map<String, Object> configuration;
-    protected ExtensionContext context;
-    protected String appUri; // 新增字段来存储 appUri
+    protected AsyncExtensionEnv context;
+    private String appUri; // 新增字段来存储 appUri
 
     // 内置异步处理能力
     private final ExecutorService asyncExecutor;
@@ -86,7 +88,7 @@ public abstract class BaseExtension implements Extension {
     // ==================== 自动生命周期管理 ====================
 
     @Override
-    public void onConfigure(ExtensionContext context) {
+    public void onConfigure(AsyncExtensionEnv context) {
         this.context = context;
         this.extensionName = context.getExtensionName();
         this.appUri = context.getAppUri(); // 从 context 中获取 appUri
@@ -105,7 +107,7 @@ public abstract class BaseExtension implements Extension {
     }
 
     @Override
-    public void onInit(ExtensionContext context) {
+    public void onInit(AsyncExtensionEnv context) {
         // 自动初始化内置组件
         initializeBuiltInComponents();
 
@@ -116,7 +118,7 @@ public abstract class BaseExtension implements Extension {
     }
 
     @Override
-    public void onStart(ExtensionContext context) {
+    public void onStart(AsyncExtensionEnv context) {
         this.isRunning = true;
         this.isHealthy = true;
 
@@ -133,7 +135,7 @@ public abstract class BaseExtension implements Extension {
     }
 
     @Override
-    public void onStop(ExtensionContext context) {
+    public void onStop(AsyncExtensionEnv context) {
         this.isRunning = false;
 
         // 停止任务执行器
@@ -149,7 +151,7 @@ public abstract class BaseExtension implements Extension {
     }
 
     @Override
-    public void onDeinit(ExtensionContext context) {
+    public void onDeinit(AsyncExtensionEnv context) {
         // 调用子类清理
         onExtensionDeinit(context);
 
@@ -162,7 +164,7 @@ public abstract class BaseExtension implements Extension {
     // ==================== 自动消息处理 ====================
 
     @Override
-    public void onCommand(Command command, ExtensionContext context) {
+    public void onCommand(Command command, AsyncExtensionEnv context) {
         if (!isRunning) {
             log.warn("Extension未运行，忽略命令: extensionName={}, commandName={}",
                     extensionName, command.getName());
@@ -185,7 +187,7 @@ public abstract class BaseExtension implements Extension {
     }
 
     @Override
-    public void onData(Data data, ExtensionContext context) {
+    public void onData(Data data, AsyncExtensionEnv context) {
         if (!isRunning) {
             log.warn("Extension未运行，忽略数据: extensionName={}, dataName={}",
                     extensionName, data.getName());
@@ -208,7 +210,7 @@ public abstract class BaseExtension implements Extension {
     }
 
     @Override
-    public void onAudioFrame(AudioFrame audioFrame, ExtensionContext context) {
+    public void onAudioFrame(AudioFrame audioFrame, AsyncExtensionEnv context) {
         if (!isRunning) {
             log.warn("Extension未运行，忽略音频帧: extensionName={}, frameName={}",
                     extensionName, audioFrame.getName());
@@ -231,7 +233,7 @@ public abstract class BaseExtension implements Extension {
     }
 
     @Override
-    public void onVideoFrame(VideoFrame videoFrame, ExtensionContext context) {
+    public void onVideoFrame(VideoFrame videoFrame, AsyncExtensionEnv context) {
         if (!isRunning) {
             log.warn("Extension未运行，忽略视频帧: extensionName={}, frameName={}",
                     extensionName, videoFrame.getName());
@@ -305,38 +307,57 @@ public abstract class BaseExtension implements Extension {
     /**
      * 发送消息的便捷方法
      */
-    protected boolean sendMessage(Data data) {
+    protected void sendMessage(Data data) {
         if (context != null) {
-            boolean success = context.sendMessage(data);
-            if (success) {
-                metrics.recordResult();
-            }
-            return success;
+            context.sendData(data); // 更改为sendData
+            metrics.recordResult(); // 仍然记录成功发送
         }
-        return false;
     }
 
     /**
      * 发送结果的便捷方法
      */
-    protected boolean sendResult(CommandResult result) {
+    protected void sendResult(CommandResult result) {
         if (context != null) {
-            boolean success = context.sendResult(result);
-            if (success) {
-                metrics.recordResult();
-            }
-            return success;
+            context.sendResult(result);
+            metrics.recordResult(); // 仍然记录成功发送
         }
-        return false;
     }
 
     /**
      * 获取配置的便捷方法
      */
     protected <T> T getConfig(String key, Class<T> type, T defaultValue) {
-        if (context != null) {
-            return context.getProperty(key, type).orElse(defaultValue);
+        if (context == null) {
+            return defaultValue;
         }
+
+        if (type == String.class) {
+            return type.cast(context.getPropertyString(key).orElse((String) defaultValue));
+        } else if (type == Integer.class) {
+            return type.cast(context.getPropertyInt(key).orElse((Integer) defaultValue));
+        } else if (type == Boolean.class) {
+            return type.cast(context.getPropertyBool(key).orElse((Boolean) defaultValue));
+        } else if (type == Float.class) {
+            return type.cast(context.getPropertyFloat(key).orElse((Float) defaultValue));
+        } else if (type == Double.class) { // 尝试将Float转换为Double，如果需要
+            Optional<Float> floatValue = context.getPropertyFloat(key);
+            if (floatValue.isPresent()) {
+                return type.cast((Double) floatValue.get().doubleValue());
+            }
+        } else if (type == Long.class) { // 增加对Long类型的支持
+            Optional<Integer> intValue = context.getPropertyInt(key); // 尝试从int获取，或者需要新的getPropertyLong
+            if (intValue.isPresent()) {
+                return type.cast((Long) intValue.get().longValue());
+            }
+        }
+        // 如果是Map或其他复杂对象，通常它们被存储为JSON字符串。
+        // 这里需要将JSON字符串反序列化为T。
+        // 但由于当前AsyncExtensionEnv没有提供从JSON直接反序列化为Map的方法，
+        // 并且为了避免引入ObjectMapper的直接依赖，暂时只处理基本类型。
+        // 如果需要，可以在这里调用getPropertyToJson并手动反序列化，但这会增加getConfig的复杂性。
+        // 或者，可以由调用者自行获取JSON字符串后反序列化。
+        log.warn("BaseExtension: 不支持的配置类型或配置未找到，返回默认值: key={}, type={}", key, type.getName());
         return defaultValue;
     }
 
@@ -349,7 +370,7 @@ public abstract class BaseExtension implements Extension {
 
     // ==================== 内置组件管理 ====================
 
-    private void loadConfiguration(ExtensionContext context) {
+    private void loadConfiguration(AsyncExtensionEnv context) {
         // 自动加载配置 - 简化实现
         this.configuration = Map.of(); // 简化实现，实际应该从context获取
         log.debug("配置加载完成: extensionName={}, configSize={}",
@@ -448,57 +469,57 @@ public abstract class BaseExtension implements Extension {
     /**
      * 处理命令 - 子类只需实现这个简单方法
      */
-    protected abstract void handleCommand(Command command, ExtensionContext context);
+    protected abstract void handleCommand(Command command, AsyncExtensionEnv context);
 
     /**
      * 处理数据 - 子类只需实现这个简单方法
      */
-    protected abstract void handleData(Data data, ExtensionContext context);
+    protected abstract void handleData(Data data, AsyncExtensionEnv context);
 
     /**
      * 处理音频帧 - 子类只需实现这个简单方法
      */
-    protected abstract void handleAudioFrame(AudioFrame audioFrame, ExtensionContext context);
+    protected abstract void handleAudioFrame(AudioFrame audioFrame, AsyncExtensionEnv context);
 
     /**
      * 处理视频帧 - 子类只需实现这个简单方法
      */
-    protected abstract void handleVideoFrame(VideoFrame videoFrame, ExtensionContext context);
+    protected abstract void handleVideoFrame(VideoFrame videoFrame, AsyncExtensionEnv context);
 
     // ==================== 可选的生命周期方法 ====================
 
     /**
      * Extension配置 - 可选实现
      */
-    protected void onExtensionConfigure(ExtensionContext context) {
+    protected void onExtensionConfigure(AsyncExtensionEnv context) {
         // 默认空实现
     }
 
     /**
      * Extension初始化 - 可选实现
      */
-    protected void onExtensionInit(ExtensionContext context) {
+    protected void onExtensionInit(AsyncExtensionEnv context) {
         // 默认空实现
     }
 
     /**
      * Extension启动 - 可选实现
      */
-    protected void onExtensionStart(ExtensionContext context) {
+    protected void onExtensionStart(AsyncExtensionEnv context) {
         // 默认空实现
     }
 
     /**
      * Extension停止 - 可选实现
      */
-    protected void onExtensionStop(ExtensionContext context) {
+    protected void onExtensionStop(AsyncExtensionEnv context) {
         // 默认空实现
     }
 
     /**
      * Extension清理 - 可选实现
      */
-    protected void onExtensionDeinit(ExtensionContext context) {
+    protected void onExtensionDeinit(AsyncExtensionEnv context) {
         // 默认空实现
     }
 
@@ -553,8 +574,8 @@ public abstract class BaseExtension implements Extension {
 
     /**
      * 获取Extension内部虚拟线程执行器中当前活跃的任务数量。
-     * 这是对 ExtensionContext.getActiveVirtualThreadCount() 的实际实现。
-     * 
+     * 这是对 AsyncExtensionEnv.getActiveVirtualThreadCount() 的实际实现。
+     *
      * @return 活跃的虚拟线程任务数量
      */
     public int getActiveTaskCount() {

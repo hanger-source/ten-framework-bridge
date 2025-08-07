@@ -1,9 +1,11 @@
 package com.tenframework.core.extension;
 
+import com.tenframework.core.extension.AsyncExtensionEnv;
 import com.tenframework.core.message.AudioFrame;
 import com.tenframework.core.message.Command;
 import com.tenframework.core.message.Data;
 import com.tenframework.core.message.VideoFrame;
+import com.tenframework.core.message.CommandResult;
 
 /**
  * TEN框架的Extension接口
@@ -17,7 +19,7 @@ public interface Extension {
      *
      * @param context Extension上下文
      */
-    default void onConfigure(ExtensionContext context) {
+    default void onConfigure(AsyncExtensionEnv context) {
         // 默认实现为空，Extension可以选择性实现
     }
 
@@ -26,7 +28,7 @@ public interface Extension {
      *
      * @param context Extension上下文
      */
-    default void onInit(ExtensionContext context) {
+    default void onInit(AsyncExtensionEnv context) {
         // 默认实现为空，Extension可以选择性实现
     }
 
@@ -35,7 +37,7 @@ public interface Extension {
      *
      * @param context Extension上下文
      */
-    default void onStart(ExtensionContext context) {
+    default void onStart(AsyncExtensionEnv context) {
         // 默认实现为空，Extension可以选择性实现
     }
 
@@ -44,7 +46,7 @@ public interface Extension {
      *
      * @param context Extension上下文
      */
-    default void onStop(ExtensionContext context) {
+    default void onStop(AsyncExtensionEnv context) {
         // 默认实现为空，Extension可以选择性实现
     }
 
@@ -53,7 +55,7 @@ public interface Extension {
      *
      * @param context Extension上下文
      */
-    default void onDeinit(ExtensionContext context) {
+    default void onDeinit(AsyncExtensionEnv context) {
         // 默认实现为空，Extension可以选择性实现
     }
 
@@ -63,7 +65,7 @@ public interface Extension {
      * @param command 命令消息
      * @param context Extension上下文
      */
-    default void onCommand(Command command, ExtensionContext context) {
+    default void onCommand(Command command, AsyncExtensionEnv context) {
         // 默认实现为空，Extension可以选择性实现
     }
 
@@ -73,7 +75,7 @@ public interface Extension {
      * @param data    数据消息
      * @param context Extension上下文
      */
-    default void onData(Data data, ExtensionContext context) {
+    default void onData(Data data, AsyncExtensionEnv context) {
         // 默认实现为空，Extension可以选择性实现
     }
 
@@ -83,7 +85,7 @@ public interface Extension {
      * @param audioFrame 音频帧消息
      * @param context    Extension上下文
      */
-    default void onAudioFrame(AudioFrame audioFrame, ExtensionContext context) {
+    default void onAudioFrame(AudioFrame audioFrame, AsyncExtensionEnv context) {
         // 默认实现为空，Extension可以选择性实现
     }
 
@@ -93,7 +95,17 @@ public interface Extension {
      * @param videoFrame 视频帧消息
      * @param context    Extension上下文
      */
-    default void onVideoFrame(VideoFrame videoFrame, ExtensionContext context) {
+    default void onVideoFrame(VideoFrame videoFrame, AsyncExtensionEnv context) {
+        // 默认实现为空，Extension可以选择性实现
+    }
+
+    /**
+     * 处理命令结果消息。
+     *
+     * @param commandResult 命令结果消息
+     * @param context       Extension上下文
+     */
+    default void onCommandResult(CommandResult commandResult, AsyncExtensionEnv context) {
         // 默认实现为空，Extension可以选择性实现
     }
 

@@ -1,6 +1,5 @@
 package com.tenframework.core.message;
 
-import com.tenframework.core.Location;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.Data;

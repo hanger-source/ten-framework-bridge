@@ -1,10 +1,12 @@
 package com.tenframework.core.graph;
 
-import com.tenframework.core.extension.EngineExtensionContext;
+import com.tenframework.core.extension.EngineAsyncExtensionEnv; // 修改导入
 import com.tenframework.core.extension.Extension;
 import com.tenframework.core.extension.ExtensionMetrics;
 import com.tenframework.core.engine.MessageSubmitter;
-import com.tenframework.core.Location;
+import com.tenframework.core.engine.CommandSubmitter; // 添加CommandSubmitter导入
+import com.tenframework.core.message.Message;
+import com.tenframework.core.message.Location;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
@@ -13,8 +15,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
-import com.tenframework.core.message.Message; // 新增导入
 import com.tenframework.core.message.MessageConstants; // 新增导入
 import org.mvel2.MVEL;
 import org.mvel2.integration.VariableResolverFactory;
@@ -43,7 +45,7 @@ public class GraphInstance {
     /**
      * 该图实例下的ExtensionContext实例注册表，与Extension一一对应
      */
-    private final Map<String, EngineExtensionContext> extensionContextRegistry;
+    private final Map<String, EngineAsyncExtensionEnv> extensionContextRegistry; // 修改类型声明
 
     /**
      * 该图实例下的ExtensionMetrics实例注册表，与Extension一一对应
@@ -54,6 +56,9 @@ public class GraphInstance {
      * 连接路由表，键为源Extension名称，值为该Extension发出的连接列表
      */
     private final Map<String, List<ConnectionConfig>> connectionRoutes;
+
+    // 用于标记图实例是否启动失败
+    private final AtomicBoolean startFailed = new AtomicBoolean(false);
 
     public GraphInstance(String graphId, String appUri, MessageSubmitter messageSubmitter, GraphConfig graphConfig) {
         this.graphId = graphId;
@@ -68,6 +73,22 @@ public class GraphInstance {
                 .collect(groupingBy(ConnectionConfig::getSource)) : Collections.emptyMap();
 
         log.info("GraphInstance创建: graphId={}, appUri={}, 连接数={}", graphId, appUri, connectionRoutes.size());
+    }
+
+    /**
+     * 标记图实例启动失败
+     */
+    public void markStartFailed() {
+        startFailed.set(true);
+    }
+
+    /**
+     * 检查图实例是否启动失败
+     *
+     * @return true如果启动失败
+     */
+    public boolean isStartFailed() {
+        return startFailed.get();
     }
 
     /**
@@ -94,8 +115,9 @@ public class GraphInstance {
         }
 
         // 创建ExtensionContext，关联到当前图实例的graphId和appUri
-        EngineExtensionContext context = new EngineExtensionContext(extensionName, graphId, appUri, messageSubmitter,
-                properties, extension);
+        // 这里的messageSubmitter实际上就是Engine实例，因为Engine实现了MessageSubmitter和CommandSubmitter
+        EngineAsyncExtensionEnv context = new EngineAsyncExtensionEnv(extensionName, graphId, appUri, messageSubmitter, (CommandSubmitter) messageSubmitter,
+                properties); // 修改实例化逻辑
 
         // 创建Extension性能指标
         ExtensionMetrics metrics = new ExtensionMetrics(extensionName);
@@ -175,7 +197,7 @@ public class GraphInstance {
         }
 
         Extension extension = extensionRegistry.remove(extensionName);
-        EngineExtensionContext context = extensionContextRegistry.remove(extensionName);
+        EngineAsyncExtensionEnv context = extensionContextRegistry.remove(extensionName); // 修改类型
         ExtensionMetrics metrics = extensionMetricsRegistry.remove(extensionName);
 
         if (extension == null) {
@@ -239,7 +261,7 @@ public class GraphInstance {
         }
 
         Extension extension = extensionRegistry.remove(extensionName);
-        EngineExtensionContext context = extensionContextRegistry.remove(extensionName);
+        EngineAsyncExtensionEnv context = extensionContextRegistry.remove(extensionName); // 修改类型
         ExtensionMetrics metrics = extensionMetricsRegistry.remove(extensionName);
 
         if (extension == null) {
@@ -303,7 +325,7 @@ public class GraphInstance {
      * @param extensionName Extension名称
      * @return ExtensionContext实例的Optional，如果不存在则为空
      */
-    public Optional<EngineExtensionContext> getExtensionContext(String extensionName) {
+    public Optional<EngineAsyncExtensionEnv> getExtensionContext(String extensionName) { // 修改返回类型
         return Optional.ofNullable(extensionContextRegistry.get(extensionName));
     }
 
@@ -357,9 +379,9 @@ public class GraphInstance {
         if (messagePriority != null) {
             String messageIdentifier = null;
             if (message instanceof Command command) {
-                messageIdentifier = command.getCommandId();
+                messageIdentifier = String.valueOf(command.getCommandId()); // 转换为String
             } else if (message instanceof CommandResult commandResult) {
-                messageIdentifier = commandResult.getCommandId();
+                messageIdentifier = String.valueOf(commandResult.getCommandId()); // 转换为String
             } else {
                 messageIdentifier = message.getName(); // 对于Data、AudioFrame等，使用name或自定义逻辑
             }
@@ -368,6 +390,14 @@ public class GraphInstance {
 
         // 1. 筛选出所有潜在的匹配连接
         for (ConnectionConfig connection : connectionsFromSource) {
+            // --- 新增：检查连接类型是否与消息类型匹配 ---
+            if (!connection.getType().equals(message.getType().name())) {
+                log.debug("连接类型与消息类型不匹配，跳过连接: graphId={}, source={}, connectionType={}, messageType={}",
+                        graphId, sourceExtensionName, connection.getType(), message.getType().name());
+                continue; // 跳过此连接
+            }
+            // --- 结束新增 ---
+
             // 检查消息优先级是否满足连接的最低优先级要求
             if (messagePriority < connection.getMinPriority()) {
                 log.debug(
@@ -417,7 +447,7 @@ public class GraphInstance {
                     .max(java.util.Comparator.comparingInt(ConnectionConfig::getPriority));
 
             // 如果最高优先级的连接有路由规则且规则匹配，则使用规则的targets，否则使用连接的destinations
-            if (highestPriorityConnection.get().getRoutingRules() != null
+            if (highestPriorityConnection.isPresent() && highestPriorityConnection.get().getRoutingRules() != null
                     && !highestPriorityConnection.get().getRoutingRules().isEmpty()) {
                 for (RoutingRule rule : highestPriorityConnection.get().getRoutingRules()) {
                     if (evaluateRoutingRule(message, rule)) {
@@ -429,7 +459,7 @@ public class GraphInstance {
                         break;
                     }
                 }
-            } else {
+            } else if (highestPriorityConnection.isPresent()) {
                 resolvedTargets.addAll(highestPriorityConnection.get().getDestinations());
             }
         }
@@ -647,7 +677,7 @@ public class GraphInstance {
         } catch (Exception e) {
             String messageId = "N/A";
             if (message instanceof Command) {
-                messageId = ((Command) message).getCommandId();
+                messageId = String.valueOf(((Command) message).getCommandId()); // 转换为String
             } else if (message.getName() != null) {
                 messageId = message.getName();
             } else {

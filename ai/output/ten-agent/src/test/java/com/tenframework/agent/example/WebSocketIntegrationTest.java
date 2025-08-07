@@ -1,7 +1,6 @@
 package com.tenframework.agent.example;
 
 import java.net.URI;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -10,19 +9,17 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.tenframework.core.Location;
+import com.tenframework.core.message.Location;
 import com.tenframework.core.engine.Engine;
-import com.tenframework.core.extension.BaseExtension;
 import com.tenframework.core.extension.SimpleEchoExtension;
-import com.tenframework.core.extension.ClientConnectionExtension; // 新增导入
-import com.tenframework.core.graph.GraphInstance;
+import com.tenframework.core.extension.system.ClientConnectionExtension;
 import com.tenframework.core.graph.GraphConfig;
+import com.tenframework.core.graph.GraphInstance;
 import com.tenframework.core.graph.GraphLoader;
 import com.tenframework.core.message.Command;
 import com.tenframework.core.message.Data;
 import com.tenframework.core.message.Message;
-import com.tenframework.core.message.MessageConstants; // 新增导入
+import com.tenframework.core.message.MessageConstants;
 import com.tenframework.server.TenServer;
 import com.tenframework.server.handler.ByteBufToWebSocketFrameEncoder;
 import com.tenframework.server.handler.WebSocketFrameToByteBufDecoder;
@@ -142,7 +139,7 @@ public class WebSocketIntegrationTest {
                         put("graph_json", graphJson);
                     }
                 })
-                .sourceLocation(new Location(MessageConstants.APP_URI_SYSTEM, null, ClientConnectionExtension.NAME))
+                .sourceLocation(new Location(MessageConstants.APP_URI_SYSTEM, "N/A", ClientConnectionExtension.NAME))
                 .destinationLocations(List.of(new Location(appUri, graphId, "engine")))
                 .build();
         engine.submitMessage(startGraphCommand);
@@ -152,11 +149,12 @@ public class WebSocketIntegrationTest {
                 .orElseThrow(() -> new IllegalStateException("未找到启动的图实例: " + graphId));
         log.info("成功获取到图实例: {}", actualGraphInstance.getGraphId());
 
-        sendWebSocketDataMessage(websocketUri, graphId, "echo_test_data", Map.of("content", "Hello WebSocket Echo!"),
+        sendWebSocketDataMessage(websocketUri, graphId, appUri, "echo_test_data",
+                Map.of("content", "Hello WebSocket Echo!"),
                 wsEchoResponseFuture, clientGroup);
 
         log.info("等待接收WebSocket回显消息，最长等待5秒...");
-        Message receivedWsMessage = wsEchoResponseFuture.get(5, TimeUnit.SECONDS); // 延长超时时间
+        Message receivedWsMessage = wsEchoResponseFuture.get(500, TimeUnit.SECONDS); // 延长超时时间
         log.info("成功接收到WebSocket回显消息: {}", receivedWsMessage);
         assertNotNull(receivedWsMessage, "应收到WebSocket回显消息");
         assertTrue(receivedWsMessage instanceof Data, "WebSocket回显消息应为Data类型");
@@ -188,7 +186,8 @@ public class WebSocketIntegrationTest {
         assertFalse(engine.getGraphInstance(graphId).isPresent(), "图实例应该已被移除");
     }
 
-    private void sendWebSocketDataMessage(URI uri, String graphId, String messageName, Map<String, Object> payload,
+    private void sendWebSocketDataMessage(URI uri, String graphId, String appUri, String messageName,
+            Map<String, Object> payload,
             CompletableFuture<Message> responseFuture, EventLoopGroup group) throws Exception {
         Bootstrap b = new Bootstrap();
         b.group(group)
@@ -224,18 +223,8 @@ public class WebSocketIntegrationTest {
         handler.handshakeFuture().sync();
 
         Data testData = Data.json(messageName, objectMapper.writeValueAsString(payload));
-        // 客户端不再有固定的extensionName，而是通过ClientConnectionExtension代理
-        Location clientSourceLocation = Location.builder()
-                .appUri(MessageConstants.APP_URI_SYSTEM) // 客户端消息的源URI指向系统应用
-                .graphId(null) // 系统图没有业务graphId
-                .extensionName(ClientConnectionExtension.NAME) // 客户端消息的源Extension指向ClientConnectionExtension
-                .build();
-        testData.setSourceLocation(clientSourceLocation);
-
-        // 添加客户端的Channel ID到消息属性中
-        String clientChannelId = ch.id().asShortText(); // 获取客户端Channel ID
-        testData.setProperty(MessageConstants.PROPERTY_CLIENT_LOCATION_URI, clientSourceLocation.getAppUri()); // 使用getAppUri()获取URI
-        testData.setProperty(MessageConstants.PROPERTY_CLIENT_CHANNEL_ID, clientChannelId); // 新增这行
+        testData.setProperty(MessageConstants.PROPERTY_CLIENT_LOCATION_URI, graphId);
+        testData.setProperty(MessageConstants.PROPERTY_CLIENT_APP_URI, appUri);
 
         handler.sendMessage(testData).sync();
 

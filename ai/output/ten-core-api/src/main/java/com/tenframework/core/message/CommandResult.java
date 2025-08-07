@@ -21,7 +21,7 @@ import java.util.function.Predicate;
 public final class CommandResult extends AbstractMessage {
 
     @JsonProperty("cmd_id")
-    private String commandId;
+    private long commandId;
 
     @JsonProperty("result")
     private Map<String, Object> result = new HashMap<>();
@@ -45,7 +45,7 @@ public final class CommandResult extends AbstractMessage {
     /**
      * 创建成功结果的构造函数
      */
-    public CommandResult(String commandId) {
+    public CommandResult(long commandId) {
         this();
         this.commandId = commandId;
     }
@@ -53,7 +53,7 @@ public final class CommandResult extends AbstractMessage {
     /**
      * 创建成功结果的构造函数，带结果数据
      */
-    public CommandResult(String commandId, Map<String, Object> result) {
+    public CommandResult(long commandId, Map<String, Object> result) {
         this(commandId);
         if (result != null) {
             this.result.putAll(result);
@@ -63,7 +63,7 @@ public final class CommandResult extends AbstractMessage {
     /**
      * 创建错误结果的构造函数
      */
-    public CommandResult(String commandId, String error, Integer errorCode) {
+    public CommandResult(long commandId, String error, Integer errorCode) {
         this(commandId);
         this.error = error;
         this.errorCode = errorCode;
@@ -74,7 +74,7 @@ public final class CommandResult extends AbstractMessage {
      */
     @JsonCreator
     public CommandResult(
-            @JsonProperty("cmd_id") String commandId,
+            @JsonProperty("cmd_id") long commandId,
             @JsonProperty("result") Map<String, Object> result,
             @JsonProperty("is_final") Boolean isFinal,
             @JsonProperty("error") String error,
@@ -193,35 +193,35 @@ public final class CommandResult extends AbstractMessage {
     /**
      * 创建成功结果的静态工厂方法
      */
-    public static CommandResult success(String commandId) {
+    public static CommandResult success(long commandId) {
         return new CommandResult(commandId);
     }
 
     /**
      * 创建成功结果的静态工厂方法，带结果数据
      */
-    public static CommandResult success(String commandId, Map<String, Object> result) {
+    public static CommandResult success(long commandId, Map<String, Object> result) {
         return new CommandResult(commandId, result);
     }
 
     /**
      * 创建错误结果的静态工厂方法
      */
-    public static CommandResult error(String commandId, String error) {
+    public static CommandResult error(long commandId, String error) {
         return new CommandResult(commandId, error, null);
     }
 
     /**
      * 创建错误结果的静态工厂方法，带错误代码
      */
-    public static CommandResult error(String commandId, String error, Integer errorCode) {
+    public static CommandResult error(long commandId, String error, Integer errorCode) {
         return new CommandResult(commandId, error, errorCode);
     }
 
     /**
      * 创建流式中间结果
      */
-    public static CommandResult streaming(String commandId, Map<String, Object> result) {
+    public static CommandResult streaming(long commandId, Map<String, Object> result) {
         CommandResult cmdResult = new CommandResult(commandId, result);
         cmdResult.setFinal(false);
         return cmdResult;
@@ -230,7 +230,7 @@ public final class CommandResult extends AbstractMessage {
     @Override
     public boolean checkIntegrity() {
         return super.checkIntegrity() &&
-                MessageUtils.validateStringField(commandId, "命令结果的命令ID");
+                commandId != 0; // 命令结果的命令ID不能为0
     }
 
     @Override
@@ -240,7 +240,7 @@ public final class CommandResult extends AbstractMessage {
 
     @Override
     public String toDebugString() {
-        return String.format("CommandResult[cmdId=%s, success=%s, final=%s, results=%d, error=%s]",
+        return String.format("CommandResult[cmdId=%d, success=%s, final=%s, results=%d, error=%s]",
                 commandId,
                 isSuccess(),
                 isFinal,

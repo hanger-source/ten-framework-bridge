@@ -1,6 +1,6 @@
 package com.tenframework.server.message;
 
-import com.tenframework.core.Location;
+import com.tenframework.core.message.Location;
 import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.handler.codec.http.websocketx.BinaryWebSocketFrame;
 import org.junit.jupiter.api.BeforeEach;
@@ -10,18 +10,13 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.Random;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.tenframework.core.message.Command;
 import com.tenframework.core.message.CommandResult;
 import com.tenframework.core.message.Data;
-import com.tenframework.core.message.AudioFrame;
-import com.tenframework.core.message.VideoFrame;
 import com.tenframework.core.message.Message;
-import com.tenframework.core.message.MessageUtils;
 
 /**
  * MsgPack编解码器单元测试

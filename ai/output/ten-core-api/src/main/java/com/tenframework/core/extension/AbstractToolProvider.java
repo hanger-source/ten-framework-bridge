@@ -7,11 +7,12 @@ import lombok.extern.slf4j.Slf4j;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import com.tenframework.core.extension.AsyncExtensionEnv;
 
 /**
  * 工具提供者基础抽象类
  * 用于提供各种工具服务，如文件操作、网络请求等
- * 
+ *
  * 功能：
  * 1. 管理工具元数据
  * 2. 提供工具执行接口
@@ -27,7 +28,7 @@ public abstract class AbstractToolProvider implements Extension {
     protected List<ToolMetadata> availableTools;
 
     @Override
-    public void onConfigure(ExtensionContext context) {
+    public void onConfigure(AsyncExtensionEnv context) {
         this.extensionName = context.getExtensionName();
         // 配置属性将在子类中通过getProperty方法获取
         log.info("工具提供者配置阶段: extensionName={}", extensionName);
@@ -35,41 +36,41 @@ public abstract class AbstractToolProvider implements Extension {
     }
 
     @Override
-    public void onInit(ExtensionContext context) {
+    public void onInit(AsyncExtensionEnv context) {
         log.info("工具提供者初始化阶段: extensionName={}", extensionName);
         this.availableTools = initializeTools();
         onToolProviderInit(context);
     }
 
     @Override
-    public void onStart(ExtensionContext context) {
+    public void onStart(AsyncExtensionEnv context) {
         log.info("工具提供者启动阶段: extensionName={}", extensionName);
         this.isRunning = true;
         onToolProviderStart(context);
     }
 
     @Override
-    public void onStop(ExtensionContext context) {
+    public void onStop(AsyncExtensionEnv context) {
         log.info("工具提供者停止阶段: extensionName={}", extensionName);
         this.isRunning = false;
         onToolProviderStop(context);
     }
 
     @Override
-    public void onDeinit(ExtensionContext context) {
+    public void onDeinit(AsyncExtensionEnv context) {
         log.info("工具提供者清理阶段: extensionName={}", extensionName);
         onToolProviderDeinit(context);
     }
 
     @Override
-    public void onCommand(Command command, ExtensionContext context) {
+    public void onCommand(Command command, AsyncExtensionEnv context) {
         if (!isRunning) {
-            log.warn("工具提供者未运行，忽略命令: extensionName={}, commandName={}", 
+            log.warn("工具提供者未运行，忽略命令: extensionName={}, commandName={}",
                     extensionName, command.getName());
             return;
         }
 
-        log.debug("工具提供者收到命令: extensionName={}, commandName={}", 
+        log.debug("工具提供者收到命令: extensionName={}, commandName={}",
                 extensionName, command.getName());
 
         // 使用虚拟线程处理工具命令
@@ -77,7 +78,7 @@ public abstract class AbstractToolProvider implements Extension {
             try {
                 handleToolCommand(command, context);
             } catch (Exception e) {
-                log.error("工具提供者命令处理异常: extensionName={}, commandName={}", 
+                log.error("工具提供者命令处理异常: extensionName={}, commandName={}",
                         extensionName, command.getName(), e);
                 sendErrorResult(command, context, "工具执行异常: " + e.getMessage());
             }
@@ -85,68 +86,92 @@ public abstract class AbstractToolProvider implements Extension {
     }
 
     @Override
-    public void onData(com.tenframework.core.message.Data data, ExtensionContext context) {
+    public void onData(com.tenframework.core.message.Data data, AsyncExtensionEnv context) {
         if (!isRunning) {
-            log.warn("工具提供者未运行，忽略数据: extensionName={}, dataName={}", 
+            log.warn("工具提供者未运行，忽略数据: extensionName={}, dataName={}",
                     extensionName, data.getName());
             return;
         }
 
-        log.debug("工具提供者收到数据: extensionName={}, dataName={}", 
+        log.debug("工具提供者收到数据: extensionName={}, dataName={}",
                 extensionName, data.getName());
-        handleToolData(data, context);
+        // 异步处理数据
+        CompletableFuture.runAsync(() -> {
+            try {
+                handleToolData(data, context);
+            } catch (Exception e) {
+                log.error("工具提供者数据处理异常: extensionName={}, dataName={}",
+                        extensionName, data.getName(), e);
+            }
+        }, context.getVirtualThreadExecutor());
     }
 
     @Override
-    public void onAudioFrame(com.tenframework.core.message.AudioFrame audioFrame, ExtensionContext context) {
+    public void onAudioFrame(com.tenframework.core.message.AudioFrame audioFrame, AsyncExtensionEnv context) {
         if (!isRunning) {
-            log.warn("工具提供者未运行，忽略音频帧: extensionName={}, frameName={}", 
+            log.warn("工具提供者未运行，忽略音频帧: extensionName={}, frameName={}",
                     extensionName, audioFrame.getName());
             return;
         }
 
-        log.debug("工具提供者收到音频帧: extensionName={}, frameName={}", 
+        log.debug("工具提供者收到音频帧: extensionName={}, frameName={}",
                 extensionName, audioFrame.getName());
-        handleToolAudioFrame(audioFrame, context);
+        // 异步处理音频帧
+        CompletableFuture.runAsync(() -> {
+            try {
+                handleToolAudioFrame(audioFrame, context);
+            } catch (Exception e) {
+                log.error("工具提供者音频帧处理异常: extensionName={}, frameName={}",
+                        extensionName, audioFrame.getName(), e);
+            }
+        }, context.getVirtualThreadExecutor());
     }
 
     @Override
-    public void onVideoFrame(com.tenframework.core.message.VideoFrame videoFrame, ExtensionContext context) {
+    public void onVideoFrame(com.tenframework.core.message.VideoFrame videoFrame, AsyncExtensionEnv context) {
         if (!isRunning) {
-            log.warn("工具提供者未运行，忽略视频帧: extensionName={}, frameName={}", 
+            log.warn("工具提供者未运行，忽略视频帧: extensionName={}, frameName={}",
                     extensionName, videoFrame.getName());
             return;
         }
 
-        log.debug("工具提供者收到视频帧: extensionName={}, frameName={}", 
+        log.debug("工具提供者收到视频帧: extensionName={}, frameName={}",
                 extensionName, videoFrame.getName());
-        handleToolVideoFrame(videoFrame, context);
+        // 异步处理视频帧
+        CompletableFuture.runAsync(() -> {
+            try {
+                handleToolVideoFrame(videoFrame, context);
+            } catch (Exception e) {
+                log.error("工具提供者视频帧处理异常: extensionName={}, frameName={}",
+                        extensionName, videoFrame.getName(), e);
+            }
+        }, context.getVirtualThreadExecutor());
     }
 
     /**
      * 工具提供者配置阶段
      */
-    protected abstract void onToolProviderConfigure(ExtensionContext context);
+    protected abstract void onToolProviderConfigure(AsyncExtensionEnv context);
 
     /**
      * 工具提供者初始化阶段
      */
-    protected abstract void onToolProviderInit(ExtensionContext context);
+    protected abstract void onToolProviderInit(AsyncExtensionEnv context);
 
     /**
      * 工具提供者启动阶段
      */
-    protected abstract void onToolProviderStart(ExtensionContext context);
+    protected abstract void onToolProviderStart(AsyncExtensionEnv context);
 
     /**
      * 工具提供者停止阶段
      */
-    protected abstract void onToolProviderStop(ExtensionContext context);
+    protected abstract void onToolProviderStop(AsyncExtensionEnv context);
 
     /**
      * 工具提供者清理阶段
      */
-    protected abstract void onToolProviderDeinit(ExtensionContext context);
+    protected abstract void onToolProviderDeinit(AsyncExtensionEnv context);
 
     /**
      * 初始化可用工具列表
@@ -156,22 +181,24 @@ public abstract class AbstractToolProvider implements Extension {
     /**
      * 处理工具命令
      */
-    protected abstract void handleToolCommand(Command command, ExtensionContext context);
+    protected abstract void handleToolCommand(Command command, AsyncExtensionEnv context);
 
     /**
      * 处理工具数据
      */
-    protected abstract void handleToolData(com.tenframework.core.message.Data data, ExtensionContext context);
+    protected abstract void handleToolData(com.tenframework.core.message.Data data, AsyncExtensionEnv context);
 
     /**
      * 处理工具音频帧
      */
-    protected abstract void handleToolAudioFrame(com.tenframework.core.message.AudioFrame audioFrame, ExtensionContext context);
+    protected abstract void handleToolAudioFrame(com.tenframework.core.message.AudioFrame audioFrame,
+            AsyncExtensionEnv context);
 
     /**
      * 处理工具视频帧
      */
-    protected abstract void handleToolVideoFrame(com.tenframework.core.message.VideoFrame videoFrame, ExtensionContext context);
+    protected abstract void handleToolVideoFrame(com.tenframework.core.message.VideoFrame videoFrame,
+            AsyncExtensionEnv context);
 
     /**
      * 获取可用工具列表
@@ -210,7 +237,7 @@ public abstract class AbstractToolProvider implements Extension {
     /**
      * 发送错误结果
      */
-    protected void sendErrorResult(Command command, ExtensionContext context, String errorMessage) {
+    protected void sendErrorResult(Command command, AsyncExtensionEnv context, String errorMessage) {
         CommandResult errorResult = CommandResult.error(command.getCommandId(), errorMessage);
         context.sendResult(errorResult);
     }
@@ -218,8 +245,8 @@ public abstract class AbstractToolProvider implements Extension {
     /**
      * 发送成功结果
      */
-    protected void sendSuccessResult(Command command, ExtensionContext context, Map<String, Object> result) {
+    protected void sendSuccessResult(Command command, AsyncExtensionEnv context, Map<String, Object> result) {
         CommandResult successResult = CommandResult.success(command.getCommandId(), result);
         context.sendResult(successResult);
     }
-} 
+}

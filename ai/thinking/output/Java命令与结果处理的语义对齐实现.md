@@ -10,7 +10,9 @@
 - **虚拟线程 (Virtual Threads)**: 利用 Java 21+ 的虚拟线程，可以高效地处理大量并发的非阻塞 I/O 操作，而无需管理传统线程池的复杂性，从而更好地模拟 `runloop` 的高效事件处理能力。
 - **“即发即忘” (Fire-and-Forget) 消息提交**: 核心设计中，消息的提交（包括命令和命令结果）是“即发即忘”的，即发送方不直接等待提交操作的成功或失败反馈（Python 端返回 `Optional[TenError]`，表示仅在提交操作本身发生即时错误时才返回错误对象，并非等待消息处理结果）。Java 端也应遵循此原则，通过 `void` 返回类型和异步执行器实现。
 
-- **Engine 的职责**: `Engine` 的核心职责是底层的消息提交 (`submitMessage`) 和调度，它不直接返回命令结果的 `CompletableFuture`。
+- **Engine 的职责**: `Engine` 是 `ten-framework` 在 Java 端的核心组件，它现在实现了 `MessageSubmitter` 和 `CommandSubmitter` 接口。
+  - 作为 `MessageSubmitter`，其 `submitMessage` 方法严格遵循“即发即忘”原则，返回 `void`，用于提交各类消息（包括 CommandResult、Data、AudioFrame、VideoFrame）。
+  - 作为 `CommandSubmitter`，其 `submitCommand` 方法返回 `CompletableFuture<Object>`，这是 `Extension` 发送命令并期望异步获取结果的机制的入口。
 
 #### 2. Java `Cmd` 与 `CmdResult` 的数据结构
 
@@ -35,10 +37,10 @@ Java 端对 `Cmd` 和 `CmdResult` 的定义与 Python/C 核心保持一致，确
 - **`AsyncExtensionEnv.sendCommand(Command command)`**:
   - **返回类型**: `CompletableFuture<Object>`。此 `CompletableFuture` 不代表命令提交的成功，而是代表未来命令执行结果（即 `CmdResult` 中包含的实际业务数据）的异步通知。这与 Python `ten_env.send_cmd` 通过 `result_handler` 异步回调来传递 `CmdResult` 的机制完全对齐。
   - **内部机制 (在 `EngineAsyncExtensionEnv` 中实现)**:
-    1.  创建一个 `CompletableFuture<Object>` 实例。
-    2.  将该 `CompletableFuture` 与 `command.getCommandId()` 关联，并由 `EngineAsyncExtensionEnv` 内部进行管理（例如，存储在一个 `ConcurrentMap<Long, CompletableFuture<Object>>` 中）。
-    3.  将 `Command` 提交给 `Engine` 的 `submitMessage` 方法。`submitMessage` 返回 `void`，遵循“即发即忘”原则。
-    4.  `EngineAsyncExtensionEnv` 返回 `CompletableFuture<Object>` 给调用方 (`Extension`)，调用方可以异步地等待或链式处理这个 Future。
+    1.  如果 `Command` 的 `commandId` 为空或为 `0`，则自动生成一个唯一的新 `commandId`。
+    2.  `EngineAsyncExtensionEnv` 将 `Command` (包含其 `commandId`) 以及关联的 `CompletableFuture<Object>` 提交给其内部持有的 `CommandSubmitter` 实例 (即 `Engine` 的 `submitCommand` 方法)。
+    3.  `CommandSubmitter.submitCommand` 会负责将此 `CompletableFuture` 与 `commandId` 进行关联（在 `Engine` 内部的 `commandFutures` 中管理），并将 `Command` 提交到 Engine 的消息队列 (`submitMessage`)。`submitCommand` 会立即返回这个 `CompletableFuture`。
+    4.  `EngineAsyncExtensionEnv` 返回从 `CommandSubmitter.submitCommand` 获得的 `CompletableFuture<Object>` 给调用方 (`Extension`)，调用方可以异步地等待或链式处理这个 Future。
 
 #### 4. `MessageSubmitter` 的语义对齐
 
@@ -75,7 +77,7 @@ Java 端 `CmdResult` 的回溯和最终消费与 Python/C 核心的 `PathTable` 
 - **`Engine.processCommandResult(CommandResult commandResult)`**:
   - 这是 Engine 内部处理 `CommandResult` 的核心方法。
   - 它会获取 `PathOut`，并调用 `pathOut.getResultFuture().complete(...)` 或 `completeExceptionally(...)` 来完成对应的 `CompletableFuture`。
-  - `Engine` 不再管理 `commandFutures`。所有 `CompletableFuture` 的管理和完成都通过 `PathOut` 进行。
+  - `Engine` 不再直接管理 `commandFutures`。所有 `CompletableFuture` 的管理和完成都通过 `PathOut` 进行，Engine 仅负责驱动 `PathManager`。
 
 #### 7. 内部命令处理器的语义对齐
 

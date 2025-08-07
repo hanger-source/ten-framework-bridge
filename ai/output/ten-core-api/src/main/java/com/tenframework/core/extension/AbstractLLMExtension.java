@@ -13,6 +13,7 @@ import java.util.Map;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import com.tenframework.core.extension.AsyncExtensionEnv;
 
 /**
  * LLM基础抽象类
@@ -57,21 +58,21 @@ public abstract class AbstractLLMExtension implements Extension {
     }
 
     @Override
-    public void onConfigure(ExtensionContext context) {
+    public void onConfigure(AsyncExtensionEnv context) {
         this.extensionName = context.getExtensionName();
-        this.metrics.setExtensionContext(context); // 设置 ExtensionContext 到 metrics 中
+        this.metrics.setExtensionContext(context); // 设置 AsyncExtensionEnv 到 metrics 中
         log.info("LLM扩展配置阶段: extensionName={}", extensionName);
         onLLMConfigure(context);
     }
 
     @Override
-    public void onInit(ExtensionContext context) {
+    public void onInit(AsyncExtensionEnv context) {
         log.info("LLM扩展初始化阶段: extensionName={}", extensionName);
         onLLMInit(context);
     }
 
     @Override
-    public void onStart(ExtensionContext context) {
+    public void onStart(AsyncExtensionEnv context) {
         log.info("LLM扩展启动阶段: extensionName={}", extensionName);
         this.isRunning = true;
         this.interrupted.set(false);
@@ -82,7 +83,7 @@ public abstract class AbstractLLMExtension implements Extension {
     }
 
     @Override
-    public void onStop(ExtensionContext context) {
+    public void onStop(AsyncExtensionEnv context) {
         log.info("LLM扩展停止阶段: extensionName={}", extensionName);
         this.isRunning = false;
 
@@ -92,7 +93,7 @@ public abstract class AbstractLLMExtension implements Extension {
     }
 
     @Override
-    public void onDeinit(ExtensionContext context) {
+    public void onDeinit(AsyncExtensionEnv context) {
         log.info("LLM扩展清理阶段: extensionName={}", extensionName);
         onLLMDeinit(context);
 
@@ -109,7 +110,7 @@ public abstract class AbstractLLMExtension implements Extension {
     }
 
     @Override
-    public void onCommand(Command command, ExtensionContext context) {
+    public void onCommand(Command command, AsyncExtensionEnv context) {
         if (!isRunning) {
             log.warn("LLM扩展未运行，忽略命令: extensionName={}, commandName={}",
                     extensionName, command.getName());
@@ -131,7 +132,7 @@ public abstract class AbstractLLMExtension implements Extension {
     }
 
     @Override
-    public void onData(Data data, ExtensionContext context) {
+    public void onData(Data data, AsyncExtensionEnv context) {
         if (!isRunning) {
             log.warn("LLM扩展未运行，忽略数据: extensionName={}, dataName={}",
                     extensionName, data.getName());
@@ -160,7 +161,7 @@ public abstract class AbstractLLMExtension implements Extension {
     }
 
     @Override
-    public void onAudioFrame(AudioFrame audioFrame, ExtensionContext context) {
+    public void onAudioFrame(AudioFrame audioFrame, AsyncExtensionEnv context) {
         if (!isRunning) {
             log.warn("LLM扩展未运行，忽略音频帧: extensionName={}, frameName={}",
                     extensionName, audioFrame.getName());
@@ -174,7 +175,7 @@ public abstract class AbstractLLMExtension implements Extension {
     }
 
     @Override
-    public void onVideoFrame(VideoFrame videoFrame, ExtensionContext context) {
+    public void onVideoFrame(VideoFrame videoFrame, AsyncExtensionEnv context) {
         if (!isRunning) {
             log.warn("LLM扩展未运行，忽略视频帧: extensionName={}, frameName={}",
                     extensionName, videoFrame.getName());
@@ -190,7 +191,7 @@ public abstract class AbstractLLMExtension implements Extension {
     /**
      * 启动处理队列
      */
-    private void startProcessingQueue(ExtensionContext context) {
+    private void startProcessingQueue(AsyncExtensionEnv context) {
         if (processingTaskRunning.compareAndSet(false, true)) {
             Future<?> task = processingExecutor.submit(() -> {
                 try {
@@ -227,7 +228,7 @@ public abstract class AbstractLLMExtension implements Extension {
     /**
      * 处理队列循环
      */
-    private void processQueue(ExtensionContext context) throws InterruptedException {
+    private void processQueue(AsyncExtensionEnv context) throws InterruptedException {
         while (processingTaskRunning.get() && !Thread.currentThread().isInterrupted()) {
             LLMInputItem item = processingQueue.take();
             if (item == null) {
@@ -254,7 +255,7 @@ public abstract class AbstractLLMExtension implements Extension {
     /**
      * 处理LLM命令
      */
-    private void handleLLMCommand(Command command, ExtensionContext context) {
+    private void handleLLMCommand(Command command, AsyncExtensionEnv context) {
         String commandName = command.getName();
 
         switch (commandName) {
@@ -276,7 +277,7 @@ public abstract class AbstractLLMExtension implements Extension {
     /**
      * 处理工具注册
      */
-    private void handleToolRegister(Command command, ExtensionContext context) {
+    private void handleToolRegister(Command command, AsyncExtensionEnv context) {
         try {
             String toolMetadataJson = command.getArg("tool", String.class)
                     .orElseThrow(() -> new IllegalArgumentException("缺少工具元数据"));
@@ -305,7 +306,7 @@ public abstract class AbstractLLMExtension implements Extension {
     /**
      * 处理聊天完成调用
      */
-    private void handleChatCompletionCall(Command command, ExtensionContext context) {
+    private void handleChatCompletionCall(Command command, AsyncExtensionEnv context) {
         try {
             // 解析聊天完成参数
             Map<String, Object> args = command.getArgs();
@@ -329,7 +330,7 @@ public abstract class AbstractLLMExtension implements Extension {
     /**
      * 处理刷新命令
      */
-    private void handleFlush(ExtensionContext context) {
+    private void handleFlush(AsyncExtensionEnv context) {
         log.info("LLM扩展收到刷新命令: extensionName={}", extensionName);
 
         // 清空处理队列
@@ -353,7 +354,7 @@ public abstract class AbstractLLMExtension implements Extension {
     /**
      * 发送文本输出
      */
-    protected void sendTextOutput(ExtensionContext context, String text, boolean endOfSegment) {
+    protected void sendTextOutput(AsyncExtensionEnv context, String text, boolean endOfSegment) {
         try {
             Data outputData = Data.text("llm_output", text);
             outputData.setProperties(Map.of(
@@ -361,14 +362,10 @@ public abstract class AbstractLLMExtension implements Extension {
                     "end_of_segment", endOfSegment,
                     "extension_name", extensionName));
 
-            boolean success = context.sendMessage(outputData);
-            if (success) {
-                metrics.recordResult();
-                log.debug("LLM文本输出发送成功: extensionName={}, text={}, endOfSegment={}",
-                        extensionName, text, endOfSegment);
-            } else {
-                log.warn("LLM文本输出发送失败: extensionName={}", extensionName);
-            }
+            context.sendData(outputData); // 将sendMessage替换为sendData
+            metrics.recordResult();
+            log.debug("LLM文本输出发送成功: extensionName={}, text={}, endOfSegment={}",
+                    extensionName, text, endOfSegment);
         } catch (Exception e) {
             log.error("LLM文本输出发送异常: extensionName={}", extensionName, e);
         }
@@ -377,7 +374,7 @@ public abstract class AbstractLLMExtension implements Extension {
     /**
      * 发送错误结果
      */
-    protected void sendErrorResult(Command command, ExtensionContext context, String errorMessage) {
+    protected void sendErrorResult(Command command, AsyncExtensionEnv context, String errorMessage) {
         CommandResult errorResult = CommandResult.error(command.getCommandId(), errorMessage);
         context.sendResult(errorResult);
     }
@@ -399,42 +396,42 @@ public abstract class AbstractLLMExtension implements Extension {
     /**
      * LLM配置阶段
      */
-    protected abstract void onLLMConfigure(ExtensionContext context);
+    protected abstract void onLLMConfigure(AsyncExtensionEnv context);
 
     /**
      * LLM初始化阶段
      */
-    protected abstract void onLLMInit(ExtensionContext context);
+    protected abstract void onLLMInit(AsyncExtensionEnv context);
 
     /**
      * LLM启动阶段
      */
-    protected abstract void onLLMStart(ExtensionContext context);
+    protected abstract void onLLMStart(AsyncExtensionEnv context);
 
     /**
      * LLM停止阶段
      */
-    protected abstract void onLLMStop(ExtensionContext context);
+    protected abstract void onLLMStop(AsyncExtensionEnv context);
 
     /**
      * LLM清理阶段
      */
-    protected abstract void onLLMDeinit(ExtensionContext context);
+    protected abstract void onLLMDeinit(AsyncExtensionEnv context);
 
     /**
      * 处理数据驱动的聊天完成
      */
-    protected abstract void onDataChatCompletion(Data data, ExtensionContext context);
+    protected abstract void onDataChatCompletion(Data data, AsyncExtensionEnv context);
 
     /**
      * 处理命令驱动的聊天完成
      */
-    protected abstract void onCallChatCompletion(Map<String, Object> args, ExtensionContext context);
+    protected abstract void onCallChatCompletion(Map<String, Object> args, AsyncExtensionEnv context);
 
     /**
      * 处理工具更新
      */
-    protected abstract void onToolsUpdate(ExtensionContext context, ToolMetadata tool);
+    protected abstract void onToolsUpdate(AsyncExtensionEnv context, ToolMetadata tool);
 
     // 辅助方法
 
@@ -466,9 +463,9 @@ public abstract class AbstractLLMExtension implements Extension {
      */
     private static class LLMInputItem {
         final Data data;
-        final ExtensionContext context;
+        final AsyncExtensionEnv context;
 
-        LLMInputItem(Data data, ExtensionContext context) {
+        LLMInputItem(Data data, AsyncExtensionEnv context) {
             this.data = data;
             this.context = context;
         }

@@ -15,10 +15,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
-import com.tenframework.core.Location;
-import com.tenframework.core.extension.ClientConnectionExtension;
-import com.tenframework.core.extension.EngineExtensionContext;
 import com.tenframework.core.extension.Extension;
+import com.tenframework.core.extension.system.ClientConnectionExtension;
+import com.tenframework.core.graph.ConnectionConfig;
 import com.tenframework.core.graph.GraphConfig;
 import com.tenframework.core.graph.GraphInstance;
 import com.tenframework.core.graph.GraphLoader;
@@ -27,12 +26,12 @@ import com.tenframework.core.message.AudioFrame;
 import com.tenframework.core.message.Command;
 import com.tenframework.core.message.CommandResult;
 import com.tenframework.core.message.Data;
+import com.tenframework.core.message.Location;
 import com.tenframework.core.message.Message;
 import com.tenframework.core.message.MessageConstants;
 import com.tenframework.core.message.MessageType;
 import com.tenframework.core.message.VideoFrame;
-import com.tenframework.core.path.PathOut;
-import com.tenframework.core.path.PathTable;
+import com.tenframework.core.path.DataInPath;
 import com.tenframework.core.path.ResultReturnPolicy;
 import com.tenframework.core.server.ChannelDisconnectedException;
 import io.netty.channel.Channel;
@@ -40,8 +39,18 @@ import lombok.extern.slf4j.Slf4j;
 import org.agrona.concurrent.IdleStrategy;
 import org.agrona.concurrent.ManyToOneConcurrentArrayQueue;
 import org.agrona.concurrent.SleepingIdleStrategy;
+import com.tenframework.core.path.PathManager;
+import com.tenframework.core.path.PathOut;
+import com.tenframework.core.route.RouteManager; // 新增导入
+import com.tenframework.core.command.InternalCommandHandler; // Add this import
+import com.tenframework.core.command.InternalCommandType;
+import com.tenframework.core.command.StartGraphCommandHandler;
+import com.tenframework.core.command.StopGraphCommandHandler;
+import com.tenframework.core.command.AddExtensionToGraphCommandHandler;
+import com.tenframework.core.command.RemoveExtensionFromGraphCommandHandler;
 
 import static java.util.concurrent.Executors.newSingleThreadExecutor;
+import java.util.HashMap;
 
 /**
  * TEN框架的核心Engine实现
@@ -49,7 +58,7 @@ import static java.util.concurrent.Executors.newSingleThreadExecutor;
  * 对应C语言中的ten_engine_t结构
  */
 @Slf4j
-public final class Engine implements MessageSubmitter {
+public final class Engine implements MessageSubmitter, CommandSubmitter { // 实现MessageSubmitter和CommandSubmitter
 
     /**
      * 队列容量，默认64K条消息
@@ -79,7 +88,7 @@ public final class Engine implements MessageSubmitter {
     /**
      * 路径表，管理命令的生命周期和结果回溯
      */
-    private final PathTable pathTable;
+    private final PathManager pathManager;
     /**
      * Engine核心处理线程 - 单线程ExecutorService
      */
@@ -92,7 +101,6 @@ public final class Engine implements MessageSubmitter {
      * 维护graphId到GraphInstance的映射
      */
     private final ConcurrentMap<String, GraphInstance> graphInstances;
-
     /**
      * 管理活动的Netty Channel，用于消息回传
      */
@@ -100,15 +108,20 @@ public final class Engine implements MessageSubmitter {
     /**
      * 维护channelId到相关联的Command ID集合的映射，用于断开连接时清理PathOut
      */
-    private final ConcurrentMap<String, ConcurrentSkipListSet<UUID>> channelToCommandIdsMap;
 
     // ClientConnectionExtension 实例
-    private final ClientConnectionExtension clientConnectionExtension; // 新增
+    private final ClientConnectionExtension clientConnectionExtension;
+
+    private final RouteManager routeManager;
+
+    private final Map<String, InternalCommandHandler> internalCommandHandlers;
+
+    private volatile Thread coreThread;
 
     /**
-     * Engine核心线程的Thread引用，用于线程检查
+     * 维护命令ID到CompletableFuture的映射，用于异步返回命令结果给调用方
      */
-    private volatile Thread coreThread;
+    private final ConcurrentMap<Long, CompletableFuture<Object>> commandFutures = new ConcurrentHashMap<>();
 
     /**
      * 构造函数
@@ -134,33 +147,28 @@ public final class Engine implements MessageSubmitter {
             capacity <<= 1;
         }
         inboundMessageQueue = new ManyToOneConcurrentArrayQueue<>(capacity);
-        pathTable = new PathTable();
         idleStrategy = new SleepingIdleStrategy(1_000_000L); // 1ms sleep time
 
         channelMap = new ConcurrentHashMap<>();
-        channelToCommandIdsMap = new ConcurrentHashMap<>();
         graphInstances = new ConcurrentHashMap<>();
 
-        // 创建并注册ClientConnectionExtension到特殊的系统图
-        GraphConfig systemGraphConfig = new GraphConfig();
-        systemGraphConfig.setGraphId("system-graph");
-        systemGraphConfig.setAppUri("system-app");
-        NodeConfig clientNodeConfig = new NodeConfig();
-        clientNodeConfig.setName(ClientConnectionExtension.NAME);
-        clientNodeConfig.setType("com.tenframework.core.extension.ClientConnectionExtension");
-        systemGraphConfig.setNodes(List.of(clientNodeConfig));
+        // 初始化PathManager
+        this.pathManager = new PathManager(this);
 
-        try {
-            GraphInstance systemGraphInstance = new GraphInstance(systemGraphConfig.getGraphId(),
-                    systemGraphConfig.getAppUri(), this, systemGraphConfig);
-            this.clientConnectionExtension = new ClientConnectionExtension(this); // 初始化
-            systemGraphInstance.registerExtension(ClientConnectionExtension.NAME, this.clientConnectionExtension, null);
-            graphInstances.put(systemGraphConfig.getGraphId(), systemGraphInstance);
-            log.info("ClientConnectionExtension已注册到系统图: graphId={}", systemGraphConfig.getGraphId());
-        } catch (Exception e) {
-            log.error("初始化ClientConnectionExtension失败", e);
-            throw new RuntimeException("Failed to initialize ClientConnectionExtension", e);
-        }
+        // 初始化ClientConnectionExtension
+        this.clientConnectionExtension = new ClientConnectionExtension(this);
+
+        // 初始化RouteManager
+        this.routeManager = new RouteManager(graphInstances);
+
+        // 初始化内部命令处理器
+        this.internalCommandHandlers = new HashMap<>();
+        internalCommandHandlers.put(InternalCommandType.START_GRAPH.getCommandName(), new StartGraphCommandHandler());
+        internalCommandHandlers.put(InternalCommandType.STOP_GRAPH.getCommandName(), new StopGraphCommandHandler());
+        internalCommandHandlers.put(InternalCommandType.ADD_EXTENSION_TO_GRAPH.getCommandName(),
+                new AddExtensionToGraphCommandHandler());
+        internalCommandHandlers.put(InternalCommandType.REMOVE_EXTENSION_FROM_GRAPH.getCommandName(),
+                new RemoveExtensionFromGraphCommandHandler());
 
         // 创建单线程ExecutorService，使用自定义ThreadFactory
         engineThread = newSingleThreadExecutor(r -> {
@@ -264,8 +272,8 @@ public final class Engine implements MessageSubmitter {
      * @return true如果成功提交，false如果队列已满
      */
     @Override
-    public boolean submitMessage(Message message) {
-        return submitMessage(message, null);
+    public void submitMessage(Message message) {
+        submitMessage(message, null);
     }
 
     /**
@@ -277,11 +285,11 @@ public final class Engine implements MessageSubmitter {
      * @return true如果成功提交，false如果队列已满
      */
     @Override
-    public boolean submitMessage(Message message, String channelId) {
+    public void submitMessage(Message message, String channelId) {
         if (state.get() != EngineState.RUNNING) {
             log.warn("Engine未在运行状态，拒绝消息: engineId={}, messageType={}",
                     engineId, message.getType());
-            return false;
+            return; // 不再返回false，直接返回
         }
 
         // 使用Agrona队列的非阻塞offer方法
@@ -299,7 +307,7 @@ public final class Engine implements MessageSubmitter {
             }
         }
 
-        return success;
+        // 不再返回boolean，直接返回void
     }
 
     /**
@@ -318,6 +326,20 @@ public final class Engine implements MessageSubmitter {
             log.error("队列已满，命令消息被拒绝: engineId={}, messageType={}, messageName={}",
                     engineId, type, message.getName());
             // TODO: 生成CommandResult错误并回溯给上游
+
+            if (message instanceof Command command) {
+                CommandResult errorResult = CommandResult.error(command.getCommandId(),
+                        "Engine队列已满，命令被拒绝");
+
+                // 尝试找到对应的PathOut并回溯错误
+                pathManager.getOutPath(command.getCommandId()).ifPresent(pathOut -> {
+                    try {
+                        pathManager.handleResultReturnPolicy(pathOut, errorResult);
+                    } catch (CloneNotSupportedException ex) {
+                        log.error("回溯队列满错误时克隆CommandResult失败: commandId={}", command.getCommandId(), ex);
+                    }
+                });
+            }
         } else {
             log.warn("队列已满，消息被拒绝: engineId={}, messageType={}, messageName={}",
                     engineId, type, message.getName());
@@ -417,24 +439,13 @@ public final class Engine implements MessageSubmitter {
         log.debug("处理命令消息: engineId={}, commandName={}, commandId={}",
                 engineId, command.getName(), command.getCommandId());
 
-        // 检查是否为Engine内部命令
-        switch (command.getName()) {
-            case "start_graph" -> {
-                handleStartGraphCommand(command);
-                return;
-            }
-            case "stop_graph" -> {
-                handleStopGraphCommand(command);
-                return;
-            }
-            case "add_extension_to_graph" -> {
-                handleAddExtensionToGraphCommand(command);
-                return;
-            }
-            case "remove_extension_from_graph" -> {
-                handleRemoveExtensionFromGraphCommand(command);
-                return;
-            }
+        InternalCommandHandler handler = internalCommandHandlers.get(command.getName());
+        if (handler != null) {
+            // 对于内部命令，如果它也需要返回结果，那么Future应该已经由调用方提供
+            // 这里我们假定内部命令处理器会自行完成结果，或者通过其自身的机制处理回调
+            // 因此，我们不需要在这里传递Engine的CompletableFuture
+            handler.handle(command, this, commandFutures.get(command.getCommandId())); // 传递可能存在的Future
+            return; // 内部命令已处理
         }
 
         // 1. 获取消息的源GraphId
@@ -442,6 +453,12 @@ public final class Engine implements MessageSubmitter {
         if (sourceGraphId == null) {
             log.warn("命令消息缺少有效的源GraphId，无法进行路由: engineId={}, commandName={}, commandId={}",
                     engineId, command.getName(), command.getCommandId());
+            // 如果是sendCmd外部调用，且没有sourceLocation，可能需要completeExceptionally对应的Future
+            // 但通常从sendCmd发出的命令会带sourceLocation
+            CompletableFuture<Object> future = commandFutures.remove(command.getCommandId()); // 清理Future
+            if (future != null && !future.isDone()) {
+                future.completeExceptionally(new IllegalStateException("命令消息缺少有效源GraphId"));
+            }
             return;
         }
 
@@ -450,15 +467,23 @@ public final class Engine implements MessageSubmitter {
         if (graphInstance == null) {
             log.warn("源GraphInstance不存在或未加载: engineId={}, graphId={}, commandName={}, commandId={}",
                     engineId, sourceGraphId, command.getName(), command.getCommandId());
+            CompletableFuture<Object> future = commandFutures.remove(command.getCommandId()); // 清理Future
+            if (future != null && !future.isDone()) {
+                future.completeExceptionally(new IllegalStateException("源GraphInstance不存在或未加载"));
+            }
             return;
         }
 
-        // 3. 解析消息的实际目的地列表
-        List<String> targetExtensionNames = graphInstance.resolveDestinations(command);
+        // 3. 解析消息的实际目的地列表，委托给RouteManager
+        List<Location> targetLocations = routeManager.resolveMessageDestinations(command);
 
-        if (targetExtensionNames.isEmpty()) {
+        if (targetLocations.isEmpty()) {
             log.warn("命令消息没有解析到任何目标Extension: engineId={}, commandName={}, commandId={}",
                     engineId, command.getName(), command.getCommandId());
+            CompletableFuture<Object> future = commandFutures.remove(command.getCommandId()); // 清理Future
+            if (future != null && !future.isDone()) {
+                future.completeExceptionally(new IllegalStateException("命令消息没有解析到任何目标Extension"));
+            }
             return;
         }
 
@@ -469,398 +494,81 @@ public final class Engine implements MessageSubmitter {
         }
 
         // 为每个目标Extension分发消息
-        for (String targetExtensionName : targetExtensionNames) {
-            Optional<Extension> extensionOpt = graphInstance.getExtension(targetExtensionName);
-            Optional<EngineExtensionContext> contextOpt = graphInstance.getExtensionContext(targetExtensionName);
-
-            if (extensionOpt.isEmpty() || contextOpt.isEmpty()) {
-                log.warn(
-                        "目标Extension不存在于图实例中或未加载: engineId={}, graphId={}, extensionName={}, commandName={}, commandId={}",
-                        engineId, sourceGraphId, targetExtensionName, command.getName(), command.getCommandId());
+        for (Location targetLocation : targetLocations) {
+            // 获取目标Extension实例
+            final Extension currentTargetExtension = graphInstance.getExtension(targetLocation.extensionName())
+                    .orElse(null);
+            if (currentTargetExtension == null) {
+                log.warn("Engine: 目标Extension未找到: {}. 无法分发命令: {}", targetLocation.extensionName(), command.getName());
+                // 如果找不到Extension，也需要完成对应的Future
+                CompletableFuture<Object> future = commandFutures.remove(command.getCommandId());
+                if (future != null && !future.isDone()) {
+                    future.completeExceptionally(
+                            new IllegalStateException("目标Extension未找到: " + targetLocation.extensionName()));
+                }
                 continue;
             }
 
-            Extension extension = extensionOpt.get();
-            EngineExtensionContext context = contextOpt.get();
-
-            // 如果有多个目标，需要克隆消息，确保每个Extension接收到独立副本
-            Command messageToSend = command;
-            if (targetExtensionNames.size() > 1) {
+            Command messageToSend = command; // 默认使用原始消息
+            final Command finalMessageToSend;
+            if (targetLocations.size() > 1) {
                 try {
-                    messageToSend = command.clone();
-                    messageToSend.setCommandId(Command.generateCommandId()); // 为克隆的命令生成新的ID
+                    // 只有在需要分发到多个目的地时才克隆消息
+                    finalMessageToSend = command.clone();
+                    // 克隆的命令不应该有新的commandId，它应该保持与原始命令相同的commandId
+                    // 因为PathOut是通过原始commandId追踪的。这里不再生成新的ID。
+                    // 重新考虑：如果一个命令需要分发到多个extension，它们应该共享同一个commandId和同一个PathOut。
+                    // 否则，结果回溯会混乱。所以这里不应该改变commandId。
                 } catch (CloneNotSupportedException e) {
                     log.error("克隆命令消息失败，无法分发到所有目标: commandId={}, targetExtensionName={}",
-                            command.getCommandId(), targetExtensionName, e);
+                            command.getCommandId(), targetLocation.extensionName(), e);
+                    CompletableFuture<Object> future = commandFutures.remove(command.getCommandId()); // 清理Future
+                    if (future != null && !future.isDone()) {
+                        future.completeExceptionally(e);
+                    }
                     continue;
                 }
+            } else {
+                finalMessageToSend = command;
             }
+            finalMessageToSend.setDestinationLocations(Collections.singletonList(targetLocation));
 
-            // 更新消息的目标位置，使其指向当前处理的Extension
-            Location currentTargetLocation = Location.builder()
-                    .appUri(graphInstance.getAppUri())
-                    .graphId(graphInstance.getGraphId())
-                    .extensionName(targetExtensionName)
-                    .build();
-            messageToSend.setDestinationLocations(Collections.singletonList(currentTargetLocation));
+            // 获取与此命令ID关联的CompletableFuture
+            CompletableFuture<Object> resultFuture = commandFutures.get(finalMessageToSend.getCommandId());
+            // resultFuture可能为null，例如Engine内部发起的命令，或者队列满时被丢弃的命令
+            // 对于非内部命令，如果Future为null，则表示逻辑错误或被提前处理
 
             // 创建PathOut记录命令路径，以便后续结果回溯
-            pathTable.createOutPath(messageToSend.getCommandIdAsUUID(), messageToSend.getParentCommandIdAsUUID(),
-                    messageToSend.getName(), messageToSend.getSourceLocation(), currentTargetLocation,
-                    new CompletableFuture<>(), ResultReturnPolicy.FIRST_ERROR_OR_LAST_OK, associatedChannelId);
+            // PathOut中的resultFuture现在是Engine管理的CompletableFuture<Object>
+            pathManager.createOutPath(finalMessageToSend.getCommandId(),
+                    finalMessageToSend.getParentCommandId(),
+                    finalMessageToSend.getName(), finalMessageToSend.getSourceLocation(),
+                    targetLocation,
+                    resultFuture, // 传递Engine管理的CompletableFuture
+                    ResultReturnPolicy.FIRST_ERROR_OR_LAST_OK,
+                    associatedChannelId);
 
-            if (associatedChannelId != null) {
-                channelToCommandIdsMap.computeIfAbsent(associatedChannelId, k -> new ConcurrentSkipListSet<>())
-                        .add(messageToSend.getCommandIdAsUUID());
-                log.debug("Engine: 关联Command {} 到 Channel {}", messageToSend.getCommandId(), associatedChannelId); // 新增日志
-            }
+            log.debug("Engine: 关联Command {} 到 Channel {}", finalMessageToSend.getCommandId(), associatedChannelId); // 新增日志
 
-            // 调用Extension的onCommand方法
             try {
-                log.debug("Engine: 正在调用Extension.onCommand. EngineId: {}, ExtensionName: {}, CommandId: {}", // 新增日志
-                        engineId, targetExtensionName, messageToSend.getCommandId());
-                extension.onCommand(messageToSend, context);
+                // 调用Extension的onCommand方法
+                // targetExtension.getContext() 替换为从graphInstance获取context
+                graphInstance.getExtensionContext(targetLocation.extensionName())
+                        .ifPresent(context -> currentTargetExtension.onCommand(finalMessageToSend, context));
+
                 log.debug("Extension处理命令完成: engineId={}, extensionName={}, commandName={}, commandId={}",
-                        engineId, targetExtensionName, messageToSend.getName(), messageToSend.getCommandId());
+                        engineId, targetLocation.extensionName(), finalMessageToSend.getName(),
+                        finalMessageToSend.getCommandId());
             } catch (Exception e) {
-                log.error("Extension处理命令时发生异常: engineId={}, extensionName={}, commandName={}, commandId={}",
-                        engineId, targetExtensionName, messageToSend.getName(), messageToSend.getCommandId(), e);
+                log.error("Engine: 调用Extension的onCommand方法异常. Extension: {}, CommandType: {}",
+                        targetLocation.extensionName(), finalMessageToSend.getType().name(), e);
+                // 在Extension处理异常时，也需要回溯错误结果
+                // 异常时直接完成Future，不需要通过pathManager.handleResultReturnPolicy
+                if (resultFuture != null && !resultFuture.isDone()) {
+                    resultFuture.completeExceptionally(e);
+                }
+                commandFutures.remove(finalMessageToSend.getCommandId()); // 即使异常，也从map中移除
             }
-        }
-    }
-
-    /**
-     * 处理start_graph命令 (Engine内部命令)
-     *
-     * @param command start_graph命令
-     */
-    private void handleStartGraphCommand(Command command) {
-        String graphId = (String) command.getProperties().get("graph_id");
-        String appUri = (String) command.getProperties().get("app_uri");
-        Object graphJsonObj = command.getProperties().get("graph_json"); // 获取原始Object，而非直接转型
-        String associatedChannelId = (String) command.getProperties().get("__channel_id__");
-        CompletableFuture<CommandResult> resultFuture = (CompletableFuture<CommandResult>) command.getProperties()
-                .get("__result_future__");
-
-        log.info("Engine收到start_graph命令: graphId={}, appUri={}", graphId, appUri);
-
-        CommandResult result;
-        if (graphId == null || graphId.isEmpty() || appUri == null || appUri.isEmpty() || graphJsonObj == null) {
-            result = CommandResult.error(command.getCommandId(),
-                    Map.of("error", "start_graph命令缺少graph_id, app_uri或graph_json属性").get("error"));
-            log.error("start_graph命令参数缺失: graphId={}, appUri={}, graphJson={}", graphId, appUri, graphJsonObj);
-        } else if (!(graphJsonObj instanceof String graphJson)) { // 增加类型检查
-            result = CommandResult.error(command.getCommandId(),
-                    Map.of("error", "graph_json属性不是有效的JSON字符串").get("error"));
-            log.error("start_graph命令graph_json类型错误: graphId={}, appUri={}, graphJsonType={}", graphId, appUri,
-                    graphJsonObj.getClass().getName());
-        } else if (graphInstances.containsKey(graphId)) {
-            result = CommandResult.error(command.getCommandId(),
-                    Map.of("error", "图实例已存在: " + graphId).get("error"));
-            log.warn("尝试启动已存在的图实例: graphId={}", graphId);
-        } else {
-            try {
-                // 1. 解析GraphConfig
-                GraphConfig graphConfig = GraphLoader.loadGraphConfigFromJson(graphJson);
-                // 如果GraphConfig中也包含graphId，确保与命令中的一致
-                if (graphConfig.getGraphId() != null && !graphConfig.getGraphId().equals(graphId)) {
-                    log.warn("命令中的graphId与GraphConfig不一致，使用命令中的: commandGraphId={}, configGraphId={}", graphId,
-                            graphConfig.getGraphId());
-                }
-                graphConfig.setGraphId(graphId); // 强制使用命令中的graphId
-
-                // 2. 创建GraphInstance
-                GraphInstance newGraphInstance = new GraphInstance(graphId, appUri, this, graphConfig); // 传入graphConfig
-
-                // 3. 遍历NodeConfig，实例化并注册Extension
-                if (graphConfig.getNodes() != null) {
-                    for (NodeConfig nodeConfig : graphConfig.getNodes()) {
-                        String extensionType = nodeConfig.getType();
-                        String extensionName = nodeConfig.getName();
-                        Map<String, Object> nodeProperties = nodeConfig.getProperties();
-
-                        try {
-                            // 动态加载Extension类并实例化
-                            Class<?> clazz = Class.forName(extensionType);
-                            Object instance = clazz.getDeclaredConstructor().newInstance();
-
-                            if (instance instanceof Extension extension) {
-                                boolean registered = newGraphInstance.registerExtension(extensionName, extension,
-                                        nodeProperties);
-                                if (!registered) {
-                                    log.error("注册Extension失败: graphId={}, extensionName={}", graphId, extensionName);
-                                    throw new RuntimeException("Extension注册失败");
-                                }
-                            } else {
-                                log.error("加载的类不是Extension类型: graphId={}, extensionType={}", graphId, extensionType);
-                                throw new ClassCastException("类不是Extension类型");
-                            }
-                        } catch (Exception e) {
-                            log.error("实例化或注册Extension失败: graphId={}, extensionType={}, extensionName={}",
-                                    graphId, extensionType, extensionName, e);
-                            throw new RuntimeException("Extension实例化/注册失败", e);
-                        }
-                    }
-                }
-
-                // 4. 将新的GraphInstance添加到Engine的映射中
-                graphInstances.put(graphId, newGraphInstance);
-
-                result = CommandResult.success(command.getCommandId(),
-                        Map.of("message", "Graph started successfully.", "graph_id", graphId));
-                log.info("图实例启动成功: graphId={}, appUri={}", graphId, appUri);
-
-            } catch (Exception e) {
-                result = CommandResult.error(command.getCommandId(),
-                        (String) Map.of("error", "启动图实例失败: " + e.getMessage()).get("error"));
-                log.error("启动图实例时发生异常: graphId={}, appUri={}", graphId, appUri, e);
-            }
-        }
-
-        result.setSourceLocation(Location.builder().appUri(appUri).graphId(graphId).extensionName("engine").build());
-        result.setDestinationLocations(Collections.singletonList(command.getSourceLocation())); // 回传给客户端
-
-        // 如果有resultFuture，完成它
-        if (resultFuture != null && !resultFuture.isDone()) {
-            resultFuture.complete(result);
-        } else if (associatedChannelId != null) {
-            // 如果没有resultFuture（例如来自TCP），则通过Channel回传，现在改为路由到ClientConnectionExtension
-            result.setProperty(MessageConstants.PROPERTY_CLIENT_CHANNEL_ID, associatedChannelId);
-            result.setDestinationLocations(List.of(Location.builder()
-                    .appUri("system-app")
-                    .graphId("system-graph")
-                    .extensionName(ClientConnectionExtension.NAME)
-                    .build()));
-            submitMessage(result);
-            log.debug("Engine: start_graph命令结果路由到ClientConnectionExtension. ChannelId: {}, Result: {}",
-                    associatedChannelId, result); // 新增日志
-        }
-    }
-
-    /**
-     * 处理stop_graph命令 (Engine内部命令)
-     *
-     * @param command stop_graph命令
-     */
-    private void handleStopGraphCommand(Command command) {
-        String graphId = (String) command.getProperties().get("graph_id");
-        String appUri = (String) command.getProperties().get("app_uri");
-        String associatedChannelId = (String) command.getProperties().get("__channel_id__");
-        CompletableFuture<CommandResult> resultFuture = (CompletableFuture<CommandResult>) command.getProperties()
-                .get("__result_future__");
-
-        log.info("Engine收到stop_graph命令: graphId={}, appUri={}", graphId, appUri);
-
-        CommandResult result;
-        if (graphId == null || graphId.isEmpty()) {
-            result = CommandResult.error(command.getCommandId(),
-                    Map.of("error", "stop_graph命令缺少graph_id属性").get("error"));
-            log.error("stop_graph命令参数缺失: graphId={}", graphId);
-        } else {
-            GraphInstance removedGraph = graphInstances.remove(graphId);
-            if (removedGraph != null) {
-                try {
-                    removedGraph.cleanupAllExtensions();
-                    result = CommandResult.success(command.getCommandId(),
-                            Map.of("message", "Graph stopped successfully.", "graph_id", graphId));
-                    log.info("图实例停止成功: graphId={}", graphId);
-                } catch (Exception e) {
-                    result = CommandResult.error(command.getCommandId(),
-                            Map.of("error", "停止图实例失败: " + e.getMessage()).get("error"));
-                    log.error("停止图实例时发生异常: graphId={}", graphId, e);
-                }
-            } else {
-                result = CommandResult.error(command.getCommandId(),
-                        Map.of("error", "图实例不存在: " + graphId).get("error"));
-                log.warn("尝试停止不存在的图实例: graphId={}", graphId);
-            }
-        }
-
-        result.setSourceLocation(Location.builder().appUri(appUri).graphId(graphId).extensionName("engine").build());
-        result.setDestinationLocations(Collections.singletonList(command.getSourceLocation())); // 回传给客户端
-
-        // 如果有resultFuture，完成它
-        if (resultFuture != null && !resultFuture.isDone()) {
-            resultFuture.complete(result);
-        } else if (associatedChannelId != null) {
-            // 如果没有resultFuture（例如来自TCP），则通过Channel回传，现在改为路由到ClientConnectionExtension
-            result.setProperty(MessageConstants.PROPERTY_CLIENT_CHANNEL_ID, associatedChannelId);
-            result.setDestinationLocations(List.of(Location.builder()
-                    .appUri("system-app")
-                    .graphId("system-graph")
-                    .extensionName(ClientConnectionExtension.NAME)
-                    .build()));
-            submitMessage(result);
-            log.debug("Engine: stop_graph命令结果路由到ClientConnectionExtension. ChannelId: {}, Result: {}",
-                    associatedChannelId, result); // 新增日志
-        }
-    }
-
-    /**
-     * 处理add_extension_to_graph命令 (Engine内部命令)
-     *
-     * @param command add_extension_to_graph命令
-     */
-    private void handleAddExtensionToGraphCommand(Command command) {
-        String graphId = (String) command.getProperties().get("graph_id");
-        String extensionType = (String) command.getProperties().get("extension_type");
-        String extensionName = (String) command.getProperties().get("extension_name");
-        String appUri = (String) command.getProperties().get("app_uri");
-        String graphJson = (String) command.getProperties().get("graph_json"); // 获取图的JSON配置
-        String associatedChannelId = (String) command.getProperties().get("__channel_id__");
-        CompletableFuture<CommandResult> resultFuture = (CompletableFuture<CommandResult>) command.getProperties()
-                .get("__result_future__");
-
-        log.info("Engine收到add_extension_to_graph命令: graphId={}, extensionType={}, extensionName={}, appUri={}",
-                graphId, extensionType, extensionName, appUri);
-
-        CommandResult result;
-        if (graphId == null || graphId.isEmpty() || extensionType == null || extensionType.isEmpty()
-                || extensionName == null || extensionName.isEmpty()) {
-            result = CommandResult.error(command.getCommandId(),
-                    (String) Map.of("error", "add_extension_to_graph命令缺少graph_id, extension_type, extension_name属性")
-                            .get("error"));
-            log.error("add_extension_to_graph命令参数缺失: graphId={}, extensionType={}, extensionName={}", graphId,
-                    extensionType, extensionName);
-        } else if (!graphInstances.containsKey(graphId)) {
-            result = CommandResult.error(command.getCommandId(),
-                    (String) Map.of("error", "图实例不存在: " + graphId).get("error"));
-            log.warn("尝试添加扩展到不存在的图实例: graphId={}", graphId);
-        } else {
-            try {
-                // 1. 解析GraphConfig
-                GraphConfig graphConfig = GraphLoader.loadGraphConfigFromJson(graphJson);
-                // 如果GraphConfig中也包含graphId，确保与命令中的一致
-                if (graphConfig.getGraphId() != null && !graphConfig.getGraphId().equals(graphId)) {
-                    log.warn("命令中的graphId与GraphConfig不一致，使用命令中的: commandGraphId={}, configGraphId={}", graphId,
-                            graphConfig.getGraphId());
-                }
-                graphConfig.setGraphId(graphId); // 强制使用命令中的graphId
-
-                // 2. 查找目标GraphInstance
-                GraphInstance graphInstance = graphInstances.get(graphId);
-                if (graphInstance == null) {
-                    result = CommandResult.error(command.getCommandId(),
-                            (String) Map.of("error", "图实例不存在: " + graphId).get("error"));
-                    log.warn("尝试添加扩展到不存在的图实例: graphId={}", graphId);
-                } else {
-                    // 3. 动态加载Extension类并实例化
-                    try {
-                        Class<?> clazz = Class.forName(extensionType);
-                        Object instance = clazz.getDeclaredConstructor().newInstance();
-
-                        if (instance instanceof Extension extension) {
-                            boolean registered = graphInstance.registerExtension(extensionName, extension, null); // 扩展本身不带属性
-                            if (!registered) {
-                                log.error("注册Extension失败: graphId={}, extensionName={}", graphId, extensionName);
-                                throw new RuntimeException("Extension注册失败");
-                            }
-                            result = CommandResult.success(command.getCommandId(),
-                                    Map.of("message", "Extension added successfully.", "graph_id", graphId,
-                                            "extension_name", extensionName));
-                            log.info("扩展添加成功: graphId={}, extensionName={}", graphId, extensionName);
-                        } else {
-                            log.error("加载的类不是Extension类型: graphId={}, extensionType={}", graphId, extensionType);
-                            result = CommandResult.error(command.getCommandId(),
-                                    (String) Map.of("error", "加载的类不是Extension类型: " + extensionType).get("error"));
-                        }
-                    } catch (Exception e) {
-                        log.error("实例化或注册Extension失败: graphId={}, extensionType={}, extensionName={}",
-                                graphId, extensionType, extensionName, e);
-                        result = CommandResult.error(command.getCommandId(),
-                                (String) Map.of("error", "Extension实例化/注册失败: " + e.getMessage()).get("error"));
-                    }
-                }
-            } catch (Exception e) {
-                result = CommandResult.error(command.getCommandId(),
-                        (String) Map.of("error", "添加扩展失败: " + e.getMessage()).get("error"));
-                log.error("添加扩展时发生异常: graphId={}, extensionType={}, extensionName={}", graphId, extensionType,
-                        extensionName, e);
-            }
-        }
-
-        result.setSourceLocation(Location.builder().appUri(appUri).graphId(graphId).extensionName("engine").build());
-        result.setDestinationLocations(Collections.singletonList(command.getSourceLocation())); // 回传给客户端
-
-        // 如果有resultFuture，完成它
-        if (resultFuture != null && !resultFuture.isDone()) {
-            resultFuture.complete(result);
-        } else if (associatedChannelId != null) {
-            // 如果没有resultFuture（例如来自TCP），则通过Channel回传，现在改为路由到ClientConnectionExtension
-            result.setProperty(MessageConstants.PROPERTY_CLIENT_CHANNEL_ID, associatedChannelId);
-            result.setDestinationLocations(List.of(Location.builder()
-                    .appUri("system-app")
-                    .graphId("system-graph")
-                    .extensionName(ClientConnectionExtension.NAME)
-                    .build()));
-            submitMessage(result);
-            log.debug("Engine: add_extension_to_graph命令结果路由到ClientConnectionExtension. ChannelId: {}, Result: {}",
-                    associatedChannelId, result); // 新增日志
-        }
-    }
-
-    /**
-     * 处理remove_extension_from_graph命令 (Engine内部命令)
-     *
-     * @param command remove_extension_from_graph命令
-     */
-    private void handleRemoveExtensionFromGraphCommand(Command command) {
-        String graphId = (String) command.getProperties().get("graph_id");
-        String extensionName = (String) command.getProperties().get("extension_name");
-        String appUri = (String) command.getProperties().get("app_uri");
-        String associatedChannelId = (String) command.getProperties().get("__channel_id__");
-        CompletableFuture<CommandResult> resultFuture = (CompletableFuture<CommandResult>) command.getProperties()
-                .get("__result_future__");
-
-        log.info("Engine收到remove_extension_from_graph命令: graphId={}, extensionName={}, appUri={}",
-                graphId, extensionName, appUri);
-
-        CommandResult result;
-        if (graphId == null || graphId.isEmpty() || extensionName == null || extensionName.isEmpty()) {
-            result = CommandResult.error(command.getCommandId(),
-                    (String) Map.of("error", "remove_extension_from_graph命令缺少graph_id或extension_name属性").get("error"));
-            log.error("remove_extension_from_graph命令参数缺失: graphId={}, extensionName={}", graphId, extensionName);
-        } else if (!graphInstances.containsKey(graphId)) {
-            result = CommandResult.error(command.getCommandId(),
-                    (String) Map.of("error", "图实例不存在: " + graphId).get("error"));
-            log.warn("尝试移除扩展到不存在的图实例: graphId={}", graphId);
-        } else {
-            GraphInstance graphInstance = graphInstances.get(graphId);
-            if (graphInstance == null) {
-                result = CommandResult.error(command.getCommandId(),
-                        (String) Map.of("error", "图实例不存在: " + graphId).get("error"));
-                log.warn("尝试移除扩展到不存在的图实例: graphId={}", graphId);
-            } else {
-                boolean removed = graphInstance.removeExtension(extensionName);
-                if (removed) {
-                    result = CommandResult.success(command.getCommandId(), Map.of("message",
-                            "Extension removed successfully.", "graph_id", graphId, "extension_name", extensionName));
-                    log.info("扩展移除成功: graphId={}, extensionName={}", graphId, extensionName);
-                } else {
-                    result = CommandResult.error(command.getCommandId(),
-                            (String) Map.of("error", "Extension not found in graph: " + extensionName).get("error"));
-                    log.warn("尝试移除不存在的扩展: graphId={}, extensionName={}", graphId, extensionName);
-                }
-            }
-        }
-
-        result.setSourceLocation(Location.builder().appUri(appUri).graphId(graphId).extensionName("engine").build());
-        result.setDestinationLocations(Collections.singletonList(command.getSourceLocation())); // 回传给客户端
-
-        // 如果有resultFuture，完成它
-        if (resultFuture != null && !resultFuture.isDone()) {
-            resultFuture.complete(result);
-        } else if (associatedChannelId != null) {
-            // 如果没有resultFuture（例如来自TCP），则通过Channel回传，现在改为路由到ClientConnectionExtension
-            result.setProperty(MessageConstants.PROPERTY_CLIENT_CHANNEL_ID, associatedChannelId);
-            result.setDestinationLocations(List.of(Location.builder()
-                    .appUri("system-app")
-                    .graphId("system-graph")
-                    .extensionName(ClientConnectionExtension.NAME)
-                    .build()));
-            submitMessage(result);
-            log.debug("Engine: remove_extension_from_graph命令结果路由到ClientConnectionExtension. ChannelId: {}, Result: {}",
-                    associatedChannelId, result); // 新增日志
         }
     }
 
@@ -877,25 +585,16 @@ public final class Engine implements MessageSubmitter {
             return;
         }
 
-        String commandIdStr = commandResult.getCommandId();
-        if (commandIdStr == null || commandIdStr.isEmpty()) {
-            log.warn("CommandResult缺少commandId: engineId={}", engineId);
-            return;
-        }
-
-        UUID commandId;
-        try {
-            commandId = UUID.fromString(commandIdStr);
-        } catch (IllegalArgumentException e) {
-            log.warn("CommandResult的commandId格式无效: engineId={}, commandId={}",
-                    engineId, commandIdStr, e);
+        long commandId = commandResult.getCommandId();
+        if (commandId == 0) { // 检查commandId是否为0（无效值）
+            log.warn("CommandResult缺少commandId或commandId无效: engineId={}", engineId);
             return;
         }
 
         // 从PathTable中查找对应的PathOut
-        Optional<PathOut> pathOutOpt = pathTable.getOutPath(commandId);
+        Optional<PathOut> pathOutOpt = pathManager.getOutPath(commandId);
         if (pathOutOpt.isEmpty()) {
-            log.warn("未找到对应的PathOut: engineId={}, commandId={}", engineId, commandId);
+            log.warn("未找到对应的PathOut: commandId={}. 命令结果可能已通过Future完成或PathOut已过期。", commandId);
             return;
         }
 
@@ -904,65 +603,52 @@ public final class Engine implements MessageSubmitter {
         log.debug("Engine: 处理CommandResult. CommandId: {}, IsFinal: {}, IsSuccess: {}", // 新增日志
                 commandResult.getCommandId(), commandResult.isFinal(), commandResult.isSuccess());
 
-        try {
-            // 处理结果返回策略
-            handleResultReturnPolicy(pathOut, commandResult);
+        CompletableFuture<Object> associatedFuture = pathOut.getResultFuture();
+        if (associatedFuture == null) {
+            log.warn("Engine: PathOut {} 未关联CompletableFuture，命令结果无法回传到调用方。", commandId);
+            pathManager.removeOutPath(commandId); // 清理PathOut
+            return;
+        }
 
-            // 如果是最终结果，清理PathOut并完成Future
-            if (commandResult.isFinal()) {
-                log.debug("Engine: CommandResult是最终结果. CommandId: {}", commandResult.getCommandId()); // 新增日志
-                completeCommandResult(pathOut, commandResult);
-                pathTable.removeOutPath(commandId);
-                // 从channelToCommandIdsMap中移除该commandId
-                if (pathOut.getChannelId() != null) {
-                    ConcurrentSkipListSet<UUID> commandIds = channelToCommandIdsMap.get(pathOut.getChannelId());
-                    if (commandIds != null) {
-                        commandIds.remove(commandId);
-                        if (commandIds.isEmpty()) {
-                            channelToCommandIdsMap.remove(pathOut.getChannelId());
-                        }
+        try {
+            // 处理结果返回策略，这会影响pathOut.cachedCommandResult和hasReceivedFinalCommandResult
+            pathManager.handleResultReturnPolicy(pathOut, commandResult);
+
+            // 如果是最终结果，或者错误结果，则完成对应的CompletableFuture
+            if (commandResult.isFinal() || !commandResult.isSuccess()) {
+                if (associatedFuture != null && !associatedFuture.isDone()) {
+                    if (commandResult.isSuccess()) {
+                        associatedFuture.complete(commandResult.getResult());
+                    } else {
+                        associatedFuture.completeExceptionally(new RuntimeException(
+                                "Command execution failed: " + commandResult.getError()));
                     }
+                    log.debug("Engine: 命令结果Future已完成. CommandId: {}", commandId);
+                } else {
+                    log.warn("Engine: 命令结果Future已完成，但收到重复的最终结果或错误结果: commandId={}", commandId);
                 }
+                commandFutures.remove(commandId); // 最终结果或错误结果后，移除Future
+                pathManager.removeOutPath(commandId); // 移除PathOut
+            } else { // 流式中间结果
+                // 对于流式结果，如果Future尚未完成且支持中间结果，可以考虑如何处理。
+                // 目前，我们将只在最终结果时完成Future。
+                log.debug("Engine: 收到中间命令结果. CommandId: {}", commandId);
             }
 
         } catch (CloneNotSupportedException e) {
-            log.error("克隆CommandResult失败: engineId={}, commandId={}",
-                    engineId, commandId, e);
-
-            // 异常情况下也要清理资源
-            if (pathOut.getResultFuture() != null && !pathOut.getResultFuture().isDone()) {
-                pathOut.getResultFuture().completeExceptionally(e);
+            log.error("回溯命令结果时克隆CommandResult失败: commandId={}", commandId, e);
+            if (associatedFuture != null && !associatedFuture.isDone()) {
+                associatedFuture.completeExceptionally(new RuntimeException("Failed to clone CommandResult"));
             }
-            pathTable.removeOutPath(commandId);
-            // 从channelToCommandIdsMap中移除该commandId
-            if (pathOut.getChannelId() != null) {
-                ConcurrentSkipListSet<UUID> commandIds = channelToCommandIdsMap.get(pathOut.getChannelId());
-                if (commandIds != null) {
-                    commandIds.remove(commandId);
-                    if (commandIds.isEmpty()) {
-                        channelToCommandIdsMap.remove(pathOut.getChannelId());
-                    }
-                }
-            }
+            commandFutures.remove(commandId);
+            pathManager.removeOutPath(commandId);
         } catch (Exception e) {
-            log.error("处理命令结果时发生异常: engineId={}, commandId={}",
-                    engineId, commandId, e);
-
-            // 异常情况下也要清理资源
-            if (pathOut.getResultFuture() != null && !pathOut.getResultFuture().isDone()) {
-                pathOut.getResultFuture().completeExceptionally(e);
+            log.error("处理命令结果时发生异常: commandId={}", commandId, e);
+            if (associatedFuture != null && !associatedFuture.isDone()) {
+                associatedFuture.completeExceptionally(e);
             }
-            pathTable.removeOutPath(commandId);
-            // 从channelToCommandIdsMap中移除该commandId
-            if (pathOut.getChannelId() != null) {
-                ConcurrentSkipListSet<UUID> commandIds = channelToCommandIdsMap.get(pathOut.getChannelId());
-                if (commandIds != null) {
-                    commandIds.remove(commandId);
-                    if (commandIds.isEmpty()) {
-                        channelToCommandIdsMap.remove(pathOut.getChannelId());
-                    }
-                }
-            }
+            commandFutures.remove(commandId);
+            pathManager.removeOutPath(commandId);
         }
     }
 
@@ -975,30 +661,14 @@ public final class Engine implements MessageSubmitter {
         log.debug("处理数据消息: engineId={}, messageType={}, messageName={}",
                 engineId, message.getType(), message.getName());
 
-        String clientLocationUri = message.getProperty(MessageConstants.PROPERTY_CLIENT_LOCATION_URI, String.class);
-        String channelId = message.getProperty(MessageConstants.PROPERTY_CLIENT_CHANNEL_ID, String.class);
+        String sourceAppUri;
+        String sourceGraphId;
 
-        // 如果消息带有客户端Location URI，则路由到ClientConnectionExtension
-        if (clientLocationUri != null && channelId != null) {
-            log.debug(
-                    "Engine: 数据消息带有客户端Location URI，路由到ClientConnectionExtension. clientLocationUri: {}, channelId: {}, messageName: {}",
-                    clientLocationUri, channelId, message.getName());
-            // 设置目标为ClientConnectionExtension
-            message.setDestinationLocations(List.of(Location.builder()
-                    .appUri("system-app") // ClientConnectionExtension位于系统图
-                    .graphId("system-graph")
-                    .extensionName(ClientConnectionExtension.NAME)
-                    .build()));
-            // 将消息重新提交到Engine队列，由ClientConnectionExtension处理
-            submitMessage(message); // 这里不会引起循环，因为ClientConnectionExtension会直接写出到Channel
-            return; // 消息已处理，不再进行常规图内路由
-        }
+        sourceAppUri = message.getSourceLocation() != null ? message.getSourceLocation().appUri() : null;
+        sourceGraphId = message.getSourceLocation() != null ? message.getSourceLocation().graphId() : null;
 
-        // 如果没有明确的客户端Location URI，或者无法通过Channel回传，则按照常规路由到Extension
-        // 1. 获取消息的源GraphId
-        String sourceGraphId = message.getSourceLocation() != null ? message.getSourceLocation().graphId() : null;
-        if (sourceGraphId == null) {
-            log.warn("数据消息缺少有效的源GraphId，无法进行路由: engineId={}, messageType={}, messageName={}",
+        if (sourceGraphId == null || sourceAppUri == null) {
+            log.warn("数据消息缺少有效的源AppUri或GraphId，无法进行路由: engineId={}, messageType={}, messageName={}",
                     engineId, message.getType(), message.getName());
             return;
         }
@@ -1011,227 +681,97 @@ public final class Engine implements MessageSubmitter {
             return;
         }
 
-        // 3. 解析消息的实际目的地列表
-        log.debug("Engine: 正在解析数据消息目标Extension. GraphId: {}, MessageName: {}", sourceGraphId, message.getName());
-        List<String> targetExtensionNames = graphInstance.resolveDestinations(message);
+        // --- 新增 DataInPath 处理 --- (从 handleInboundDataMessageFromClient 迁移过来)
+        // 如果 Data 消息是来自客户端的 (通过 ClientConnectionExtension 的 Location 识别)
+        if (message.getSourceLocation() != null &&
+                ClientConnectionExtension.NAME.equals(message.getSourceLocation().extensionName())) {
+            // 从 properties 中获取 clientLocation 和 channelId
+            String associatedChannelId = (String) message.getProperty(MessageConstants.PROPERTY_CLIENT_CHANNEL_ID,
+                    String.class);
+            String clientLocationUri = message.getProperty(MessageConstants.PROPERTY_CLIENT_LOCATION_URI, String.class);
+            String clientAppUri = message.getProperty(MessageConstants.PROPERTY_CLIENT_APP_URI, String.class);
+            String clientGraphId = message.getProperty(MessageConstants.PROPERTY_CLIENT_GRAPH_ID, String.class);
 
-        if (targetExtensionNames.isEmpty()) {
+            if (associatedChannelId != null && clientLocationUri != null && clientAppUri != null
+                    && clientGraphId != null) {
+                Location clientLoc = new Location(clientAppUri, clientGraphId, ClientConnectionExtension.NAME);
+                // 生成唯一的 dataPathId
+                UUID dataPathId = UUID.randomUUID();
+                // 创建 DataInPath 实例并存储客户端上下文
+                pathManager.createInPath(dataPathId, clientLoc, associatedChannelId);
+
+                // 将 dataPathId 附加到 Data 消息的 properties 中，以便后续 Extension 能够关联
+                message.setProperty(MessageConstants.PROPERTY_DATA_PATH_ID, dataPathId.toString());
+
+                // 移除临时属性，它们已存储在 DataInPath 中
+                message.getProperties().remove(MessageConstants.PROPERTY_CLIENT_CHANNEL_ID);
+                message.getProperties().remove(MessageConstants.PROPERTY_CLIENT_LOCATION_URI);
+                message.getProperties().remove(MessageConstants.PROPERTY_CLIENT_APP_URI);
+                message.getProperties().remove(MessageConstants.PROPERTY_CLIENT_GRAPH_ID);
+
+                // 将 Data 消息的 destinationLocations 设置为 null，让 Engine 根据图连接路由
+                message.setDestinationLocations(null); // 或根据 GraphConfig 默认目的地
+            }
+        }
+
+        // 3. 解析消息的实际目的地列表，委托给RouteManager
+        log.debug("Engine: 正在解析数据消息目标Extension. GraphId: {}, MessageName: {}", sourceGraphId, message.getName());
+        List<Location> targetLocations = routeManager.resolveMessageDestinations(message);
+
+        if (targetLocations.isEmpty()) {
             log.warn("数据消息没有解析到任何目标Extension: engineId={}, messageType={}, messageName={}",
                     engineId, message.getType(), message.getName());
             return;
         }
 
         // 为每个目标Extension分发消息
-        for (String targetExtensionName : targetExtensionNames) {
-            Optional<Extension> extensionOpt = graphInstance.getExtension(targetExtensionName);
-            Optional<EngineExtensionContext> contextOpt = graphInstance.getExtensionContext(targetExtensionName);
-
-            if (extensionOpt.isEmpty() || contextOpt.isEmpty()) {
-                log.warn(
-                        "目标Extension不存在于图实例中或未加载: engineId={}, graphId={}, extensionName={}, messageType={}, messageName={}",
-                        engineId, sourceGraphId, targetExtensionName, message.getType(), message.getName());
+        for (Location targetLocation : targetLocations) {
+            // 获取目标Extension实例
+            final Extension currentTargetExtension = graphInstance.getExtension(targetLocation.extensionName())
+                    .orElse(null);
+            if (currentTargetExtension == null) {
+                log.warn("Engine: 目标Extension未找到: {}. 无法分发数据消息: {}", targetLocation.extensionName(), message.getName());
                 continue;
             }
 
-            Extension extension = extensionOpt.get();
-            EngineExtensionContext context = contextOpt.get();
-            // 如果有多个目标，需要克隆消息，确保每个Extension接收到独立副本
-            Message messageToSend = message;
-            if (targetExtensionNames.size() > 1) {
+            // 克隆消息，确保每个Extension接收到独立副本
+            final Message finalMessageToSend;
+            if (targetLocations.size() > 1) {
                 try {
-                    messageToSend = message.clone();
+                    finalMessageToSend = message.clone();
                 } catch (CloneNotSupportedException e) {
                     log.error("克隆数据消息失败，无法分发到所有目标: messageType={}, messageName={}, targetExtensionName={}",
-                            message.getType(), message.getName(), targetExtensionName, e);
+                            message.getType(), message.getName(), targetLocation.extensionName(), e);
                     continue;
                 }
+            } else {
+                finalMessageToSend = message;
             }
+            finalMessageToSend.setDestinationLocations(List.of(targetLocation));
 
-            // 更新消息的目标位置，使其指向当前处理的Extension
-            Location currentTargetLocation = Location.builder()
-                    .appUri(graphInstance.getAppUri())
-                    .graphId(graphInstance.getGraphId())
-                    .extensionName(targetExtensionName)
-                    .build();
-            messageToSend.setDestinationLocations(List.of(currentTargetLocation));
-
-            // 根据消息类型调用相应的Extension方法
             try {
-                log.debug(
-                        "Engine: 正在调用Extension.onData/onAudioFrame/onVideoFrame. EngineId: {}, ExtensionName: {}, MessageName: {}", // 新增日志
-                        engineId, targetExtensionName, messageToSend.getName());
-                switch (messageToSend.getType()) {
-                    case DATA -> {
-                        if (messageToSend instanceof Data) {
-                            Data data = (Data) messageToSend; // 显式类型转换
-                            extension.onData(data, context);
-                            log.debug("Extension处理数据完成: engineId={}, extensionName={}, messageName={}",
-                                    engineId, targetExtensionName, data.getName());
-                        }
-                    }
-                    case AUDIO_FRAME -> {
-                        if (messageToSend instanceof AudioFrame) {
-                            AudioFrame audioFrame = (AudioFrame) messageToSend; // 显式类型转换
-                            extension.onAudioFrame(audioFrame, context);
-                            log.debug("Extension处理音频帧完成: engineId={}, extensionName={}, messageName={}",
-                                    engineId, targetExtensionName, audioFrame.getName());
-                        }
-                    }
-                    case VIDEO_FRAME -> {
-                        if (messageToSend instanceof VideoFrame) {
-                            VideoFrame videoFrame = (VideoFrame) messageToSend; // 显式类型转换
-                            extension.onVideoFrame(videoFrame, context);
-                            log.debug("Extension处理视频帧完成: engineId={}, extensionName={}, messageName={}",
-                                    engineId, targetExtensionName, videoFrame.getName());
-                        }
-                    }
-                    default -> {
-                        log.warn("未知的数据消息类型: engineId={}, extensionName={}, messageType={}",
-                                engineId, targetExtensionName, messageToSend.getType());
-                    }
+                // 根据消息类型调用Extension的相应方法
+                switch (finalMessageToSend.getType()) {
+                    case DATA -> graphInstance.getExtensionContext(targetLocation.extensionName())
+                            .ifPresent(context -> currentTargetExtension.onData((Data) finalMessageToSend, context));
+                    case AUDIO_FRAME ->
+                        graphInstance.getExtensionContext(targetLocation.extensionName())
+                                .ifPresent(
+                                        context -> currentTargetExtension.onAudioFrame((AudioFrame) finalMessageToSend,
+                                                context));
+                    case VIDEO_FRAME ->
+                        graphInstance.getExtensionContext(targetLocation.extensionName())
+                                .ifPresent(
+                                        context -> currentTargetExtension.onVideoFrame((VideoFrame) finalMessageToSend,
+                                                context));
+                    default -> log.warn("Engine: 不支持的数据消息类型: {}", finalMessageToSend.getType());
                 }
+                log.debug("Extension处理数据完成: engineId={}, extensionName={}, messageName={}",
+                        engineId, targetLocation.extensionName(), finalMessageToSend.getName());
             } catch (Exception e) {
-                log.error("Extension处理数据消息时发生异常: engineId={}, extensionName={}, messageType={}, messageName={}",
-                        engineId, targetExtensionName, messageToSend.getType(), messageToSend.getName(), e);
+                log.error("Engine: 调用Extension的onData/onAudioFrame/onVideoFrame方法异常. Extension: {}, MessageType: {}",
+                        targetLocation.extensionName(), finalMessageToSend.getType().name(), e);
             }
-        }
-    }
-
-    /**
-     * 处理结果返回策略
-     * 根据PathOut中配置的ResultReturnPolicy来决定如何处理命令结果
-     */
-    private void handleResultReturnPolicy(PathOut pathOut, CommandResult commandResult)
-            throws CloneNotSupportedException {
-        ResultReturnPolicy policy = pathOut.getReturnPolicy();
-
-        switch (policy) {
-            case FIRST_ERROR_OR_LAST_OK -> handleFirstErrorOrLastOkPolicy(pathOut, commandResult);
-            case EACH_OK_AND_ERROR -> handleEachOkAndErrorPolicy(pathOut, commandResult);
-            default -> {
-                log.warn("未知的结果返回策略: engineId={}, policy={}, commandId={}",
-                        engineId, policy, commandResult.getCommandId());
-                // 默认使用FIRST_ERROR_OR_LAST_OK策略
-                handleFirstErrorOrLastOkPolicy(pathOut, commandResult);
-            }
-        }
-
-        // 如果PathOut关联了channelId，并且不是FIRST_ERROR_OR_LAST_OK策略的最终结果，则将结果回传给客户端
-        if (pathOut.getChannelId() != null) {
-            // 如果是EACH_OK_AND_ERROR策略，或者FIRST_ERROR_OR_LAST_OK策略但还未收到最终结果，则直接发送
-            if (policy == ResultReturnPolicy.EACH_OK_AND_ERROR || !commandResult.isFinal()) {
-                log.debug("Engine: handleResultReturnPolicy通过Channel回传. ChannelId: {}, Result: {}",
-                        pathOut.getChannelId(), commandResult); // 新增日志
-                sendMessageToChannel(pathOut.getChannelId(), commandResult);
-            }
-        }
-    }
-
-    /**
-     * 处理FIRST_ERROR_OR_LAST_OK策略
-     * 优先返回第一个错误，或等待所有OK结果并返回最后一个OK结果
-     */
-    private void handleFirstErrorOrLastOkPolicy(PathOut pathOut, CommandResult commandResult)
-            throws CloneNotSupportedException {
-        // 如果是错误结果且还未收到最终结果，立即完成Future
-        if (!commandResult.isSuccess() && !pathOut.isHasReceivedFinalCommandResult()) {
-            log.debug("收到错误结果，立即返回: engineId={}, commandId={}, error={}",
-                    engineId, commandResult.getCommandId(), commandResult.getError());
-            completeCommandResult(pathOut, commandResult);
-            return;
-        }
-
-        // 如果是成功结果，缓存起来
-        if (commandResult.isSuccess()) {
-            pathOut.setCachedCommandResult(commandResult);
-            log.debug("缓存成功结果: engineId={}, commandId={}",
-                    engineId, commandResult.getCommandId());
-        }
-
-        // 如果是最终结果，使用缓存的结果或当前结果
-        if (commandResult.isFinal()) {
-            log.debug("Engine: FIRST_ERROR_OR_LAST_OK最终结果. CommandId: {}", commandResult.getCommandId()); // 新增日志
-            CommandResult finalResult = pathOut.getCachedCommandResult() != null ? pathOut.getCachedCommandResult()
-                    : commandResult;
-            completeCommandResult(pathOut, finalResult);
-        }
-    }
-
-    /**
-     * 处理EACH_OK_AND_ERROR策略
-     * 返回每个OK或ERROR结果（流式结果）
-     */
-    private void handleEachOkAndErrorPolicy(PathOut pathOut, CommandResult commandResult)
-            throws CloneNotSupportedException {
-        log.debug("流式返回结果: engineId={}, commandId={}, isSuccess={}, isFinal={}",
-                engineId, commandResult.getCommandId(), commandResult.isSuccess(), commandResult.isFinal());
-
-        // 对于流式策略，每个结果都需要通知
-        // 这里可以通过回调或其他机制通知上层
-        // 暂时记录日志，后续可以扩展为实际的流式处理
-
-        // 如果是最终结果，完成Future
-        if (commandResult.isFinal()) {
-            log.debug("Engine: EACH_OK_AND_ERROR最终结果. CommandId: {}", commandResult.getCommandId()); // 新增日志
-            completeCommandResult(pathOut, commandResult);
-        }
-
-        // 如果PathOut关联了channelId，则将结果回传给客户端
-        if (pathOut.getChannelId() != null) {
-            // 路由到ClientConnectionExtension
-            commandResult.setProperty(MessageConstants.PROPERTY_CLIENT_CHANNEL_ID, pathOut.getChannelId());
-            commandResult.setDestinationLocations(List.of(Location.builder()
-                    .appUri("system-app")
-                    .graphId("system-graph")
-                    .extensionName(ClientConnectionExtension.NAME)
-                    .build()));
-            submitMessage(commandResult);
-            log.debug("Engine: EACH_OK_AND_ERROR命令结果路由到ClientConnectionExtension. ChannelId: {}, Result: {}",
-                    pathOut.getChannelId(),
-                    commandResult); // 新增日志
-        }
-    }
-
-    /**
-     * 完成命令结果的Future并进行回溯
-     * 将CommandResult的commandId恢复为parentCommandId，目的地设置为原始命令的sourceLocation
-     */
-    private void completeCommandResult(PathOut pathOut, CommandResult commandResult) throws CloneNotSupportedException {
-        pathOut.setHasReceivedFinalCommandResult(true);
-
-        // 完成CompletableFuture
-        if (pathOut.getResultFuture() != null && !pathOut.getResultFuture().isDone()) {
-            pathOut.getResultFuture().complete(commandResult);
-            log.debug("命令结果Future已完成: engineId={}, commandId={}",
-                    engineId, commandResult.getCommandId());
-        }
-
-        // 进行结果回溯：创建新的CommandResult消息并重新提交到Engine队列
-        if (pathOut.getParentCommandId() != null) {
-            CommandResult backtrackResult = (CommandResult) commandResult.clone();
-
-            // 恢复commandId为parentCommandId
-            backtrackResult.setCommandId(pathOut.getParentCommandId().toString());
-
-            // 设置目的地为原始命令的sourceLocation
-            backtrackResult.setDestinationLocation(pathOut.getSourceLocation());
-            backtrackResult.setSourceLocation(pathOut.getDestinationLocation());
-
-            // 重新提交到Engine的消息队列继续回溯
-            submitMessage(backtrackResult, pathOut.getChannelId()); // 回溯时保留channelId
-
-            log.debug("命令结果已回溯: engineId={}, originalCommandId={}, parentCommandId={}",
-                    engineId, commandResult.getCommandId(), pathOut.getParentCommandId());
-        } else if (pathOut.getChannelId() != null) { // 如果是根命令，且有ChannelId，路由到ClientConnectionExtension
-            commandResult.setProperty(MessageConstants.PROPERTY_CLIENT_CHANNEL_ID, pathOut.getChannelId());
-            commandResult.setDestinationLocations(List.of(Location.builder()
-                    .appUri("system-app")
-                    .graphId("system-graph")
-                    .extensionName(ClientConnectionExtension.NAME)
-                    .build()));
-            submitMessage(commandResult);
-            log.debug("Engine: 根命令结果路由到ClientConnectionExtension. ChannelId: {}, Result: {}", pathOut.getChannelId(),
-                    commandResult); // 新增日志
         }
     }
 
@@ -1319,32 +859,44 @@ public final class Engine implements MessageSubmitter {
 
         log.info("处理Channel断开连接事件: engineId={}, channelId={}", engineId, channelId);
 
-        // 获取与此Channel相关的所有Command ID
-        ConcurrentSkipListSet<UUID> commandIdsToCleanup = channelToCommandIdsMap.remove(channelId);
+        // 通知PathManager处理连接断开事件，它会清理相关的PathOut
+        pathManager.handleChannelDisconnected(channelId);
 
-        if (commandIdsToCleanup != null && !commandIdsToCleanup.isEmpty()) {
-            log.debug("发现 {} 个与Channel {} 相关的命令需要清理", commandIdsToCleanup.size(), channelId);
-            for (UUID commandId : commandIdsToCleanup) {
-                Optional<PathOut> pathOutOpt = pathTable.getOutPath(commandId);
-                if (pathOutOpt.isPresent()) {
-                    PathOut pathOut = pathOutOpt.get();
-                    // 完成Future，表明连接已断开，命令无法返回结果
-                    if (pathOut.getResultFuture() != null && !pathOut.getResultFuture().isDone()) {
-                        pathOut.getResultFuture().completeExceptionally(new ChannelDisconnectedException(
-                                "Channel " + channelId + " disconnected. CommandResult cannot be returned."));
-                    }
-                    pathTable.removeOutPath(commandId);
-                    log.debug("清理与断开连接Channel相关的PathOut: commandId={}", commandId);
-                } else {
-                    log.warn("在断开连接清理时未找到PathOut，可能已被其他机制清理: commandId={}", commandId);
-                }
-            }
-        } else {
-            log.debug("没有发现与Channel {} 相关的命令需要清理", channelId);
-        }
+        // 通知ClientConnectionExtension清理其内部映射
+        clientConnectionExtension.removeClientChannelMapping(channelId);
 
         // 从channelMap中移除，确保完全清理
         channelMap.remove(channelId);
+    }
+
+    /**
+     * 向Engine发送一个命令，并返回一个CompletableFuture，用于异步获取命令执行结果。
+     * 此方法为Engine内部使用，或由EngineAsyncExtensionEnv调用。
+     * 实现CommandSubmitter接口。
+     *
+     * @param command 要发送的命令对象
+     * @return CompletableFuture<Object>，代表命令执行的最终结果
+     * @throws IllegalStateException 如果Engine未在运行状态
+     */
+    @Override // 添加Override注解
+    public CompletableFuture<Object> submitCommand(Command command) { // 方法名改为submitCommand
+        if (state.get() != EngineState.RUNNING) {
+            CompletableFuture<Object> future = new CompletableFuture<>();
+            future.completeExceptionally(new IllegalStateException("Engine未在运行状态，无法发送命令: " + engineId));
+            return future;
+        }
+
+        if (command.getCommandId() == 0) {
+            command.setCommandId(Command.generateCommandId());
+        }
+
+        CompletableFuture<Object> future = new CompletableFuture<>();
+        commandFutures.put(command.getCommandId(), future);
+
+        // 提交命令到Engine的内部消息队列，不再检查返回值
+        submitMessage(command); // 现在是void方法
+
+        return future;
     }
 
     // Getter方法
@@ -1376,6 +928,26 @@ public final class Engine implements MessageSubmitter {
     }
 
     /**
+     * 将GraphInstance添加到Engine的映射中。
+     *
+     * @param graphId       图实例ID
+     * @param graphInstance 图实例对象
+     */
+    public void addGraphInstance(String graphId, GraphInstance graphInstance) {
+        graphInstances.put(graphId, graphInstance);
+    }
+
+    /**
+     * 从Engine的映射中移除并返回GraphInstance。
+     *
+     * @param graphId 图实例ID
+     * @return 被移除的GraphInstance，如果不存在则为null
+     */
+    public GraphInstance removeGraphInstance(String graphId) {
+        return graphInstances.remove(graphId);
+    }
+
+    /**
      * 获取队列当前大小（用于监控）
      */
     public int getQueueSize() {
@@ -1387,15 +959,6 @@ public final class Engine implements MessageSubmitter {
      */
     public int getQueueCapacity() {
         return inboundMessageQueue.capacity();
-    }
-
-    /**
-     * 获取ClientConnectionExtension实例。
-     *
-     * @return ClientConnectionExtension实例
-     */
-    public ClientConnectionExtension getClientConnectionExtension() {
-        return clientConnectionExtension;
     }
 
     /**

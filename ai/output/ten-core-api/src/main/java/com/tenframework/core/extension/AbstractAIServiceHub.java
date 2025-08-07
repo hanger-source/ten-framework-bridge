@@ -1,183 +1,116 @@
 package com.tenframework.core.extension;
 
+import com.tenframework.core.message.AudioFrame;
 import com.tenframework.core.message.Command;
+import com.tenframework.core.message.Data;
+import com.tenframework.core.message.VideoFrame;
+import com.tenframework.core.extension.AsyncExtensionEnv;
 import com.tenframework.core.message.CommandResult;
-import lombok.extern.slf4j.Slf4j;
+// import com.tenframework.core.message.StatusCode; // 移除StatusCode导入
+import com.tenframework.core.util.JsonUtils;
+import com.fasterxml.jackson.core.JsonProcessingException;
 
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * AI服务集线器基础抽象类
- * 用于集成多个AI服务，提供统一的接口
- * 
- * 功能：
- * 1. 管理多个AI服务实例
- * 2. 提供统一的命令处理接口
- * 3. 支持服务路由和负载均衡
- * 4. 处理AI服务的异步响应
+ * 抽象的AI服务中心Extension，提供了AI服务相关Extension的通用逻辑。
+ * 继承自BaseExtension，并实现了Extension接口。
  */
-@Slf4j
-public abstract class AbstractAIServiceHub implements Extension {
+public abstract class AbstractAIServiceHub extends BaseExtension {
 
-    protected String extensionName;
-    protected boolean isRunning = false;
-    protected Map<String, Object> configuration;
+    /**
+     * 构造函数，初始化AI服务中心Extension。
+     *
+     * @param extensionName Extension的名称。
+     */
+    public AbstractAIServiceHub(String extensionName) {
+        super(); // 修改为无参构造函数
+    }
 
     @Override
-    public void onConfigure(ExtensionContext context) {
-        this.extensionName = context.getExtensionName();
-        // 配置属性将在子类中通过getProperty方法获取
-        log.info("AI服务集线器配置阶段: extensionName={}", extensionName);
+    public void onConfigure(AsyncExtensionEnv context) {
+        super.onConfigure(context);
         onAIServiceConfigure(context);
     }
 
     @Override
-    public void onInit(ExtensionContext context) {
-        log.info("AI服务集线器初始化阶段: extensionName={}", extensionName);
+    public void onInit(AsyncExtensionEnv context) {
+        super.onInit(context);
         onAIServiceInit(context);
     }
 
     @Override
-    public void onStart(ExtensionContext context) {
-        log.info("AI服务集线器启动阶段: extensionName={}", extensionName);
-        this.isRunning = true;
+    public void onStart(AsyncExtensionEnv context) {
+        super.onStart(context);
         onAIServiceStart(context);
     }
 
     @Override
-    public void onStop(ExtensionContext context) {
-        log.info("AI服务集线器停止阶段: extensionName={}", extensionName);
-        this.isRunning = false;
+    public void onStop(AsyncExtensionEnv context) {
+        super.onStop(context);
         onAIServiceStop(context);
     }
 
     @Override
-    public void onDeinit(ExtensionContext context) {
-        log.info("AI服务集线器清理阶段: extensionName={}", extensionName);
+    public void onDeinit(AsyncExtensionEnv context) {
+        super.onDeinit(context);
         onAIServiceDeinit(context);
     }
 
     @Override
-    public void onCommand(Command command, ExtensionContext context) {
-        if (!isRunning) {
-            log.warn("AI服务集线器未运行，忽略命令: extensionName={}, commandName={}", 
-                    extensionName, command.getName());
-            return;
-        }
-
-        log.debug("AI服务集线器收到命令: extensionName={}, commandName={}", 
-                extensionName, command.getName());
-
-        // 使用虚拟线程处理AI服务命令
-        CompletableFuture.runAsync(() -> {
-            try {
-                handleAIServiceCommand(command, context);
-            } catch (Exception e) {
-                log.error("AI服务集线器命令处理异常: extensionName={}, commandName={}", 
-                        extensionName, command.getName(), e);
-                sendErrorResult(command, context, "AI服务处理异常: " + e.getMessage());
-            }
-        }, context.getVirtualThreadExecutor());
+    public void onCommand(Command command, AsyncExtensionEnv context) {
+        super.onCommand(command, context);
+        handleAIServiceCommand(command, context);
     }
 
     @Override
-    public void onData(com.tenframework.core.message.Data data, ExtensionContext context) {
-        if (!isRunning) {
-            log.warn("AI服务集线器未运行，忽略数据: extensionName={}, dataName={}", 
-                    extensionName, data.getName());
-            return;
-        }
-
-        log.debug("AI服务集线器收到数据: extensionName={}, dataName={}", 
-                extensionName, data.getName());
+    public void onData(Data data, AsyncExtensionEnv context) {
+        super.onData(data, context);
         handleAIServiceData(data, context);
     }
 
     @Override
-    public void onAudioFrame(com.tenframework.core.message.AudioFrame audioFrame, ExtensionContext context) {
-        if (!isRunning) {
-            log.warn("AI服务集线器未运行，忽略音频帧: extensionName={}, frameName={}", 
-                    extensionName, audioFrame.getName());
-            return;
-        }
-
-        log.debug("AI服务集线器收到音频帧: extensionName={}, frameName={}", 
-                extensionName, audioFrame.getName());
+    public void onAudioFrame(AudioFrame audioFrame, AsyncExtensionEnv context) {
+        super.onAudioFrame(audioFrame, context);
         handleAIServiceAudioFrame(audioFrame, context);
     }
 
     @Override
-    public void onVideoFrame(com.tenframework.core.message.VideoFrame videoFrame, ExtensionContext context) {
-        if (!isRunning) {
-            log.warn("AI服务集线器未运行，忽略视频帧: extensionName={}, frameName={}", 
-                    extensionName, videoFrame.getName());
-            return;
-        }
-
-        log.debug("AI服务集线器收到视频帧: extensionName={}, frameName={}", 
-                extensionName, videoFrame.getName());
+    public void onVideoFrame(VideoFrame videoFrame, AsyncExtensionEnv context) {
+        super.onVideoFrame(videoFrame, context);
         handleAIServiceVideoFrame(videoFrame, context);
     }
 
-    /**
-     * AI服务配置阶段
-     */
-    protected abstract void onAIServiceConfigure(ExtensionContext context);
+    protected abstract void onAIServiceConfigure(AsyncExtensionEnv context);
 
-    /**
-     * AI服务初始化阶段
-     */
-    protected abstract void onAIServiceInit(ExtensionContext context);
+    protected abstract void onAIServiceInit(AsyncExtensionEnv context);
 
-    /**
-     * AI服务启动阶段
-     */
-    protected abstract void onAIServiceStart(ExtensionContext context);
+    protected abstract void onAIServiceStart(AsyncExtensionEnv context);
 
-    /**
-     * AI服务停止阶段
-     */
-    protected abstract void onAIServiceStop(ExtensionContext context);
+    protected abstract void onAIServiceStop(AsyncExtensionEnv context);
 
-    /**
-     * AI服务清理阶段
-     */
-    protected abstract void onAIServiceDeinit(ExtensionContext context);
+    protected abstract void onAIServiceDeinit(AsyncExtensionEnv context);
 
-    /**
-     * 处理AI服务命令
-     */
-    protected abstract void handleAIServiceCommand(Command command, ExtensionContext context);
+    protected abstract void handleAIServiceCommand(Command command, AsyncExtensionEnv context);
 
-    /**
-     * 处理AI服务数据
-     */
-    protected abstract void handleAIServiceData(com.tenframework.core.message.Data data, ExtensionContext context);
+    protected abstract void handleAIServiceData(Data data, AsyncExtensionEnv context);
 
-    /**
-     * 处理AI服务音频帧
-     */
-    protected abstract void handleAIServiceAudioFrame(com.tenframework.core.message.AudioFrame audioFrame, ExtensionContext context);
+    protected abstract void handleAIServiceAudioFrame(AudioFrame audioFrame, AsyncExtensionEnv context);
 
-    /**
-     * 处理AI服务视频帧
-     */
-    protected abstract void handleAIServiceVideoFrame(com.tenframework.core.message.VideoFrame videoFrame, ExtensionContext context);
+    protected abstract void handleAIServiceVideoFrame(VideoFrame videoFrame, AsyncExtensionEnv context);
 
-    /**
-     * 发送错误结果
-     */
-    protected void sendErrorResult(Command command, ExtensionContext context, String errorMessage) {
+    protected void sendErrorResult(Command command, AsyncExtensionEnv context, String errorMessage) {
+        // 构建错误结果
         CommandResult errorResult = CommandResult.error(command.getCommandId(), errorMessage);
+        // 发送结果
         context.sendResult(errorResult);
     }
 
-    /**
-     * 发送成功结果
-     */
-    protected void sendSuccessResult(Command command, ExtensionContext context, Map<String, Object> result) {
+    protected void sendSuccessResult(Command command, AsyncExtensionEnv context, Map<String, Object> result) {
+        // 构建成功结果
         CommandResult successResult = CommandResult.success(command.getCommandId(), result);
+        // 发送结果
         context.sendResult(successResult);
     }
-} 
+}
