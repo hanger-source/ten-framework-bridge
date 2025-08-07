@@ -38,7 +38,7 @@ public class HttpCommandResultOutboundHandler extends MessageToMessageEncoder<Co
             // 将CommandResult转换为Map，便于JSON序列化
             Map<String, Object> responseMap = Map.of(
                     "status", msg.isSuccess() ? "OK" : "ERROR",
-                    "command_id", msg.getCommandId() != null ? msg.getCommandId() : "N/A",
+                    "command_id", msg.getCommandId(), // 直接使用getCommandId()，long类型不会是null
                     "result", msg.getResult() != null ? msg.getResult() : Map.of(),
                     "is_final", msg.isFinal(),
                     "message", msg.getError() != null ? msg.getError() : (msg.isSuccess() ? "Success" : "Failure"));

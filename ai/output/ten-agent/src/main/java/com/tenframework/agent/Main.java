@@ -63,8 +63,8 @@ public class Main {
 
                 // 模拟 HTTP POST 请求
                 Command startGraphCommand = new Command(
-                                UUID.randomUUID().toString(), // 将 UUID 转换为 String
-                                null, // parentCommandId (仍然是 String)
+                                UUID.randomUUID().getMostSignificantBits(), // 使用long类型UUID
+                                0L, // parentCommandId 设置为0L
                                 startGraphCommandJson.get("name").asText(),
                                 objectMapper.convertValue(startGraphArgs, Map.class),
                                 new Location("main-app", "test-graph", "http-client"), // sourceLocation: 添加graphId
@@ -109,8 +109,8 @@ public class Main {
                 stopGraphCommandJson.set("args", stopGraphArgs);
 
                 Command stopGraphCommand = new Command(
-                                UUID.randomUUID().toString(), // 将 UUID 转换为 String
-                                null,
+                                UUID.randomUUID().getMostSignificantBits(), // 使用long类型UUID
+                                0L,
                                 stopGraphCommandJson.get("name").asText(),
                                 objectMapper.convertValue(stopGraphArgs, Map.class),
                                 new Location("main-app", "test-graph", "http-client"), // appUri改为main-app, 添加graphId

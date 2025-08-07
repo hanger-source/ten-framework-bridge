@@ -11,6 +11,8 @@ import io.netty.channel.SimpleChannelInboundHandler;
 import lombok.extern.slf4j.Slf4j;
 
 import static com.tenframework.core.message.MessageConstants.PROPERTY_CLIENT_LOCATION_URI;
+import static com.tenframework.core.message.MessageConstants.PROPERTY_CLIENT_GRAPH_ID;
+import static com.tenframework.core.message.MessageConstants.PROPERTY_CLIENT_APP_URI;
 
 @Slf4j
 public class WebSocketMessageFrameHandler extends SimpleChannelInboundHandler<Message> {

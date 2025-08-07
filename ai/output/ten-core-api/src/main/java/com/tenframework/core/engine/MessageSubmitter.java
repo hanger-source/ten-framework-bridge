@@ -14,7 +14,7 @@ public interface MessageSubmitter {
      * @param channelId 可选的Channel ID，如果消息来自特定Channel
      * @return true如果成功提交，false如果队列已满
      */
-    void submitMessage(Message message, String channelId);
+    boolean submitMessage(Message message, String channelId);
 
     /**
      * 向Engine提交消息（非阻塞）
@@ -22,7 +22,7 @@ public interface MessageSubmitter {
      * @param message 要处理的消息
      * @return true如果成功提交，false如果队列已满
      */
-    default void submitMessage(Message message) {
-        submitMessage(message, null);
+    default boolean submitMessage(Message message) {
+        return submitMessage(message, null);
     }
 }

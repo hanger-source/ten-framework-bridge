@@ -272,8 +272,8 @@ public final class Engine implements MessageSubmitter, CommandSubmitter { // 实
      * @return true如果成功提交，false如果队列已满
      */
     @Override
-    public void submitMessage(Message message) {
-        submitMessage(message, null);
+    public boolean submitMessage(Message message) {
+        return submitMessage(message, null);
     }
 
     /**
@@ -285,11 +285,11 @@ public final class Engine implements MessageSubmitter, CommandSubmitter { // 实
      * @return true如果成功提交，false如果队列已满
      */
     @Override
-    public void submitMessage(Message message, String channelId) {
+    public boolean submitMessage(Message message, String channelId) {
         if (state.get() != EngineState.RUNNING) {
             log.warn("Engine未在运行状态，拒绝消息: engineId={}, messageType={}",
                     engineId, message.getType());
-            return; // 不再返回false，直接返回
+            return false; // 返回false
         }
 
         // 使用Agrona队列的非阻塞offer方法
@@ -306,8 +306,7 @@ public final class Engine implements MessageSubmitter, CommandSubmitter { // 实
                 message.getProperties().put("__channel_id__", channelId);
             }
         }
-
-        // 不再返回boolean，直接返回void
+        return success; // 返回boolean
     }
 
     /**

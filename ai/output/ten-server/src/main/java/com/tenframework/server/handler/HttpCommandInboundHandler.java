@@ -65,7 +65,7 @@ public class HttpCommandInboundHandler extends SimpleChannelInboundHandler<FullH
             String requestBody = msg.content().toString(CharsetUtil.UTF_8);
             JsonNode rootNode = objectMapper.readTree(requestBody); // rootNode 现在代表整个 Command JSON
 
-            String commandId = rootNode.path("command_id").asText(UUID.randomUUID().toString());
+            long commandId = UUID.randomUUID().getMostSignificantBits(); // 直接生成long类型的commandId
             String commandName = rootNode.path("name").asText();
 
             // 从 rootNode 的 "properties" 字段中提取参数
@@ -150,8 +150,11 @@ public class HttpCommandInboundHandler extends SimpleChannelInboundHandler<FullH
                     log.error("等待start_graph命令结果超时或发生异常", e);
                     sendErrorResponse(ctx, GATEWAY_TIMEOUT, "处理命令超时或发生异常: " + e.getMessage());
                 }
+            } else {
+                // 如果提交失败，可能是队列满了，返回错误响应
+                log.error("Engine队列已满，start_graph命令提交失败: commandId={}", command.getCommandId());
+                sendErrorResponse(ctx, SERVICE_UNAVAILABLE, "Engine队列已满，无法处理您的请求");
             }
-
         } catch (Exception e) {
             log.error("处理 /start_graph 请求时发生异常", e);
             sendErrorResponse(ctx, INTERNAL_SERVER_ERROR, "处理请求时发生内部错误: " + e.getMessage());
@@ -163,7 +166,7 @@ public class HttpCommandInboundHandler extends SimpleChannelInboundHandler<FullH
             String requestBody = msg.content().toString(CharsetUtil.UTF_8);
             JsonNode rootNode = objectMapper.readTree(requestBody);
 
-            String commandId = rootNode.path("command_id").asText(UUID.randomUUID().toString()); // 新增
+            long commandId = UUID.randomUUID().getMostSignificantBits(); // 使用long类型
             String commandName = rootNode.path("name").asText("stop_graph"); // 新增
 
             JsonNode propertiesNode = rootNode.path("properties"); // 新增
@@ -229,8 +232,11 @@ public class HttpCommandInboundHandler extends SimpleChannelInboundHandler<FullH
                     log.error("等待stop_graph命令结果超时或发生异常", e);
                     sendErrorResponse(ctx, GATEWAY_TIMEOUT, "处理命令超时或发生异常: " + e.getMessage());
                 }
+            } else {
+                // 如果提交失败，可能是队列满了，返回错误响应
+                log.error("Engine队列已满，stop_graph命令提交失败: commandId={}", command.getCommandId());
+                sendErrorResponse(ctx, SERVICE_UNAVAILABLE, "Engine队列已满，无法处理您的请求");
             }
-
         } catch (Exception e) {
             log.error("处理 /stop_graph 请求时发生异常", e);
             sendErrorResponse(ctx, INTERNAL_SERVER_ERROR, "处理请求时发生内部错误: " + e.getMessage());
