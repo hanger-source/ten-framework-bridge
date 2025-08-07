@@ -87,6 +87,12 @@ TODO:
 ✅ 2.1.3 动态创建和销毁消息处理图实例（`graphId` 的概念）。
 ✅ 2.1.4 支持运行时动态添加、移除和更新 Extension 实例（通过管理命令）。
 ✅ 2.1.5 实现图内消息的复杂路由逻辑（例如，基于消息内容、条件路由、广播、多目标）。
+✅ 2.1.6.1 Engine重构，独立routeManager [in_progress]
+✅ 2.1.6.2 Engine重构，独立PatheManager [in_progress]
+✅ 2.1.6.3 Engine重构，独立InternalCommnadHandler
+✅ 2.1.6.4 完善pathIn、pathOut
+✅ 2.1.6.5 ExtensionContext 升级为 AsyncExtensionEnv 对齐 python/c 的ten-framework
+✅ 2.1.6.6 重新深度理解并重构了 cmd、cmdResult 异步回调的支持
 2.2.1 实现基于消息内容、优先级或来源的高级路由策略。
 2.2.2 在 `Engine` 内部引入优先级队列，确保高优先级消息优先处理。
 2.2.3 设计和实现消息截止时间/超时机制，对过期消息进行处理。
@@ -140,9 +146,3 @@ TODO:
 4.5.2 编写 Kubernetes 部署清单（Deployment, Service, Ingress）。
 4.5.3 建立 CI/CD 流水线，实现自动化构建、测试和部署。
 4.5.4 编写运维脚本和工具，简化日常管理。
-2.1.6.1 Engine重构，独立routeManager [in_progress]
-2.1.6.2 Engine重构，独立PatheManager [in_progress]
-2.1.6.3 Engine重构，独立InternalCommnadHandler
-2.1.6.4 完善pathIn、pathOut
-2.1.6.5 ExtensionContext 升级为 AsyncExtensionContext
-✅ 2.1.6.6 深度理解 常量PROPERTY_CLIENT_LOCATION_URI、PROPERTY_CLIENT_CHANNEL_ID、PROPERTY_DATA_PATH_ID、PROPERTY_CLIENT_APP_URI、PROPERTY_CLIENT_GRAPH_ID 常量之间的关系，以及在项目中的具体错误使用
