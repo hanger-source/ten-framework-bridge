@@ -18,6 +18,7 @@ public final class MessageConstants {
 
     // 通用消息属性键
     public static final String PROPERTY_CLIENT_CHANNEL_ID = "__client_channel_id__";
+    public static final String PROPERTY_CLIENT_LOCATION_URI = "__client_location_uri__"; // 新增
     public static final String PROPERTY_MESSAGE_PRIORITY = "priority"; // 新增消息优先级属性
 
     // Data消息名称常量

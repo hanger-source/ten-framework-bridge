@@ -157,7 +157,7 @@ public class EndToEndIntegrationTest {
                 Map.of("app_uri", "http_client", "graph_id", "N/A", "extension_name", "N/A"));
         startGraphPayload.put("destination_locations", Collections.emptyList());
 
-        String httpResponse = sendHttpRequest(FIXED_HTTP_PORT, "/start_graph", "POST", startGraphPayload);
+        String httpResponse = sendHttpRequest(tenServer.getPort(), "/start_graph", "POST", startGraphPayload);
         assertTrue(httpResponse.contains("\"status\":\"success\""), "HTTP start_graph 响应应包含 'status:success'");
         log.info("HTTP /start_graph 响应: {}", httpResponse);
         TimeUnit.SECONDS.sleep(1);
@@ -202,14 +202,14 @@ public class EndToEndIntegrationTest {
                 Map.of("app_uri", "http_client", "graph_id", "N/A", "extension_name", "N/A"));
         stopGraphPayload.put("destination_locations", Collections.emptyList());
 
-        String stopResponse = sendHttpRequest(FIXED_HTTP_PORT, "/stop_graph", "POST", stopGraphPayload);
+        String stopResponse = sendHttpRequest(tenServer.getPort(), "/stop_graph", "POST", stopGraphPayload);
         assertTrue(stopResponse.contains("\"status\":\"success\""), "HTTP stop_graph 响应应包含 'status:success'");
         log.info("HTTP /stop_graph 响应: {}", stopResponse);
         TimeUnit.SECONDS.sleep(1);
 
         // 4. 测试 Engine /ping
         log.info("--- 测试 HTTP /ping 命令 ---");
-        String pingResponse = sendHttpRequest(FIXED_HTTP_PORT, "/ping", "POST", Collections.emptyMap());
+        String pingResponse = sendHttpRequest(tenServer.getPort(), "/ping", "POST", Collections.emptyMap());
         assertTrue(pingResponse.contains("\"status\":\"pong\""), "HTTP /ping 响应应包含 'status:pong'");
         log.info("HTTP /ping 响应: {}", pingResponse);
     }

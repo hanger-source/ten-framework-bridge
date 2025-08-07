@@ -1,6 +1,7 @@
 package com.tenframework.agent.example;
 
 import java.net.URI;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -20,6 +21,9 @@ import com.tenframework.core.message.Data;
 import com.tenframework.core.message.Message;
 import com.tenframework.core.message.MessageConstants;
 import com.tenframework.server.TenServer;
+import com.tenframework.server.handler.ByteBufToWebSocketFrameEncoder;
+import com.tenframework.server.handler.WebSocketFrameToByteBufDecoder;
+import com.tenframework.server.handler.WebSocketMessageFrameHandler;
 import com.tenframework.server.message.MessageDecoder;
 import com.tenframework.server.message.MessageEncoder;
 import io.netty.bootstrap.Bootstrap;
@@ -36,7 +40,6 @@ import io.netty.handler.codec.http.DefaultHttpHeaders;
 import io.netty.handler.codec.http.FullHttpResponse;
 import io.netty.handler.codec.http.HttpClientCodec;
 import io.netty.handler.codec.http.HttpObjectAggregator;
-import io.netty.handler.codec.http.websocketx.BinaryWebSocketFrame;
 import io.netty.handler.codec.http.websocketx.CloseWebSocketFrame;
 import io.netty.handler.codec.http.websocketx.PongWebSocketFrame;
 import io.netty.handler.codec.http.websocketx.TextWebSocketFrame;
@@ -52,9 +55,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-
-import com.tenframework.server.handler.ByteBufToWebSocketFrameEncoder;
-import com.tenframework.server.handler.WebSocketFrameToByteBufDecoder;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -116,7 +116,8 @@ public class WebSocketIntegrationTest {
     @AfterEach
     void tearDown() throws Exception {
         if (tenServer != null) {
-            tenServer.shutdown().get(15, TimeUnit.SECONDS); // 延长关闭超时时间
+            // 500 方便开发人员debug
+            tenServer.shutdown().get(500, TimeUnit.SECONDS); // 延长关闭超时时间
         }
         if (engine != null) {
             engine.stop();
@@ -238,8 +239,8 @@ public class WebSocketIntegrationTest {
 
                         // WebSocket帧到ByteBuf解码 (入站)
                         ch.pipeline().addLast(new WebSocketFrameToByteBufDecoder());
-                        // ByteBuf到Message解码 (入站)
-                        ch.pipeline().addLast(new MessageDecoder());
+                        ch.pipeline().addLast(new MessageDecoder()); // Move this line
+                        ch.pipeline().addLast(new WebSocketMessageFrameHandler(engine)); // Move this line
                         // Message到ByteBuf编码 (出站)
                         ch.pipeline().addLast(new MessageEncoder());
                         // ByteBuf到WebSocket帧编码 (出站)
@@ -255,12 +256,15 @@ public class WebSocketIntegrationTest {
         handler.handshakeFuture().sync();
 
         Data testData = Data.json(messageName, objectMapper.writeValueAsString(payload));
-        testData.setSourceLocation(Location.builder().appUri("test-client").graphId(graphId)
-                .extensionName("tcp-client-extension").build());
-        testData.setDestinationLocations(List.of(Location.builder().appUri("test-app").graphId(graphId)
-                .extensionName("SimpleEcho").build()));
-        // Add the client channel ID to the message properties
-        testData.setProperty(MessageConstants.PROPERTY_CLIENT_CHANNEL_ID, ch.id().asShortText()); // 新增这行
+        Location clientSourceLocation = Location.builder().appUri("test-client").graphId(graphId)
+                .extensionName("tcp-client-extension").build();
+        testData.setSourceLocation(clientSourceLocation);
+        testData.setDestinationLocations(
+                Collections.singletonList(Location.builder().appUri("test-app").graphId(graphId)
+                        .extensionName("SimpleEcho").build()));
+
+        // Add the client location URI to the message properties
+        testData.setProperty(MessageConstants.PROPERTY_CLIENT_LOCATION_URI, clientSourceLocation.toString()); // 新增这行
 
         handler.sendMessage(testData).sync();
 

@@ -4,10 +4,9 @@ import java.util.concurrent.CompletableFuture;
 
 import com.tenframework.core.engine.Engine;
 import com.tenframework.server.handler.ByteBufToWebSocketFrameEncoder;
-import com.tenframework.server.handler.HttpCommandInboundHandler; // 新增导入
-import com.tenframework.server.handler.HttpCommandResultOutboundHandler; // 新增导入
+import com.tenframework.server.handler.HttpCommandInboundHandler;
+import com.tenframework.server.handler.HttpCommandResultOutboundHandler;
 import com.tenframework.server.handler.HttpRequestLogger;
-import com.tenframework.server.handler.MessageInboundHandler;
 import com.tenframework.server.handler.WebSocketFrameToByteBufDecoder;
 import com.tenframework.server.handler.WebSocketMessageFrameHandler;
 import com.tenframework.server.message.MessageEncoder;
@@ -62,10 +61,7 @@ public class NettyMessageServer {
                             ch.pipeline().addLast(new HttpCommandInboundHandler(engine));
                             ch.pipeline().addLast(new WebSocketFrameToByteBufDecoder());
                             ch.pipeline().addLast(new WebSocketMessageDecoder());
-                            ch.pipeline().addLast("messageInboundHandler", new MessageInboundHandler(engine)); // Add
-                                                                                                               // Message
-                                                                                                               // inbound
-                                                                                                               // handler
+                            ch.pipeline().addLast(new WebSocketMessageFrameHandler(engine));
                             ch.pipeline().addLast(new MessageEncoder());
                             ch.pipeline().addLast(new ByteBufToWebSocketFrameEncoder());
                         }

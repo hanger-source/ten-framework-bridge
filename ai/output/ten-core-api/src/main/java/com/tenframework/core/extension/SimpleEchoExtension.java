@@ -60,6 +60,7 @@ public class SimpleEchoExtension extends BaseExtension {
         log.info("SimpleEchoExtension收到数据: name={}, sourceLocation={}",
                 dataName, data.getSourceLocation());
         log.debug("原始数据内容类型: {}, 编码: {}", data.getContentType(), data.getEncoding());
+        log.debug("SimpleEchoExtension: Message properties at handleData start: {}", data.getProperties()); // Debug log
         if (data.hasData()) {
             log.debug("原始数据大小: {} bytes", data.getDataSize());
         } else {
@@ -96,13 +97,13 @@ public class SimpleEchoExtension extends BaseExtension {
             Data echoData = Data.binary(MessageConstants.DATA_NAME_ECHO_DATA, echoedContentBytes); // 使用常量
             echoData.setProperties(Map.of("original_name", dataName, "count", ++messageCount));
 
-            // IMPORTANT: 复制原始消息的__client_channel_id__到回显消息
-            String clientChannelId = data.getProperty(MessageConstants.PROPERTY_CLIENT_CHANNEL_ID, String.class); // 使用常量
-            if (clientChannelId != null) {
-                echoData.setProperty(MessageConstants.PROPERTY_CLIENT_CHANNEL_ID, clientChannelId); // 使用常量
-                log.debug("复制 client_channel_id: {}", clientChannelId);
+            // IMPORTANT: 复制原始消息的__client_location_uri__到回显消息
+            String clientLocationUri = data.getProperty(MessageConstants.PROPERTY_CLIENT_LOCATION_URI, String.class); // 使用新常量
+            if (clientLocationUri != null) {
+                echoData.setProperty(MessageConstants.PROPERTY_CLIENT_LOCATION_URI, clientLocationUri); // 使用新常量
+                log.debug("复制 client_location_uri: {}", clientLocationUri);
             } else {
-                log.warn("原始消息中未找到 __client_channel_id__，无法回传给特定客户端。");
+                log.warn("原始消息中未找到 __client_location_uri__，无法回传给特定客户端。");
             }
 
             echoData.setSourceLocation(
@@ -114,8 +115,8 @@ public class SimpleEchoExtension extends BaseExtension {
             // The Engine's processData method handles routing to the Channel if the
             // destination appUri is a client.
             if (data.getSourceLocation() != null &&
-                (MessageConstants.APP_URI_TEST_CLIENT.equals(data.getSourceLocation().appUri()) ||
-                    MessageConstants.APP_URI_HTTP_CLIENT.equals(data.getSourceLocation().appUri()))) {
+                    (MessageConstants.APP_URI_TEST_CLIENT.equals(data.getSourceLocation().appUri()) ||
+                            MessageConstants.APP_URI_HTTP_CLIENT.equals(data.getSourceLocation().appUri()))) {
                 echoData.setDestinationLocations(java.util.Collections.singletonList(data.getSourceLocation()));
             } else {
                 // Fallback: If not from a recognized client URI, or no source location, send
@@ -123,10 +124,10 @@ public class SimpleEchoExtension extends BaseExtension {
                 // This might still cause a loop if source is another echo extension, but the
                 // primary client case is handled.
                 echoData.setDestinationLocations(
-                    java.util.Collections.singletonList(data.getSourceLocation()));
+                        java.util.Collections.singletonList(data.getSourceLocation()));
             }
             log.debug("准备发送回显数据: name={}, sourceLocation={}, destinationLocations={}",
-                echoData.getName(), echoData.getSourceLocation(), echoData.getDestinationLocations());
+                    echoData.getName(), echoData.getSourceLocation(), echoData.getDestinationLocations());
             sendMessage(echoData);
             log.info("SimpleEchoExtension发送回显数据: name={}, destinationLocations={}",
                     echoData.getName(), echoData.getDestinationLocations());

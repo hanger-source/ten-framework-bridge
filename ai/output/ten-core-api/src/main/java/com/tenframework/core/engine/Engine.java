@@ -2,6 +2,7 @@ package com.tenframework.core.engine;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.ArrayList;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -35,6 +36,7 @@ import com.tenframework.core.path.PathTable;
 import com.tenframework.core.path.ResultReturnPolicy;
 import com.tenframework.core.server.ChannelDisconnectedException;
 import io.netty.channel.Channel;
+import io.netty.channel.ChannelHandlerContext;
 import lombok.extern.slf4j.Slf4j;
 import org.agrona.concurrent.IdleStrategy;
 import org.agrona.concurrent.ManyToOneConcurrentArrayQueue;
@@ -96,11 +98,14 @@ public final class Engine implements MessageSubmitter {
      * 管理活动的Netty Channel，用于消息回传
      */
     private final Map<String, Channel> channelMap;
-
     /**
      * 维护channelId到相关联的Command ID集合的映射，用于断开连接时清理PathOut
      */
     private final ConcurrentMap<String, ConcurrentSkipListSet<UUID>> channelToCommandIdsMap;
+    /**
+     * 维护客户端Location URI到服务器端Channel ID的映射，用于将消息回传给特定客户端
+     */
+    private final ConcurrentMap<String, String> clientLocationUriToChannelIdMap; // 新增
     /**
      * Engine核心线程的Thread引用，用于线程检查
      */
@@ -136,6 +141,7 @@ public final class Engine implements MessageSubmitter {
         channelMap = new ConcurrentHashMap<>();
         channelToCommandIdsMap = new ConcurrentHashMap<>();
         graphInstances = new ConcurrentHashMap<>();
+        clientLocationUriToChannelIdMap = new ConcurrentHashMap<>(); // 初始化新增的Map
 
         // 创建单线程ExecutorService，使用自定义ThreadFactory
         engineThread = newSingleThreadExecutor(r -> {
@@ -923,29 +929,31 @@ public final class Engine implements MessageSubmitter {
         log.debug("处理数据消息: engineId={}, messageType={}, messageName={}",
                 engineId, message.getType(), message.getName());
 
-        // 如果目标Location指向客户端，尝试通过Channel回传
-        if (message.getDestinationLocations() != null && !message.getDestinationLocations().isEmpty()) {
-            Location firstDestination = message.getDestinationLocations().get(0);
-            // 假设 "test-client" 或 "http_client" 是客户端的appUri，或者根据实际情况判断
-            // 并且消息中带有 __client_channel_id__ 属性
-            if (MessageConstants.APP_URI_TEST_CLIENT.equals(firstDestination.appUri())
-                    || MessageConstants.APP_URI_HTTP_CLIENT.equals(firstDestination.appUri())) {
-                String clientChannelId = message.getProperty(MessageConstants.PROPERTY_CLIENT_CHANNEL_ID, String.class); // 使用常量
-                log.debug("Engine: 数据消息目标是客户端. ChannelId: {}, AppUri: {}", clientChannelId, firstDestination.appUri()); // 新增日志
-                if (clientChannelId != null) {
-                    if (sendMessageToChannel(clientChannelId, message)) {
-                        log.debug("数据消息已成功回传到客户端Channel: engineId={}, messageType={}, messageName={}, channelId={}",
-                                engineId, message.getType(), message.getName(), clientChannelId);
-                        return; // 消息已回传，无需继续路由到Extension
-                    } else {
-                        log.warn("未能将数据消息回传到客户端Channel: engineId={}, messageType={}, messageName={}, channelId={}",
-                                engineId, message.getType(), message.getName(), clientChannelId);
-                        // 如果无法回传，可以考虑将消息路由到默认Extension或丢弃
-                    }
+        // 如果消息带有客户端Location URI，尝试通过映射查找服务器端Channel ID并回传
+        String clientLocationUri = message.getProperty(MessageConstants.PROPERTY_CLIENT_LOCATION_URI, String.class); // 从消息属性中获取Location
+                                                                                                                     // URI
+
+        if (clientLocationUri != null) {
+            String serverChannelId = clientLocationUriToChannelIdMap.get(clientLocationUri); // 通过Location
+                                                                                             // URI查找服务器端Channel ID
+            if (serverChannelId != null) {
+                log.debug("Engine: 数据消息带有客户端Location URI. Location URI: {}, 对应的服务器端Channel ID: {}, MessageName: {}",
+                        clientLocationUri, serverChannelId, message.getName());
+                if (sendMessageToChannel(serverChannelId, message)) {
+                    log.debug("数据消息已成功回传到客户端Channel: engineId={}, messageType={}, messageName={}, clientLocationUri={}",
+                            engineId, message.getType(), message.getName(), clientLocationUri);
+                    return; // 消息已回传，无需继续路由到Extension
+                } else {
+                    log.warn("未能将数据消息回传到客户端Channel: engineId={}, messageType={}, messageName={}, clientLocationUri={}",
+                            engineId, message.getType(), message.getName(), clientLocationUri);
+                    // 如果无法回传，继续尝试路由到Extension（如果目的地是Extension的话）
                 }
+            } else {
+                log.warn("Engine: 未找到客户端Location URI [{}] 对应的服务器端Channel ID，无法回传数据消息。", clientLocationUri);
             }
         }
 
+        // 如果没有明确的客户端Location URI，或者无法通过Channel回传，则按照常规路由到Extension
         // 1. 获取消息的源GraphId
         String sourceGraphId = message.getSourceLocation() != null ? message.getSourceLocation().graphId() : null;
         if (sourceGraphId == null) {
@@ -963,7 +971,7 @@ public final class Engine implements MessageSubmitter {
         }
 
         // 3. 解析消息的实际目的地列表
-        log.debug("Engine: 正在解析数据消息目标Extension. GraphId: {}, MessageName: {}", sourceGraphId, message.getName()); // 新增日志
+        log.debug("Engine: 正在解析数据消息目标Extension. GraphId: {}, MessageName: {}", sourceGraphId, message.getName());
         List<String> targetExtensionNames = graphInstance.resolveDestinations(message);
 
         if (targetExtensionNames.isEmpty()) {
@@ -1240,49 +1248,6 @@ public final class Engine implements MessageSubmitter {
     }
 
     /**
-     * 向指定的Netty Channel发送消息
-     *
-     * @param channelId 目标Channel的ID
-     * @param message   要发送的消息
-     * @return true如果消息成功发送（或提交到Channel的写队列），false如果Channel不存在或写入失败
-     */
-    private boolean sendMessageToChannel(String channelId, Message message) {
-        if (channelId == null || message == null) {
-            log.warn("尝试向空Channel ID或发送空消息");
-            return false;
-        }
-
-        Optional<Channel> channelOpt = getChannel(channelId);
-        if (channelOpt.isEmpty()) {
-            log.warn("尝试向不存在的Channel发送消息: engineId={}, channelId={}", engineId, channelId);
-            return false;
-        }
-
-        Channel channel = channelOpt.get();
-        // Add more detailed logging here
-        log.debug(
-                "sendMessageToChannel: Attempting to send message to Channel. ChannelId: {}, isActive: {}, isWritable: {}",
-                channelId, channel.isActive(), channel.isWritable());
-
-        if (channel.isActive() && channel.isWritable()) {
-            // Netty的writeAndFlush是异步的
-            channel.writeAndFlush(message).addListener(future -> {
-                if (future.isSuccess()) {
-                    log.debug("消息已成功发送到Channel: engineId={}, channelId={}, messageType={}, messageName={}",
-                            engineId, channelId, message.getType(), message.getName());
-                } else {
-                    log.error("消息发送到Channel失败: engineId={}, channelId={}, messageType={}, messageName={}",
-                            engineId, channelId, message.getType(), message.getName(), future.cause());
-                }
-            });
-            return true;
-        } else {
-            log.warn("Channel不可用或不可写，无法发送消息: engineId={}, channelId={}", engineId, channelId);
-            return false;
-        }
-    }
-
-    /**
      * 处理连接断开事件，清理与该Channel相关的PathOut
      *
      * @param channelId 断开连接的Channel ID
@@ -1321,6 +1286,40 @@ public final class Engine implements MessageSubmitter {
 
         // 从channelMap中移除，确保完全清理
         channelMap.remove(channelId);
+    }
+
+    /**
+     * 注册客户端Location URI与其对应的服务器端Channel ID的映射。
+     *
+     * @param clientLocationUri 客户端Location的URI字符串
+     * @param serverChannelId   对应的服务器端Netty Channel ID
+     */
+    public void registerClientLocationToChannel(String clientLocationUri, String serverChannelId) {
+        if (clientLocationUri == null || clientLocationUri.isEmpty() || serverChannelId == null
+                || serverChannelId.isEmpty()) {
+            log.warn("尝试注册空的或无效的客户端Location URI或服务器端Channel ID");
+            return;
+        }
+        clientLocationUriToChannelIdMap.put(clientLocationUri, serverChannelId);
+        log.debug("Engine: 客户端Location URI [{}] 已注册到 Channel ID [{}]", clientLocationUri, serverChannelId); // Debug log
+    }
+
+    /**
+     * 注销客户端Location URI与对应的服务器端Channel ID的映射。
+     *
+     * @param clientLocationUri 客户端Location的URI字符串
+     */
+    public void unregisterClientLocationToChannel(String clientLocationUri) {
+        if (clientLocationUri == null || clientLocationUri.isEmpty()) {
+            log.warn("尝试注销空的或无效的客户端Location URI");
+            return;
+        }
+        String removedChannelId = clientLocationUriToChannelIdMap.remove(clientLocationUri);
+        if (removedChannelId != null) {
+            log.debug("Engine: 客户端Location URI [{}] 已从 Channel ID [{}] 注销", clientLocationUri, removedChannelId);
+        } else {
+            log.warn("Engine: 尝试注销不存在的客户端Location URI: {}", clientLocationUri);
+        }
     }
 
     // Getter方法
@@ -1385,5 +1384,37 @@ public final class Engine implements MessageSubmitter {
         }
 
         return firstDestination.extensionName();
+    }
+
+    /**
+     * 向指定的Netty Channel发送消息
+     *
+     * @param channelId 目标Channel的ID
+     * @param message   要发送的消息 (可以是Message或其子类，如CommandResult)
+     * @return true如果消息成功发送（或提交到Channel的写队列），false如果Channel不存在或写入失败
+     */
+    private boolean sendMessageToChannel(String channelId, Message message) {
+        if (channelId == null || message == null) {
+            log.warn("尝试向空Channel ID或发送空消息");
+            return false;
+        }
+
+        Optional<Channel> channelOpt = getChannel(channelId);
+        if (channelOpt.isEmpty()) {
+            log.warn("尝试向不存在的Channel发送消息: engineId={}, channelId={}", engineId, channelId);
+            return false;
+        }
+
+        Channel targetChannel = channelOpt.get();
+        if (targetChannel.isActive() && targetChannel.isWritable()) {
+            // Netty的writeAndFlush是异步的
+            targetChannel.writeAndFlush(message);
+            log.debug("消息已发送到Channel: engineId={}, channelId={}, messageType={}, messageName={}",
+                    engineId, channelId, message.getType(), message.getName());
+            return true;
+        } else {
+            log.warn("Channel不可用或不可写，无法发送消息: engineId={}, channelId={}", engineId, channelId);
+            return false;
+        }
     }
 }
