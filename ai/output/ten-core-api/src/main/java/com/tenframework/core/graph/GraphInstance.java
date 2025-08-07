@@ -22,6 +22,8 @@ import org.mvel2.integration.impl.MapVariableResolverFactory;
 import com.tenframework.core.message.Command; // 新增导入
 import com.tenframework.core.message.CommandResult; // 新增导入
 
+import static java.util.stream.Collectors.*;
+
 /**
  * 表示一个运行时消息处理图的实例。
  * 每个GraphInstance管理自己独立的Extension集合。
@@ -63,7 +65,7 @@ public class GraphInstance {
 
         // 根据graphConfig构建连接路由表
         this.connectionRoutes = graphConfig.getConnections() != null ? graphConfig.getConnections().stream()
-                .collect(Collectors.groupingBy(ConnectionConfig::getSource)) : Collections.emptyMap();
+                .collect(groupingBy(ConnectionConfig::getSource)) : Collections.emptyMap();
 
         log.info("GraphInstance创建: graphId={}, appUri={}, 连接数={}", graphId, appUri, connectionRoutes.size());
     }
@@ -414,23 +416,21 @@ public class GraphInstance {
             Optional<ConnectionConfig> highestPriorityConnection = potentialConnections.stream()
                     .max(java.util.Comparator.comparingInt(ConnectionConfig::getPriority));
 
-            if (highestPriorityConnection.isPresent()) {
-                // 如果最高优先级的连接有路由规则且规则匹配，则使用规则的targets，否则使用连接的destinations
-                if (highestPriorityConnection.get().getRoutingRules() != null
-                        && !highestPriorityConnection.get().getRoutingRules().isEmpty()) {
-                    for (RoutingRule rule : highestPriorityConnection.get().getRoutingRules()) {
-                        if (evaluateRoutingRule(message, rule)) {
-                            if (rule.getTargets() != null && !rule.getTargets().isEmpty()) {
-                                resolvedTargets.addAll(rule.getTargets());
-                            } else {
-                                resolvedTargets.addAll(highestPriorityConnection.get().getDestinations());
-                            }
-                            break;
+            // 如果最高优先级的连接有路由规则且规则匹配，则使用规则的targets，否则使用连接的destinations
+            if (highestPriorityConnection.get().getRoutingRules() != null
+                    && !highestPriorityConnection.get().getRoutingRules().isEmpty()) {
+                for (RoutingRule rule : highestPriorityConnection.get().getRoutingRules()) {
+                    if (evaluateRoutingRule(message, rule)) {
+                        if (rule.getTargets() != null && !rule.getTargets().isEmpty()) {
+                            resolvedTargets.addAll(rule.getTargets());
+                        } else {
+                            resolvedTargets.addAll(highestPriorityConnection.get().getDestinations());
                         }
+                        break;
                     }
-                } else {
-                    resolvedTargets.addAll(highestPriorityConnection.get().getDestinations());
                 }
+            } else {
+                resolvedTargets.addAll(highestPriorityConnection.get().getDestinations());
             }
         }
 
@@ -440,7 +440,7 @@ public class GraphInstance {
         // 或者在 resolvedTargets 中移除低优先级Extension
 
         // 去重并返回
-        return resolvedTargets.stream().distinct().collect(Collectors.toList());
+        return resolvedTargets.stream().distinct().collect(toList());
     }
 
     /**

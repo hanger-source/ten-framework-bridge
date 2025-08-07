@@ -17,7 +17,7 @@ public class WebSocketFrameToByteBufDecoder extends MessageToMessageDecoder<WebS
     protected void decode(ChannelHandlerContext ctx, WebSocketFrame frame, List<Object> out) {
         if (frame instanceof BinaryWebSocketFrame) {
             ByteBuf binaryData = frame.content();
-            out.add(binaryData); // retain the ByteBuf for the next handler
+            out.add(binaryData.retain()); // retain the ByteBuf for the next handler
             log.debug("WebSocketFrameToByteBufDecoder: Decoded BinaryWebSocketFrame to ByteBuf, size: {}",
                     binaryData.readableBytes());
         } else if (frame instanceof TextWebSocketFrame) {

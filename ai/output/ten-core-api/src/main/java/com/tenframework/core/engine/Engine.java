@@ -521,16 +521,16 @@ public final class Engine implements MessageSubmitter {
         CommandResult result;
         if (graphId == null || graphId.isEmpty() || appUri == null || appUri.isEmpty() || graphJsonObj == null) {
             result = CommandResult.error(command.getCommandId(),
-                Map.of("error", "start_graph命令缺少graph_id, app_uri或graph_json属性").get("error"));
+                    Map.of("error", "start_graph命令缺少graph_id, app_uri或graph_json属性").get("error"));
             log.error("start_graph命令参数缺失: graphId={}, appUri={}, graphJson={}", graphId, appUri, graphJsonObj);
         } else if (!(graphJsonObj instanceof String graphJson)) { // 增加类型检查
             result = CommandResult.error(command.getCommandId(),
-                Map.of("error", "graph_json属性不是有效的JSON字符串").get("error"));
+                    Map.of("error", "graph_json属性不是有效的JSON字符串").get("error"));
             log.error("start_graph命令graph_json类型错误: graphId={}, appUri={}, graphJsonType={}", graphId, appUri,
                     graphJsonObj.getClass().getName());
         } else if (graphInstances.containsKey(graphId)) {
             result = CommandResult.error(command.getCommandId(),
-                Map.of("error", "图实例已存在: " + graphId).get("error"));
+                    Map.of("error", "图实例已存在: " + graphId).get("error"));
             log.warn("尝试启动已存在的图实例: graphId={}", graphId);
         } else {
             try {
@@ -621,7 +621,7 @@ public final class Engine implements MessageSubmitter {
         CommandResult result;
         if (graphId == null || graphId.isEmpty()) {
             result = CommandResult.error(command.getCommandId(),
-                Map.of("error", "stop_graph命令缺少graph_id属性").get("error"));
+                    Map.of("error", "stop_graph命令缺少graph_id属性").get("error"));
             log.error("stop_graph命令参数缺失: graphId={}", graphId);
         } else {
             GraphInstance removedGraph = graphInstances.remove(graphId);
@@ -633,12 +633,12 @@ public final class Engine implements MessageSubmitter {
                     log.info("图实例停止成功: graphId={}", graphId);
                 } catch (Exception e) {
                     result = CommandResult.error(command.getCommandId(),
-                        Map.of("error", "停止图实例失败: " + e.getMessage()).get("error"));
+                            Map.of("error", "停止图实例失败: " + e.getMessage()).get("error"));
                     log.error("停止图实例时发生异常: graphId={}", graphId, e);
                 }
             } else {
                 result = CommandResult.error(command.getCommandId(),
-                    Map.of("error", "图实例不存在: " + graphId).get("error"));
+                        Map.of("error", "图实例不存在: " + graphId).get("error"));
                 log.warn("尝试停止不存在的图实例: graphId={}", graphId);
             }
         }
@@ -1259,11 +1259,22 @@ public final class Engine implements MessageSubmitter {
         }
 
         Channel channel = channelOpt.get();
+        // Add more detailed logging here
+        log.debug(
+                "sendMessageToChannel: Attempting to send message to Channel. ChannelId: {}, isActive: {}, isWritable: {}",
+                channelId, channel.isActive(), channel.isWritable());
+
         if (channel.isActive() && channel.isWritable()) {
             // Netty的writeAndFlush是异步的
-            channel.writeAndFlush(message);
-            log.debug("消息已发送到Channel: engineId={}, channelId={}, messageType={}, messageName={}",
-                    engineId, channelId, message.getType(), message.getName());
+            channel.writeAndFlush(message).addListener(future -> {
+                if (future.isSuccess()) {
+                    log.debug("消息已成功发送到Channel: engineId={}, channelId={}, messageType={}, messageName={}",
+                            engineId, channelId, message.getType(), message.getName());
+                } else {
+                    log.error("消息发送到Channel失败: engineId={}, channelId={}, messageType={}, messageName={}",
+                            engineId, channelId, message.getType(), message.getName(), future.cause());
+                }
+            });
             return true;
         } else {
             log.warn("Channel不可用或不可写，无法发送消息: engineId={}, channelId={}", engineId, channelId);

@@ -57,6 +57,9 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import com.tenframework.server.handler.ByteBufToWebSocketFrameEncoder;
+import com.tenframework.server.handler.WebSocketFrameToByteBufDecoder;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -65,8 +68,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 public class EndToEndIntegrationTest {
 
     // 将端口设置为动态获取，避免端口冲突
-    private static final int TCP_PORT = 0;
-    private static final int HTTP_PORT = 0;
+    private static final int ANY_AVAILABLE_PORT = 0; // 修改为更通用的名称
+    // private static final int HTTP_PORT = 0; // 移除此行
+    private static final int FIXED_HTTP_PORT = 8080; // 明确HTTP固定端口，用于测试
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
     private Engine engine;
@@ -79,13 +83,12 @@ public class EndToEndIntegrationTest {
         engine.start();
         log.info("Engine [{}] started for test.", engine.getEngineId());
 
-        // 使用TenServer启动TCP和HTTP服务，让操作系统自动分配端口
-        tenServer = new TenServer(TCP_PORT, HTTP_PORT, engine);
+        // 使用TenServer启动服务，让操作系统自动分配端口
+        tenServer = new TenServer(ANY_AVAILABLE_PORT, engine); // 传入一个端口
         tenServer.start().get(10, TimeUnit.SECONDS); // 延长超时时间
         // 获取实际绑定的端口
-        int actualTcpPort = tenServer.getTcpPort();
-        int actualHttpPort = tenServer.getHttpPort();
-        log.info("TenServer started on TCP port {} and HTTP port {}", actualTcpPort, actualHttpPort);
+        int actualPort = tenServer.getPort(); // 统一获取端口
+        log.info("TenServer started on port {}", actualPort); // 更新日志
 
         clientGroup = new NioEventLoopGroup();
     }
@@ -154,7 +157,7 @@ public class EndToEndIntegrationTest {
                 Map.of("app_uri", "http_client", "graph_id", "N/A", "extension_name", "N/A"));
         startGraphPayload.put("destination_locations", Collections.emptyList());
 
-        String httpResponse = sendHttpRequest(tenServer.getHttpPort(), "/start_graph", "POST", startGraphPayload);
+        String httpResponse = sendHttpRequest(FIXED_HTTP_PORT, "/start_graph", "POST", startGraphPayload);
         assertTrue(httpResponse.contains("\"status\":\"success\""), "HTTP start_graph 响应应包含 'status:success'");
         log.info("HTTP /start_graph 响应: {}", httpResponse);
         TimeUnit.SECONDS.sleep(1);
@@ -167,7 +170,7 @@ public class EndToEndIntegrationTest {
         // 2. 通过 WebSocket/MsgPack 接口发送一个 Data 消息给 SimpleEchoExtension
         log.info("--- 测试 WebSocket/MsgPack Data 消息回显 ---");
         CompletableFuture<Message> wsEchoResponseFuture = new CompletableFuture<>();
-        URI websocketUri = new URI("ws://localhost:" + tenServer.getTcpPort() + "/websocket");
+        URI websocketUri = new URI("ws://localhost:" + tenServer.getPort() + "/websocket"); // 使用统一端口
 
         sendWebSocketDataMessage(websocketUri, graphId, "echo_test_data", Map.of("content", "Hello WebSocket Echo!"),
                 wsEchoResponseFuture, clientGroup);
@@ -199,14 +202,14 @@ public class EndToEndIntegrationTest {
                 Map.of("app_uri", "http_client", "graph_id", "N/A", "extension_name", "N/A"));
         stopGraphPayload.put("destination_locations", Collections.emptyList());
 
-        String stopResponse = sendHttpRequest(tenServer.getHttpPort(), "/stop_graph", "POST", stopGraphPayload);
+        String stopResponse = sendHttpRequest(FIXED_HTTP_PORT, "/stop_graph", "POST", stopGraphPayload);
         assertTrue(stopResponse.contains("\"status\":\"success\""), "HTTP stop_graph 响应应包含 'status:success'");
         log.info("HTTP /stop_graph 响应: {}", stopResponse);
         TimeUnit.SECONDS.sleep(1);
 
         // 4. 测试 Engine /ping
         log.info("--- 测试 HTTP /ping 命令 ---");
-        String pingResponse = sendHttpRequest(tenServer.getHttpPort(), "/ping", "POST", Collections.emptyMap());
+        String pingResponse = sendHttpRequest(FIXED_HTTP_PORT, "/ping", "POST", Collections.emptyMap());
         assertTrue(pingResponse.contains("\"status\":\"pong\""), "HTTP /ping 响应应包含 'status:pong'");
         log.info("HTTP /ping 响应: {}", pingResponse);
     }
@@ -266,16 +269,28 @@ public class EndToEndIntegrationTest {
                         ch.pipeline().addLast(
                                 new HttpClientCodec(),
                                 new HttpObjectAggregator(8192));
-                        ch.pipeline().addLast(new WebSocketClientHandler(
+                        // WebSocket 握手处理
+                        ch.pipeline().addLast("websocket-client-handler", new WebSocketClientHandler( // 添加名称
                                 WebSocketClientHandshakerFactory.newHandshaker(
                                         uri, WebSocketVersion.V13, null, true, new DefaultHttpHeaders()),
                                 responseFuture));
+
+                        // WebSocket帧到ByteBuf解码 (入站)
+                        ch.pipeline().addLast(new WebSocketFrameToByteBufDecoder());
+                        // ByteBuf到Message解码 (入站)
+                        ch.pipeline().addLast(new MessageDecoder());
+                        // Message到ByteBuf编码 (出站)
+                        ch.pipeline().addLast(new MessageEncoder());
+                        // ByteBuf到WebSocket帧编码 (出站)
+                        ch.pipeline().addLast(new ByteBufToWebSocketFrameEncoder());
+
                     }
                 });
 
         Channel ch = b.connect(uri.getHost(), uri.getPort()).sync().channel();
 
-        WebSocketClientHandler handler = (WebSocketClientHandler) ch.pipeline().last();
+        // 通过名称获取 WebSocketClientHandler 实例
+        WebSocketClientHandler handler = (WebSocketClientHandler) ch.pipeline().get("websocket-client-handler");
         handler.handshakeFuture().sync();
 
         Data testData = Data.json(messageName, objectMapper.writeValueAsString(payload));
@@ -296,8 +311,6 @@ public class EndToEndIntegrationTest {
         private final WebSocketClientHandshaker handshaker;
         private final Promise<Void> handshakeFuture;
         private final CompletableFuture<Message> responseFuture;
-        private final MessageEncoder messageEncoder = new MessageEncoder();
-        private final MessageDecoder messageDecoder = new MessageDecoder();
         private Channel channel;
 
         public WebSocketClientHandler(WebSocketClientHandshaker handshaker, CompletableFuture<Message> responseFuture) {
@@ -329,10 +342,8 @@ public class EndToEndIntegrationTest {
             if (channel == null || !channel.isActive()) {
                 throw new IllegalStateException("WebSocket channel is not active.");
             }
-            List<Object> encodedFrames = new ArrayList<>();
-            messageEncoder.encode(null, message, encodedFrames);
-            BinaryWebSocketFrame binaryFrame = (BinaryWebSocketFrame) encodedFrames.get(0);
-            return channel.writeAndFlush(binaryFrame);
+            // MessageEncoder现在是pipeline的一部分，直接发送Message
+            return channel.writeAndFlush(message); // 直接发送Message，由pipeline中的MessageEncoder处理
         }
 
         @Override
@@ -352,26 +363,16 @@ public class EndToEndIntegrationTest {
                                 + response.content().toString(CharsetUtil.UTF_8) + ')');
             }
 
-            if (msg instanceof WebSocketFrame) {
+            // 现在应该接收到 Message 类型，因为解码器已经在前面处理了
+            if (msg instanceof Message) { // 直接处理 Message
+                Message decodedMsg = (Message) msg;
+                responseFuture.complete(decodedMsg);
+                log.info("WebSocket客户端成功解码并接收到回显消息: {}", decodedMsg.getName());
+            } else if (msg instanceof WebSocketFrame) { // 仍然处理其他WebSocket帧
                 WebSocketFrame frame = (WebSocketFrame) msg;
                 if (frame instanceof TextWebSocketFrame) {
                     TextWebSocketFrame textFrame = (TextWebSocketFrame) frame;
                     log.warn("WebSocket客户端收到文本帧: {}", textFrame.text());
-                } else if (frame instanceof BinaryWebSocketFrame) {
-                    BinaryWebSocketFrame binaryFrame = (BinaryWebSocketFrame) frame;
-                    log.debug("WebSocket客户端收到二进制帧，大小: {} 字节", binaryFrame.content().readableBytes());
-
-                    List<Object> decodedMsgs = new ArrayList<>();
-                    messageDecoder.decode(ctx, new BinaryWebSocketFrame(binaryFrame.content().retain()), decodedMsgs);
-
-                    if (!decodedMsgs.isEmpty() && decodedMsgs.get(0) instanceof Message) {
-                        Message decodedMsg = (Message) decodedMsgs.get(0);
-                        responseFuture.complete(decodedMsg);
-                        log.info("WebSocket客户端成功解码并接收到回显消息: {}", decodedMsg.getName());
-                        // ctx.close(); // 移除此行，避免过早关闭连接
-                    } else {
-                        log.warn("WebSocket客户端无法解码二进制帧为TEN消息。");
-                    }
                 } else if (frame instanceof PongWebSocketFrame) {
                     log.debug("WebSocket客户端收到Pong帧。");
                 } else if (frame instanceof CloseWebSocketFrame) {

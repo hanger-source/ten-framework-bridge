@@ -37,12 +37,11 @@ public class Main {
                 System.out.println("SimpleEchoExtension registered.");
 
                 // 3. 启动 TenServer
-                int tcpPort = 9090;
-                int httpPort = 9091;
+                int port = 8080; // 使用统一端口
 
-                TenServer tenServer = new TenServer(tcpPort, httpPort, engine);
+                TenServer tenServer = new TenServer(port, engine); // 只传入一个端口
                 tenServer.start().join(); // 阻塞等待服务器启动完成
-                System.out.println("TenServer started on TCP port " + tcpPort + " and HTTP port " + httpPort);
+                System.out.println("TenServer started on port " + port); // 更新日志
 
                 // --- 模拟客户端交互 ---
 

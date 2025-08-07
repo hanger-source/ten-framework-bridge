@@ -3,8 +3,8 @@ package com.tenframework.server;
 import com.tenframework.core.engine.Engine;
 import lombok.extern.slf4j.Slf4j;
 
-import com.tenframework.server.handler.HttpCommandInboundHandler;
-import com.tenframework.server.NettyHttpServer;
+// import com.tenframework.server.handler.HttpCommandInboundHandler; // 已移动到 NettyMessageServer
+// import com.tenframework.server.NettyHttpServer; // 不再使用
 
 import java.net.BindException;
 import java.util.concurrent.CompletableFuture;
@@ -17,78 +17,65 @@ public class TenServer {
     private static final int MAX_RETRY_ATTEMPTS = 5;
     private static final long RETRY_DELAY_MILLIS = 500;
 
-    private final int initialTcpPort;
-    private final int initialHttpPort;
+    private static final int DEFAULT_PORT = 8080; // 统一端口
+
+    private final int initialPort; // 统一端口
     private final Engine engine;
     private NettyMessageServer nettyMessageServer;
-    private NettyHttpServer nettyHttpServer;
+    // private NettyHttpServer nettyHttpServer; // 不再需要
 
-    private int currentTcpPort;
-    private int currentHttpPort;
+    private int currentPort; // 统一端口
 
-    public TenServer(int tcpPort, int httpPort, Engine engine) {
-        this.initialTcpPort = tcpPort;
-        this.initialHttpPort = httpPort;
+    public TenServer(int port, Engine engine) { // 修改构造函数参数
+        this.initialPort = port;
         this.engine = engine;
-        this.currentTcpPort = tcpPort;
-        this.currentHttpPort = httpPort;
+        this.currentPort = port;
     }
 
     public CompletableFuture<Void> start() {
         for (int attempt = 0; attempt < MAX_RETRY_ATTEMPTS; attempt++) {
             try {
                 CompletableFuture<Void> startAttemptFuture = tryStart();
-                // 如果成功，返回future并跳出重试循环
                 return startAttemptFuture;
             } catch (CompletionException e) {
                 if (e.getCause() instanceof BindException) {
-                    log.warn("Port already in use on attempt {}/{}. Retrying with new ports...", attempt + 1,
+                    log.warn("Port already in use on attempt {}/{}. Retrying with new port...", attempt + 1,
                             MAX_RETRY_ATTEMPTS);
-                    // 重新查找可用端口
-                    currentTcpPort = findAvailablePort();
-                    currentHttpPort = findAvailablePort();
+                    currentPort = findAvailablePort(); // 重新查找可用端口
                     try {
-                        TimeUnit.MILLISECONDS.sleep(RETRY_DELAY_MILLIS); // 短暂延迟
+                        TimeUnit.MILLISECONDS.sleep(RETRY_DELAY_MILLIS);
                     } catch (InterruptedException interruptedException) {
                         Thread.currentThread().interrupt();
                         return CompletableFuture.failedFuture(new IllegalStateException(
                                 "Server startup interrupted during retry.", interruptedException));
                     }
                 } else {
-                    // 非BindException，直接失败
                     return CompletableFuture.failedFuture(e);
                 }
             } catch (Exception e) {
                 return CompletableFuture.failedFuture(e);
             }
         }
-        // 达到最大重试次数仍未成功
         return CompletableFuture.failedFuture(new RuntimeException(
                 "Failed to start TenServer after " + MAX_RETRY_ATTEMPTS + " attempts due to port binding issues."));
     }
 
     private CompletableFuture<Void> tryStart() throws Exception {
-        log.info("TenServer starting on TCP port {} and HTTP port {}", currentTcpPort, currentHttpPort);
+        log.info("TenServer starting on port {}", currentPort); // 日志更新
 
-        nettyMessageServer = new NettyMessageServer(currentTcpPort, currentHttpPort, engine);
-        nettyHttpServer = new NettyHttpServer(currentHttpPort, engine);
+        nettyMessageServer = new NettyMessageServer(currentPort, engine); // 传入统一端口
+        // nettyHttpServer = null; // 移除
 
-        CompletableFuture<Void> messageServerStartFuture = nettyMessageServer.start();
-        CompletableFuture<Void> httpServerStartFuture = nettyHttpServer.start();
-
-        return CompletableFuture.allOf(messageServerStartFuture, httpServerStartFuture)
+        return nettyMessageServer.start()
                 .whenComplete((v, cause) -> {
                     if (cause == null) {
-                        // 成功启动后，更新实际绑定的端口
-                        this.currentTcpPort = nettyMessageServer.getBoundPort();
-                        this.currentHttpPort = nettyHttpServer.getBoundPort();
-                        log.info("TenServer successfully started on TCP port {} and HTTP port {}", this.currentTcpPort,
-                                this.currentHttpPort);
+                        this.currentPort = nettyMessageServer.getBoundPort();
+                        log.info("TenServer successfully started on port {}", this.currentPort); // 日志更新
                     }
                 })
                 .exceptionally(e -> {
-                    log.error("TenServer failed to start one or more components.", e);
-                    throw new java.util.concurrent.CompletionException(e); // 重新抛出，以便上游可以捕获
+                    log.error("TenServer failed to start.", e);
+                    throw new java.util.concurrent.CompletionException(e);
                 });
     }
 
@@ -100,29 +87,17 @@ public class TenServer {
             messageServerShutdownFuture = nettyMessageServer.shutdown();
         }
 
-        CompletableFuture<Void> httpServerShutdownFuture = CompletableFuture.completedFuture(null);
-        if (nettyHttpServer != null) {
-            httpServerShutdownFuture = nettyHttpServer.shutdown();
-        }
-
-        return CompletableFuture.allOf(messageServerShutdownFuture, httpServerShutdownFuture)
+        return messageServerShutdownFuture
                 .exceptionally(e -> {
                     log.error("TenServer shutdown encountered errors.", e);
-                    throw new java.util.concurrent.CompletionException(e); // 重新抛出，以便上游可以捕获
+                    throw new java.util.concurrent.CompletionException(e);
                 });
     }
 
-    // 新增方法，用于获取实际绑定的TCP端口
-    public int getTcpPort() {
-        return currentTcpPort;
+    public int getPort() { // 统一获取端口的方法
+        return currentPort;
     }
 
-    // 新增方法，用于获取实际绑定的HTTP端口
-    public int getHttpPort() {
-        return currentHttpPort;
-    }
-
-    // 新增方法，用于查找可用端口
     private static int findAvailablePort() {
         try (java.net.ServerSocket socket = new java.net.ServerSocket(0)) {
             socket.setReuseAddress(true);

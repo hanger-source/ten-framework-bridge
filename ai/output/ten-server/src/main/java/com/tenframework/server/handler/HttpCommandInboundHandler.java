@@ -74,31 +74,32 @@ public class HttpCommandInboundHandler extends SimpleChannelInboundHandler<FullH
             // 从 rootNode 的 "properties" 字段中提取参数
             JsonNode propertiesNode = rootNode.path("properties");
             Map<String, Object> commandProperties = new HashMap<>();
+            String graphJson = null; // 声明在外面以便后续使用
+
             if (propertiesNode.isObject()) {
                 propertiesNode.fields().forEachRemaining(entry -> {
-                    if (entry.getValue().isTextual()) {
+                    if ("graph_json".equals(entry.getKey())) {
+                        // 特殊处理 graph_json，确保它是原始的JSON字符串
+                        if (entry.getValue().isObject() || entry.getValue().isArray()) {
+                            // 如果是JSON对象或数组，直接将其序列化为字符串
+                            commandProperties.put(entry.getKey(), entry.getValue().toString());
+                        } else if (entry.getValue().isTextual()) {
+                            // 如果已经是文本，直接取文本值
+                            commandProperties.put(entry.getKey(), entry.getValue().asText());
+                        } else {
+                            // 其他情况，尝试转换为字符串（可能不是期望的JSON格式）
+                            commandProperties.put(entry.getKey(), entry.getValue().asText());
+                        }
+                    } else if (entry.getValue().isTextual()) {
                         commandProperties.put(entry.getKey(), entry.getValue().asText());
-                    } else if (entry.getValue().isObject() || entry.getValue().isArray()) { // 处理嵌套对象和数组
-                        commandProperties.put(entry.getKey(), entry.getValue().toString()); // 将嵌套对象和数组转为字符串
+                    } else if (entry.getValue().isObject() || entry.getValue().isArray()) {
+                        commandProperties.put(entry.getKey(), entry.getValue().toString());
                     } else {
                         commandProperties.put(entry.getKey(),
                                 objectMapper.convertValue(entry.getValue(), Object.class));
                     }
                 });
-            }
-
-            String graphId = commandProperties.getOrDefault("graph_id", UUID.randomUUID().toString()).toString();
-            String appUri = commandProperties.getOrDefault("app_uri", "default_app").toString();
-
-            // 提取 graph_json，并确保它是 String 类型
-            String graphJson = null;
-            Object tempGraphJson = commandProperties.get("graph_json");
-            if (tempGraphJson instanceof String) {
-                graphJson = (String) tempGraphJson;
-            } else if (tempGraphJson instanceof JsonNode) { // 如果是JsonNode，转为String
-                graphJson = tempGraphJson.toString();
-            } else if (tempGraphJson != null) { // 如果是其他类型，尝试转为String
-                graphJson = tempGraphJson.toString();
+                graphJson = (String) commandProperties.get("graph_json"); // 获取处理后的graphJson
             }
 
             if (graphJson == null || graphJson.isEmpty()) {
@@ -106,6 +107,9 @@ public class HttpCommandInboundHandler extends SimpleChannelInboundHandler<FullH
                 sendErrorResponse(ctx, BAD_REQUEST, "start_graph命令缺少有效的 'graph_json' 属性");
                 return;
             }
+
+            String graphId = commandProperties.getOrDefault("graph_id", UUID.randomUUID().toString()).toString();
+            String appUri = commandProperties.getOrDefault("app_uri", "default_app").toString();
 
             // 重新构建传递给 Engine 的 properties，确保其结构符合 Engine 的期望
             Map<String, Object> engineCommandProperties = new HashMap<>();
