@@ -44,7 +44,7 @@ public class MessageEncoder extends MessageToMessageEncoder<Message> { // 修改
             // 1. 将Message对象序列化为普通的MsgPack字节数组
             // Jackson现在应该会根据@JsonTypeInfo和@JsonSubTypes自动添加"type"字段
             byte[] innerBytes = objectMapper.writeValueAsBytes(msg);
-            log.debug("MessageEncoder: 内部消息 '{}' (type: {}) 序列化为 {} 字节", msg.getName(), msg.getType(),
+            log.debug("MessageEncoder: 图事件消息 '{}' (type: {}) 序列化为 {} 字节", msg.getName(), msg.getType(),
                     innerBytes.length);
 
             // 2. 将内部MsgPack字节数组封装为自定义的EXT类型

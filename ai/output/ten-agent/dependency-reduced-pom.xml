@@ -6,8 +6,8 @@
     <version>1.0.0-SNAPSHOT</version>
   </parent>
   <modelVersion>4.0.0</modelVersion>
-  <artifactId>ten-agent-example</artifactId>
-  <name>TEN Agent Example</name>
+  <artifactId>ten-agent</artifactId>
+  <name>ten-agent</name>
   <description>Minimal runnable example for TEN Agent</description>
   <build>
     <plugins>
@@ -22,6 +22,62 @@
               <mainClass>com.tenframework.agent.Main</mainClass>
             </manifest>
           </archive>
+        </configuration>
+      </plugin>
+      <plugin>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <version>3.13.0</version>
+        <executions>
+          <execution>
+            <id>default-testCompile</id>
+            <phase>test-compile</phase>
+            <goals>
+              <goal>testCompile</goal>
+            </goals>
+            <configuration>
+              <annotationProcessorPaths>
+                <path>
+                  <groupId>org.projectlombok</groupId>
+                  <artifactId>lombok</artifactId>
+                  <version>${lombok.version}</version>
+                </path>
+              </annotationProcessorPaths>
+            </configuration>
+          </execution>
+        </executions>
+        <configuration>
+          <source>${maven.compiler.source}</source>
+          <target>${maven.compiler.target}</target>
+          <annotationProcessorPaths>
+            <path>
+              <groupId>org.projectlombok</groupId>
+              <artifactId>lombok</artifactId>
+              <version>${lombok.version}</version>
+            </path>
+          </annotationProcessorPaths>
+          <compilerArgs>
+            <arg>--enable-preview</arg>
+            <arg>--add-opens</arg>
+            <arg>java.base/jdk.internal.misc=ALL-UNNAMED</arg>
+            <arg>--add-opens</arg>
+            <arg>java.base/java.util.zip=ALL-UNNAMED</arg>
+            <arg>--add-opens</arg>
+            <arg>java.base/sun.nio.ch=ALL-UNNAMED</arg>
+          </compilerArgs>
+        </configuration>
+      </plugin>
+      <plugin>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <version>3.1.2</version>
+        <configuration>
+          <argLine>--enable-preview --add-opens java.base/sun.nio.ch=ALL-UNNAMED
+                        --add-opens java.base/jdk.internal.misc=ALL-UNNAMED</argLine>
+          <includes>
+            <include>**/*Test.java</include>
+            <include>**/*Tests.java</include>
+            <include>**/*TestCase.java</include>
+            <include>**/*IntegrationTest.java</include>
+          </includes>
         </configuration>
       </plugin>
       <plugin>
