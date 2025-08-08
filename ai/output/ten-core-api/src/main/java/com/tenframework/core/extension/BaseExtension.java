@@ -1,15 +1,11 @@
 package com.tenframework.core.extension;
 
 import java.util.Map;
-import java.util.Optional;
-import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -44,10 +40,7 @@ public abstract class BaseExtension implements Extension {
     private String appUri; // 新增字段来存储 appUri
 
     // 内置异步处理能力
-    private final ExecutorService asyncExecutor;
-    private final BlockingQueue<Runnable> taskQueue;
-    private final ExecutorService taskExecutor;
-    private final AtomicBoolean taskExecutorRunning = new AtomicBoolean(false);
+    private final ExecutorService asyncVirtualExecutor;
     private final AtomicInteger activeTaskCount = new AtomicInteger(0);
 
     // 内置性能监控
@@ -72,13 +65,7 @@ public abstract class BaseExtension implements Extension {
         this.retryDelayMs = retryDelayMs;
 
         // 初始化内置组件
-        this.asyncExecutor = Executors.newVirtualThreadPerTaskExecutor();
-        this.taskQueue = new LinkedBlockingQueue<>();
-        this.taskExecutor = Executors.newSingleThreadExecutor(r -> {
-            Thread t = new Thread(r, "BaseExtension-TaskExecutor");
-            t.setDaemon(true);
-            return t;
-        });
+        this.asyncVirtualExecutor = Executors.newVirtualThreadPerTaskExecutor();
 
         // 修正 ExtensionMetrics 的实例化，不再使用 builder()
         this.metrics = new ExtensionMetrics(extensionName); // extensionName 在 onConfigure 中设置，这里会是 null，但 Gauge 的获取是懒加载
@@ -98,9 +85,6 @@ public abstract class BaseExtension implements Extension {
         this.extensionName = env.getExtensionName();
         this.appUri = env.getAppUri(); // 从 context 中获取 appUri
         this.metrics.setExtensionContext(env); // 设置ExtensionContext到metrics中
-
-        // 自动配置加载
-        loadConfiguration(env);
 
         // 启动内置组件
         startBuiltInComponents();
@@ -127,9 +111,6 @@ public abstract class BaseExtension implements Extension {
         this.isRunning = true;
         this.isHealthy = true;
 
-        // 启动任务执行器
-        startTaskExecutor();
-
         // 启动健康检查
         startHealthCheck();
 
@@ -142,9 +123,6 @@ public abstract class BaseExtension implements Extension {
     @Override
     public void onStop(AsyncExtensionEnv env) {
         this.isRunning = false;
-
-        // 停止任务执行器
-        stopTaskExecutor();
 
         // 停止健康检查
         stopHealthCheck();
@@ -268,7 +246,7 @@ public abstract class BaseExtension implements Extension {
     protected void submitTask(Runnable task) {
         if (isRunning) {
             activeTaskCount.incrementAndGet(); // 增加活跃任务计数
-            CompletableFuture.runAsync(task, asyncExecutor)
+            CompletableFuture.runAsync(task, asyncVirtualExecutor)
                     .whenComplete((v, e) -> {
                         activeTaskCount.decrementAndGet(); // 减少活跃任务计数
                         if (e != null) {
@@ -367,7 +345,7 @@ public abstract class BaseExtension implements Extension {
      * 获取虚拟线程执行器
      */
     protected ExecutorService getVirtualThreadExecutor() {
-        return context != null ? context.getVirtualThreadExecutor() : asyncExecutor;
+        return context != null ? context.getVirtualThreadExecutor() : asyncVirtualExecutor;
     }
 
     // ==================== 内置组件管理 ====================
@@ -389,42 +367,6 @@ public abstract class BaseExtension implements Extension {
         log.debug("初始化内置组件: extensionName={}", extensionName);
     }
 
-    private void startTaskExecutor() {
-        if (taskExecutorRunning.compareAndSet(false, true)) {
-            taskExecutor.submit(() -> {
-                try {
-                    while (taskExecutorRunning.get() && !Thread.currentThread().isInterrupted()) {
-                        Runnable task = taskQueue.take();
-                        if (task != null) {
-                            task.run();
-                        }
-                    }
-                } catch (InterruptedException e) {
-                    log.info("任务执行器被中断: extensionName={}", extensionName);
-                    Thread.currentThread().interrupt();
-                } catch (Exception e) {
-                    log.error("任务执行器异常: extensionName={}", extensionName, e);
-                } finally {
-                    taskExecutorRunning.set(false);
-                }
-            });
-        }
-    }
-
-    private void stopTaskExecutor() {
-        if (taskExecutorRunning.compareAndSet(true, false)) {
-            taskExecutor.shutdown();
-            try {
-                if (!taskExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
-                    taskExecutor.shutdownNow();
-                }
-            } catch (InterruptedException e) {
-                taskExecutor.shutdownNow();
-                Thread.currentThread().interrupt();
-            }
-        }
-    }
-
     private void startHealthCheck() {
         healthCheckExecutor.scheduleAtFixedRate(() -> {
             try {
@@ -443,25 +385,17 @@ public abstract class BaseExtension implements Extension {
 
     private void stopHealthCheck() {
         healthCheckExecutor.shutdown();
-        try {
-            if (!healthCheckExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
-                healthCheckExecutor.shutdownNow();
-            }
-        } catch (InterruptedException e) {
-            healthCheckExecutor.shutdownNow();
-            Thread.currentThread().interrupt();
-        }
     }
 
     private void cleanupResources() {
         // 清理资源
-        asyncExecutor.shutdown();
+        asyncVirtualExecutor.shutdown();
         try {
-            if (!asyncExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
-                asyncExecutor.shutdownNow();
+            if (!asyncVirtualExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
+                asyncVirtualExecutor.shutdownNow();
             }
         } catch (InterruptedException e) {
-            asyncExecutor.shutdownNow();
+            asyncVirtualExecutor.shutdownNow();
             Thread.currentThread().interrupt();
         }
     }

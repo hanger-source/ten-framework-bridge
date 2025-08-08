@@ -15,8 +15,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 import com.tenframework.core.command.AddExtensionToGraphCommandHandler;
-import com.tenframework.core.command.InternalCommandHandler;
-import com.tenframework.core.command.InternalCommandType;
+import com.tenframework.core.command.GraphEventCommandHandler;
 import com.tenframework.core.command.RemoveExtensionFromGraphCommandHandler;
 import com.tenframework.core.command.StartGraphCommandHandler;
 import com.tenframework.core.command.StopGraphCommandHandler;
@@ -42,6 +41,11 @@ import org.agrona.concurrent.IdleStrategy;
 import org.agrona.concurrent.ManyToOneConcurrentArrayQueue;
 import org.agrona.concurrent.SleepingIdleStrategy;
 
+import static com.tenframework.core.command.GraphEventCommandType.ADD_EXTENSION_TO_GRAPH;
+import static com.tenframework.core.command.GraphEventCommandType.REMOVE_EXTENSION_FROM_GRAPH;
+import static com.tenframework.core.command.GraphEventCommandType.START_GRAPH;
+import static com.tenframework.core.command.GraphEventCommandType.STOP_GRAPH;
+import static com.tenframework.core.command.GraphEventCommandType.isInternal;
 import static com.tenframework.core.message.MessageConstants.PROPERTY_CLIENT_LOCATION_URI;
 import static java.util.concurrent.Executors.newSingleThreadExecutor;
 
@@ -93,7 +97,7 @@ public final class Engine implements MessageSubmitter, CommandSubmitter { // 实
     /**
      * 维护graphId到GraphInstance的映射
      */
-    private GraphInstances graphInstances;
+    private final GraphInstances graphInstances;
     /**
      * 管理活动的Netty Channel，用于消息回传
      */
@@ -103,7 +107,7 @@ public final class Engine implements MessageSubmitter, CommandSubmitter { // 实
      */
     private final RouteManager routeManager;
 
-    private final Map<String, InternalCommandHandler> internalCommandHandlers;
+    private final Map<String, GraphEventCommandHandler> graphEventCommandHandlers;
     /**
      * 维护命令ID到CompletableFuture的映射，用于异步返回命令结果给调用方
      */
@@ -146,13 +150,11 @@ public final class Engine implements MessageSubmitter, CommandSubmitter { // 实
         routeManager = new RouteManager(graphInstances);
 
         // 初始化内部命令处理器
-        internalCommandHandlers = new HashMap<>();
-        internalCommandHandlers.put(InternalCommandType.START_GRAPH.getCommandName(), new StartGraphCommandHandler());
-        internalCommandHandlers.put(InternalCommandType.STOP_GRAPH.getCommandName(), new StopGraphCommandHandler());
-        internalCommandHandlers.put(InternalCommandType.ADD_EXTENSION_TO_GRAPH.getCommandName(),
-                new AddExtensionToGraphCommandHandler());
-        internalCommandHandlers.put(InternalCommandType.REMOVE_EXTENSION_FROM_GRAPH.getCommandName(),
-                new RemoveExtensionFromGraphCommandHandler());
+        graphEventCommandHandlers = new HashMap<>();
+        graphEventCommandHandlers.put(START_GRAPH.getCommandName(), new StartGraphCommandHandler());
+        graphEventCommandHandlers.put(STOP_GRAPH.getCommandName(), new StopGraphCommandHandler());
+        graphEventCommandHandlers.put(ADD_EXTENSION_TO_GRAPH.getCommandName(), new AddExtensionToGraphCommandHandler());
+        graphEventCommandHandlers.put(REMOVE_EXTENSION_FROM_GRAPH.getCommandName(), new RemoveExtensionFromGraphCommandHandler());
 
         // 创建单线程ExecutorService，使用自定义ThreadFactory
         engineThread = newSingleThreadExecutor(r -> {
@@ -263,7 +265,7 @@ public final class Engine implements MessageSubmitter, CommandSubmitter { // 实
             return false;
         }
 
-        if (message.getType() == MessageType.COMMAND && !InternalCommandType.isInternal(message.getName())) {
+        if (message.getType() == MessageType.COMMAND && !isInternal(message.getName())) {
             Command command = (Command)message;
             command.setCommandId(Command.generateCommandId());
             CompletableFuture<Object> future = new CompletableFuture<>();
@@ -422,7 +424,7 @@ public final class Engine implements MessageSubmitter, CommandSubmitter { // 实
         log.debug("处理命令消息: engineId={}, commandName={}, commandId={}",
                 engineId, command.getName(), command.getCommandId());
 
-        InternalCommandHandler handler = internalCommandHandlers.get(command.getName());
+        GraphEventCommandHandler handler = graphEventCommandHandlers.get(command.getName());
         if (handler != null) {
             handler.handle(command, this);
             return;
@@ -468,11 +470,6 @@ public final class Engine implements MessageSubmitter, CommandSubmitter { // 实
         }
 
         String associatedChannelId = null;
-        if (command.getProperties() != null && command.getProperties().containsKey("__channel_id__")) {
-            associatedChannelId = (String) command.getProperties().get("__channel_id__");
-            command.getProperties().remove("__channel_id__");
-        }
-
         // 为每个目标Extension分发消息
         for (Location targetLocation : targetLocations) {
             // 获取目标Extension实例
@@ -516,19 +513,6 @@ public final class Engine implements MessageSubmitter, CommandSubmitter { // 实
             // 获取与此命令ID关联的CompletableFuture
             CompletableFuture<Object> resultFuture = commandFutures.get(finalMessageToSend.getCommandId());
             // resultFuture可能为null，例如Engine内部发起的命令，或者队列满时被丢弃的命令
-            // 对于非内部命令，如果Future为null，则表示逻辑错误或被提前处理
-
-            // PathOut的创建已移至Engine.submitMessage(Message,
-            // String)方法中，以确保其在命令进入Engine时就创建并关联CompletableFuture。
-            // 这里的PathOut是为Command命令创建的，而Data消息的PathIn在processData中创建。
-            // pathManager.createOutPath(finalMessageToSend.getCommandId(),
-            // finalMessageToSend.getParentCommandId(),
-            // finalMessageToSend.getName(), finalMessageToSend.getSourceLocation(),
-            // targetLocation,
-            // resultFuture, // 传递Engine管理的CompletableFuture
-            // ResultReturnPolicy.FIRST_ERROR_OR_LAST_OK,
-            // associatedChannelId);
-
             log.debug("Engine: 关联Command {} 到 Channel {}", finalMessageToSend.getCommandId(), associatedChannelId); // 新增日志
 
             try {
@@ -573,7 +557,7 @@ public final class Engine implements MessageSubmitter, CommandSubmitter { // 实
         }
 
         String clientLocationUri = message.getPropertyAsString(PROPERTY_CLIENT_LOCATION_URI);
-        if (InternalCommandType.isInternal(message.getName()) && clientLocationUri != null) {
+        if (isInternal(message.getName()) && clientLocationUri != null) {
             GraphInstance graphInstance = graphInstances.getByClientLocationUri(clientLocationUri);
 
             graphInstance.getExtension(ClientConnectionExtension.NAME).ifPresent(extension -> {
@@ -862,6 +846,11 @@ public final class Engine implements MessageSubmitter, CommandSubmitter { // 实
         submitMessage(command); // 现在是void方法
 
         return future;
+    }
+
+    @Override
+    public void cleanup(String graphId) {
+        pathManager.cleanupPathsForGraph(graphId);
     }
 
     // Getter方法

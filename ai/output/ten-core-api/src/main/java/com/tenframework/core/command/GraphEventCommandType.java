@@ -6,7 +6,7 @@ import lombok.Getter;
  * 定义Engine支持的内部命令类型。
  */
 @Getter
-public enum InternalCommandType {
+public enum GraphEventCommandType {
     START_GRAPH("__start_graph__"),
     STOP_GRAPH("__stop_graph__"),
     ADD_EXTENSION_TO_GRAPH("__add_extension_to_graph__"),
@@ -14,7 +14,7 @@ public enum InternalCommandType {
 
     private final String commandName;
 
-    InternalCommandType(String commandName) {
+    GraphEventCommandType(String commandName) {
         this.commandName = commandName;
     }
 
@@ -28,8 +28,8 @@ public enum InternalCommandType {
      * @param commandName 命令名称
      * @return 对应的InternalCommandType，如果未找到则返回null
      */
-    public static InternalCommandType fromCommandName(String commandName) {
-        for (InternalCommandType type : values()) {
+    public static GraphEventCommandType fromCommandName(String commandName) {
+        for (GraphEventCommandType type : values()) {
             if (type.getCommandName().equals(commandName)) {
                 return type;
             }

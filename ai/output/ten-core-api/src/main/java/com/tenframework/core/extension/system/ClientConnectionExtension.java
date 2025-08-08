@@ -2,12 +2,15 @@ package com.tenframework.core.extension.system;
 
 import com.tenframework.core.engine.Engine;
 import com.tenframework.core.extension.AsyncExtensionEnv;
-import com.tenframework.core.extension.Extension;
+import com.tenframework.core.extension.BaseExtension;
+import com.tenframework.core.extension.ExtensionMetrics;
+import com.tenframework.core.message.AudioFrame;
 import com.tenframework.core.message.Command;
 import com.tenframework.core.message.CommandResult;
 import com.tenframework.core.message.Data;
 import com.tenframework.core.message.Location;
 import com.tenframework.core.message.MessageConstants;
+import com.tenframework.core.message.VideoFrame;
 import com.tenframework.core.util.ClientLocationUriUtils;
 import io.netty.channel.Channel;
 import lombok.extern.slf4j.Slf4j;
@@ -17,7 +20,7 @@ import lombok.extern.slf4j.Slf4j;
  * 负责管理客户端Channel，并将消息在客户端与Engine之间路由。
  */
 @Slf4j
-public class ClientConnectionExtension implements Extension {
+public class ClientConnectionExtension extends BaseExtension {
 
     public static final String NAME = "client-connection-extension";
     private final Engine engine; // 新增Engine引用
@@ -27,6 +30,11 @@ public class ClientConnectionExtension implements Extension {
 
     public ClientConnectionExtension(Engine engine) {
         this.engine = engine;
+    }
+
+    @Override
+    public ExtensionMetrics getMetrics() {
+        return null;
     }
 
     @Override
@@ -113,6 +121,26 @@ public class ClientConnectionExtension implements Extension {
                     this.clientLocationUri, channelId, message.getName());
             }
         }
+    }
+
+    @Override
+    protected void handleCommand(Command command, AsyncExtensionEnv context) {
+
+    }
+
+    @Override
+    protected void handleData(Data data, AsyncExtensionEnv context) {
+
+    }
+
+    @Override
+    protected void handleAudioFrame(AudioFrame audioFrame, AsyncExtensionEnv context) {
+
+    }
+
+    @Override
+    protected void handleVideoFrame(VideoFrame videoFrame, AsyncExtensionEnv context) {
+
     }
 
     @Override

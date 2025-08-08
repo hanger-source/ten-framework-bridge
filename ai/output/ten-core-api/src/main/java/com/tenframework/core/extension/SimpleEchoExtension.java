@@ -36,8 +36,6 @@ public class SimpleEchoExtension extends BaseExtension {
     private String echoPrefix = "Echo: ";
     private long messageCount = 0;
 
-    // 构造函数已被移除，依赖BaseExtension的默认构造函数
-
     @Override
     protected void handleCommand(Command command, AsyncExtensionEnv context) {
         // 开发者只需关注业务逻辑

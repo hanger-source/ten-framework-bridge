@@ -195,7 +195,7 @@ class EchoExtensionTest {
                 GraphInstance graphInstance = engine.getGraphInstance(graphId)
                                 .orElseThrow(() -> new IllegalStateException("未找到启动的图实例: " + graphId));
 
-                boolean success = graphInstance.unregisterExtension("non-existent");
+                boolean success = graphInstance.removeExtension("non-existent");
                 assertFalse(success, "注销不存在的Extension应该失败");
                 assertEquals(0, graphInstance.getExtensionRegistry().size(), "Extension数量应该为0");
 

@@ -8,6 +8,7 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import com.tenframework.core.engine.Engine;
 import com.tenframework.core.engine.MessageSubmitter;
@@ -16,6 +17,7 @@ import com.tenframework.core.message.CommandResult;
 import com.tenframework.core.message.Location;
 import com.tenframework.core.message.MessageConstants;
 import com.tenframework.core.server.ChannelDisconnectedException;
+import com.tenframework.core.server.GraphStoppedException;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -364,5 +366,56 @@ public class PathManager {
         // .filter(entry -> channelId.equals(entry.getValue().channelId()))
         // .collect(Collectors.toList());
         // dataInPathsToCleanup.forEach(entry -> removeInPath(entry.getKey()));
+    }
+
+    /**
+     * 清理与指定图实例相关的所有PathOut实例。
+     * 当图实例停止时调用。
+     *
+     * @param graphId 要清理的图实例ID
+     */
+    public void cleanupPathsForGraph(String graphId) {
+        if (graphId == null || graphId.isEmpty()) {
+            log.warn("PathManager: 尝试清理空的或无效的Graph ID相关的路径");
+            return;
+        }
+
+        log.info("PathManager: 清理与Graph {} 相关的PathOut实例", graphId);
+
+        // 收集需要移除的Command ID
+        List<Long> commandIdsToCleanup = pathOuts.entrySet().stream()
+                .filter(entry -> {
+                    PathOut pathOut = entry.getValue();
+                    // 检查sourceLocation或destinationLocation的graphId是否匹配
+                    return (pathOut.getSourceLocation() != null
+                            && graphId.equals(pathOut.getSourceLocation().graphId())) ||
+                            (pathOut.getDestinationLocation() != null
+                                    && graphId.equals(pathOut.getDestinationLocation().graphId()));
+                })
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toList());
+
+        if (commandIdsToCleanup.isEmpty()) {
+            log.debug("PathManager: 没有发现与Graph {} 相关的PathOut需要清理", graphId);
+            return;
+        }
+
+        log.debug("PathManager: 发现 {} 个与Graph {} 相关的PathOut需要清理", commandIdsToCleanup.size(), graphId);
+
+        for (long commandId : commandIdsToCleanup) {
+            Optional<PathOut> pathOutOpt = getOutPath(commandId);
+            if (pathOutOpt.isPresent()) {
+                PathOut pathOut = pathOutOpt.get();
+                // 完成Future，表明图已停止，命令可能无法返回结果
+                if (pathOut.getResultFuture() != null && !pathOut.getResultFuture().isDone()) {
+                    pathOut.getResultFuture().completeExceptionally(new GraphStoppedException(
+                            "Graph " + graphId + " stopped. CommandResult cannot be returned."));
+                }
+                removeOutPath(commandId); // 内部会处理从pathOuts和channelToCommandIdsMap中移除
+                log.debug("PathManager: 清理与停止图相关的PathOut: commandId={}", commandId);
+            } else {
+                log.warn("PathManager: 在图停止清理时未找到PathOut，可能已被其他机制清理: commandId={}", commandId);
+            }
+        }
     }
 }

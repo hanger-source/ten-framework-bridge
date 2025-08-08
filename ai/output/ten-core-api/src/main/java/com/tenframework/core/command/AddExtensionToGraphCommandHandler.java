@@ -18,7 +18,7 @@ import lombok.extern.slf4j.Slf4j;
  * 处理 "add_extension_to_graph" 命令的处理器。
  */
 @Slf4j
-public class AddExtensionToGraphCommandHandler implements InternalCommandHandler {
+public class AddExtensionToGraphCommandHandler implements GraphEventCommandHandler {
 
     @Override
     public void handle(Command command, Engine engine) {

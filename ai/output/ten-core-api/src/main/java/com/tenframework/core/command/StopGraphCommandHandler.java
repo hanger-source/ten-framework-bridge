@@ -1,61 +1,70 @@
 package com.tenframework.core.command;
 
-import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
 
 import com.tenframework.core.engine.Engine;
 import com.tenframework.core.graph.GraphInstance;
 import com.tenframework.core.message.Command;
 import com.tenframework.core.message.CommandResult;
-import com.tenframework.core.message.Location;
+import com.tenframework.core.message.MessageConstants;
+import com.tenframework.core.util.ClientLocationUriUtils;
 import lombok.extern.slf4j.Slf4j;
 
 /**
  * 处理 "stop_graph" 命令的处理器。
  */
 @Slf4j
-public class StopGraphCommandHandler implements InternalCommandHandler {
+public class StopGraphCommandHandler implements GraphEventCommandHandler {
 
     @Override
     public void handle(Command command, Engine engine) {
-        String graphId = (String) command.getProperties().get("graph_id");
-        String appUri = (String) command.getProperties().get("app_uri");
-        String associatedChannelId = (String) command.getProperties().get("__channel_id__");
 
-        log.info("Engine收到stop_graph命令: graphId={}, appUri={}", graphId, appUri);
+        String clientLocationUri = command.getProperty(MessageConstants.PROPERTY_CLIENT_LOCATION_URI, String.class);
+        String graphId = ClientLocationUriUtils.getGraphId(clientLocationUri);
+        String appUri = ClientLocationUriUtils.getAppUri(clientLocationUri);
 
-        CommandResult result;
-        if (graphId == null || graphId.isEmpty()) {
-            result = CommandResult.error(command.getCommandId(),
-                    Map.of("error", "stop_graph命令缺少graph_id属性").get("error"));
-            log.error("stop_graph命令参数缺失: graphId={}", graphId);
+        log.info("Engine收到stop_graph命令: graphId={}, appUri={}, clientLocationUri={}",
+            graphId, appUri, clientLocationUri);
+
+        CommandResult commandResult;
+        if (clientLocationUri == null) {
+            commandResult = CommandResult.error(command.getCommandId(), "stop_graph命令缺少clientLocationUri");
+            log.error("stop_graph命令参数缺失: clientLocationUri=null");
         } else {
-            GraphInstance removedGraph = engine.removeGraphInstance(graphId);
+            // 根据clientLocationUri获取并移除图实例
+            GraphInstance removedGraph = engine.removeGraphInstance(clientLocationUri);
             if (removedGraph != null) {
                 try {
                     removedGraph.cleanupAllExtensions();
-                    result = CommandResult.success(command.getCommandId(),
-                            Map.of("message", "Graph stopped successfully.", "graph_id", graphId));
+                    // 清理PathManager中与此图实例相关的PathOut
+                    engine.cleanup(graphId);
+                    commandResult = CommandResult.success(command.getCommandId(),
+                        Map.of("message", "Graph stopped successfully.",
+                                    MessageConstants.PROPERTY_CLIENT_LOCATION_URI, clientLocationUri,
+                                    MessageConstants.PROPERTY_CLIENT_GRAPH_ID, graphId));
                     log.info("图实例停止成功: graphId={}", graphId);
                 } catch (Exception e) {
-                    result = CommandResult.error(command.getCommandId(),
-                            Map.of("error", "停止图实例失败: " + e.getMessage()).get("error"));
+                    commandResult = CommandResult.error(command.getCommandId(), "停止图实例失败: " + e.getMessage());
                     log.error("停止图实例时发生异常: graphId={}", graphId, e);
                 }
             } else {
-                result = CommandResult.error(command.getCommandId(),
-                        Map.of("error", "图实例不存在: " + graphId).get("error"));
+                commandResult = CommandResult.error(command.getCommandId(), "图实例不存在或未加载: " + graphId);
                 log.warn("尝试停止不存在的图实例: graphId={}", graphId);
             }
         }
 
-        result.setSourceLocation(Location.builder().appUri(appUri).graphId(graphId).extensionName("engine").build());
-        result.setDestinationLocations(Collections.singletonList(command.getSourceLocation()));
 
+        Map<String, Object> properties = new HashMap<>(command.getProperties());
+        properties.putAll(commandResult.getProperties());
+        commandResult.setCommandId(command.getCommandId());
+        commandResult.setProperties(properties);
+        commandResult.setName(command.getName());
+        engine.submitMessage(commandResult);
     }
 
     @Override
     public String getCommandName() {
-        return "stop_graph";
+        return GraphEventCommandType.STOP_GRAPH.getCommandName();
     }
 }

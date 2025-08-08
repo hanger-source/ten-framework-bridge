@@ -11,7 +11,6 @@ import com.tenframework.core.engine.CommandSubmitter;
 import com.tenframework.core.engine.MessageSubmitter;
 import com.tenframework.core.extension.EngineAsyncExtensionEnv;
 import com.tenframework.core.extension.Extension;
-import com.tenframework.core.extension.ExtensionMetrics;
 import com.tenframework.core.message.Command;
 import com.tenframework.core.message.CommandResult;
 import com.tenframework.core.message.Message;
@@ -50,11 +49,6 @@ public class GraphInstance {
     private final Map<String, EngineAsyncExtensionEnv> asyncExtensionEnvRegistry; // 修改类型声明
 
     /**
-     * 该图实例下的ExtensionMetrics实例注册表，与Extension一一对应
-     */
-    private final Map<String, ExtensionMetrics> extensionMetricsRegistry;
-
-    /**
      * 连接路由表，键为源Extension名称，值为该Extension发出的连接列表
      */
     private final Map<String, List<ConnectionConfig>> connectionRoutes;
@@ -63,17 +57,16 @@ public class GraphInstance {
     private final AtomicBoolean startFailed = new AtomicBoolean(false);
 
     public GraphInstance(String appUri, GraphConfig graphConfig, MessageSubmitter messageSubmitter) {
-        this.graphName =graphConfig.getGraphName();
+        this.graphName = graphConfig.getGraphName();
         this.graphId = UUID.randomUUID().toString();
         this.appUri = appUri;
         this.messageSubmitter = messageSubmitter;
         extensionRegistry = new ConcurrentHashMap<>();
         asyncExtensionEnvRegistry = new ConcurrentHashMap<>();
-        extensionMetricsRegistry = new ConcurrentHashMap<>();
 
         // 根据graphConfig构建连接路由表
         connectionRoutes = graphConfig.getConnections() != null ? graphConfig.getConnections().stream()
-            .collect(groupingBy(ConnectionConfig::getSource)) : emptyMap();
+                .collect(groupingBy(ConnectionConfig::getSource)) : emptyMap();
 
         log.info("GraphInstance创建: graphId={}, appUri={}, connections={}", graphId, appUri, connectionRoutes.size());
     }
@@ -104,7 +97,6 @@ public class GraphInstance {
      */
     public boolean registerExtension(String extensionName, Extension extension, Map<String, Object> properties) {
         if (extensionName == null || extensionName.isEmpty()) {
-            log.warn("Extension名称不能为空: graphId={}", graphId);
             return false;
         }
         if (extension == null) {
@@ -118,23 +110,19 @@ public class GraphInstance {
         }
 
         // 创建ExtensionContext，关联到当前图实例的graphId和appUri
-        // 这里的messageSubmitter实际上就是Engine实例，因为Engine实现了MessageSubmitter和CommandSubmitter
-        EngineAsyncExtensionEnv context = new EngineAsyncExtensionEnv(extensionName, graphId, appUri, messageSubmitter, (CommandSubmitter) messageSubmitter,
+        EngineAsyncExtensionEnv env = new EngineAsyncExtensionEnv(extensionName, graphId, appUri, messageSubmitter,
+                (CommandSubmitter) messageSubmitter,
                 properties); // 修改实例化逻辑
-
-        // 创建Extension性能指标
-        ExtensionMetrics metrics = new ExtensionMetrics(extensionName);
 
         // 注册Extension、Context和Metrics
         extensionRegistry.put(extensionName, extension);
-        asyncExtensionEnvRegistry.put(extensionName, context);
-        extensionMetricsRegistry.put(extensionName, metrics);
+        asyncExtensionEnvRegistry.put(extensionName, env);
 
         // 调用Extension生命周期方法
         try {
             // 1. 配置阶段
             long startTime = System.currentTimeMillis();
-            extension.onConfigure(context);
+            extension.onConfigure(env);
             long configureTime = System.currentTimeMillis() - startTime;
             log.debug("Extension配置完成: graphId={}, extensionName={}, 耗时={}ms",
                     graphId, extensionName, configureTime);
@@ -147,7 +135,7 @@ public class GraphInstance {
 
             // 2. 初始化阶段
             startTime = System.currentTimeMillis();
-            extension.onInit(context);
+            extension.onInit(env);
             long initTime = System.currentTimeMillis() - startTime;
             log.debug("Extension初始化完成: graphId={}, extensionName={}, 耗时={}ms",
                     graphId, extensionName, initTime);
@@ -160,7 +148,7 @@ public class GraphInstance {
 
             // 3. 启动阶段
             startTime = System.currentTimeMillis();
-            extension.onStart(context);
+            extension.onStart(env);
             long startTimeElapsed = System.currentTimeMillis() - startTime;
             log.debug("Extension启动完成: graphId={}, extensionName={}, 耗时={}ms",
                     graphId, extensionName, startTimeElapsed);
@@ -177,9 +165,7 @@ public class GraphInstance {
             // 清理已注册的资源
             extensionRegistry.remove(extensionName);
             asyncExtensionEnvRegistry.remove(extensionName);
-            if (context != null) {
-                context.close();
-            }
+            env.close();
             return false;
         }
 
@@ -195,13 +181,11 @@ public class GraphInstance {
      */
     public boolean unregisterExtension(String extensionName) {
         if (extensionName == null || extensionName.isEmpty()) {
-            log.warn("Extension名称不能为空: graphId={}", graphId);
             return false;
         }
 
         Extension extension = extensionRegistry.remove(extensionName);
-        EngineAsyncExtensionEnv context = asyncExtensionEnvRegistry.remove(extensionName); // 修改类型
-        ExtensionMetrics metrics = extensionMetricsRegistry.remove(extensionName);
+        EngineAsyncExtensionEnv env = asyncExtensionEnvRegistry.remove(extensionName); // 修改类型
 
         if (extension == null) {
             log.warn("Extension不存在于当前图: graphId={}, extensionName={}", graphId, extensionName);
@@ -212,7 +196,7 @@ public class GraphInstance {
         try {
             // 1. 停止阶段
             long startTime = System.currentTimeMillis();
-            extension.onStop(context);
+            extension.onStop(env);
             long stopTime = System.currentTimeMillis() - startTime;
             log.debug("Extension停止完成: graphId={}, extensionName={}, 耗时={}ms",
                     graphId, extensionName, stopTime);
@@ -225,7 +209,7 @@ public class GraphInstance {
 
             // 2. 清理阶段
             startTime = System.currentTimeMillis();
-            extension.onDeinit(context);
+            extension.onDeinit(env);
             long deinitTime = System.currentTimeMillis() - startTime;
             log.debug("Extension清理完成: graphId={}, extensionName={}, 耗时={}ms",
                     graphId, extensionName, deinitTime);
@@ -243,8 +227,8 @@ public class GraphInstance {
         }
 
         // 关闭ExtensionContext资源
-        if (context != null) {
-            context.close();
+        if (env != null) {
+            env.close();
         }
 
         log.info("Extension注销成功: graphId={}, extensionName={}", graphId, extensionName);
@@ -259,13 +243,11 @@ public class GraphInstance {
      */
     public boolean removeExtension(String extensionName) {
         if (extensionName == null || extensionName.isEmpty()) {
-            log.warn("Extension名称不能为空: graphId={}", graphId);
             return false;
         }
 
         Extension extension = extensionRegistry.remove(extensionName);
         EngineAsyncExtensionEnv context = asyncExtensionEnvRegistry.remove(extensionName); // 修改类型
-        ExtensionMetrics metrics = extensionMetricsRegistry.remove(extensionName);
 
         if (extension == null) {
             log.warn("Extension不存在于当前图，无法移除: graphId={}, extensionName={}", graphId, extensionName);
@@ -338,19 +320,53 @@ public class GraphInstance {
     public void cleanupAllExtensions() {
         log.info("开始清理GraphInstance下的所有Extension资源: graphId={}, extensionCount={}", graphId, extensionRegistry.size());
 
-        // 关闭所有ExtensionContext
-        asyncExtensionEnvRegistry.values().forEach(context -> {
+        // 遍历所有Extension，并调用其onStop和onDeinit生命周期方法
+        extensionRegistry.forEach((extensionName, extension) -> {
+            EngineAsyncExtensionEnv env = asyncExtensionEnvRegistry.get(extensionName);
+            if (env == null) {
+                log.warn("无法获取ExtensionContext，跳过Extension清理: graphId={}, extensionName={}", graphId, extensionName);
+                return;
+            }
+
             try {
-                context.close();
+                // 1. 停止阶段
+                long startTime = System.currentTimeMillis();
+                extension.onStop(env);
+                long stopTime = System.currentTimeMillis() - startTime;
+                log.debug("Extension停止完成: graphId={}, extensionName={}, 耗时={}ms (cleanup)",
+                        graphId, extensionName, stopTime);
+                if (stopTime > 10000) { // 10秒超时检查
+                    log.warn("Extension停止阶段耗时过长(cleanup): graphId={}, extensionName={}, 耗时={}ms",
+                            graphId, extensionName, stopTime);
+                }
+
+                // 2. 清理阶段
+                startTime = System.currentTimeMillis();
+                extension.onDeinit(env);
+                long deinitTime = System.currentTimeMillis() - startTime;
+                log.debug("Extension清理完成: graphId={}, extensionName={}, 耗时={}ms (cleanup)",
+                        graphId, extensionName, deinitTime);
+                if (deinitTime > 5000) { // 5秒超时检查
+                    log.warn("Extension清理阶段耗时过长(cleanup): graphId={}, extensionName={}, 耗时={}ms",
+                            graphId, extensionName, deinitTime);
+                }
+
             } catch (Exception e) {
-                log.error("关闭ExtensionContext时发生异常: extensionName={}", context.getExtensionName(), e);
+                log.error("Extension生命周期清理失败: graphId={}, extensionName={}, 阶段={}",
+                        graphId, extensionName, "onStop/onDeinit (cleanup)", e);
+            } finally {
+                // 无论成功与否，最终都要关闭Context
+                try {
+                    env.close();
+                } catch (Exception e) {
+                    log.error("关闭ExtensionContext时发生异常: extensionName={}", extensionName, e);
+                }
             }
         });
 
         // 清空注册表
         extensionRegistry.clear();
         asyncExtensionEnvRegistry.clear();
-        extensionMetricsRegistry.clear();
 
         log.info("GraphInstance下所有Extension资源清理完成: graphId={}", graphId);
     }
@@ -396,7 +412,7 @@ public class GraphInstance {
             // --- 新增：检查连接类型是否与消息类型匹配 ---
             if (!connection.getType().equals(message.getType().getValue())) {
                 log.debug("连接类型与消息类型不匹配，跳过连接: graphId={}, source={}, connectionType={}, messageType={}",
-                    graphId, sourceExtensionName, connection.getType(), message.getType().getValue());
+                        graphId, sourceExtensionName, connection.getType(), message.getType().getValue());
                 continue; // 跳过此连接
             }
             // --- 结束新增 ---

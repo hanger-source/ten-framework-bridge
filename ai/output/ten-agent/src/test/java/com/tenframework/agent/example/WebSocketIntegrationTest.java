@@ -7,7 +7,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.tenframework.core.command.InternalCommandType;
+import com.tenframework.core.command.GraphEventCommandType;
 import com.tenframework.core.engine.Engine;
 import com.tenframework.core.extension.SimpleEchoExtension;
 import com.tenframework.core.graph.GraphConfig;
@@ -96,7 +96,7 @@ public class WebSocketIntegrationTest {
         // 构建start_graph命令
         Command startGraphCommand = Command.builder()
             .commandId(UUID.randomUUID().getMostSignificantBits())
-            .name(InternalCommandType.START_GRAPH.getCommandName())
+            .name(GraphEventCommandType.START_GRAPH.getCommandName())
             .properties(Map.of(
                 PROPERTY_CLIENT_APP_URI, clientAppUri,
                 PROPERTY_CLIENT_GRAPH_NAME, clientGraphName,
@@ -176,7 +176,7 @@ public class WebSocketIntegrationTest {
         // 2. 模拟发送 stop_graph 命令进行清理 - 通过WebSocket发送
         Command stopGraphCommand = Command.builder()
             .commandId(UUID.randomUUID().getMostSignificantBits())
-            .name("stop_graph") // 设置命令名称
+            .name(GraphEventCommandType.STOP_GRAPH.getCommandName()) // 设置命令名称
             .properties(Map.of(
                 PROPERTY_CLIENT_LOCATION_URI, clientLocationUri))
             .build();

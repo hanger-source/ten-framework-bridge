@@ -1,8 +1,8 @@
 package com.tenframework.core.engine;
 
-import com.tenframework.core.message.Command;
-
 import java.util.concurrent.CompletableFuture;
+
+import com.tenframework.core.message.Command;
 
 /**
  * CommandSubmitter接口定义了提交命令并异步获取其结果的契约。
@@ -16,4 +16,11 @@ public interface CommandSubmitter {
      * @return CompletableFuture<Object>，代表命令执行的最终结果。
      */
     CompletableFuture<Object> submitCommand(Command command);
+
+    /**
+     * Cleanup.
+     *
+     * @param graphId the graph id
+     */
+    void cleanup(String graphId);
 }
