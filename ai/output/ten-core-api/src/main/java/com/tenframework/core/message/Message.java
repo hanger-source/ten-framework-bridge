@@ -90,6 +90,10 @@ public sealed interface Message
          */
         <T> T getProperty(String key, Class<T> type);
 
+        default String getPropertyAsString(String key) {
+                return getProperty(key, String.class);
+        }
+
         /**
          * 设置属性值
          */

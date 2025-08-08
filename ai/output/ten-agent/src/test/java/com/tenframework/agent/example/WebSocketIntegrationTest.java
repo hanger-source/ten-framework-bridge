@@ -16,7 +16,6 @@ import com.tenframework.core.graph.GraphLoader;
 import com.tenframework.core.message.Command;
 import com.tenframework.core.message.CommandResult;
 import com.tenframework.core.message.Data;
-import com.tenframework.core.message.Location;
 import com.tenframework.core.message.Message;
 import com.tenframework.core.message.MessageConstants;
 import com.tenframework.server.TenServer;
@@ -164,7 +163,7 @@ public class WebSocketIntegrationTest {
         Message receivedWsMessage = wsEchoResponseFuture.get(100, TimeUnit.SECONDS); // 延长超时时间
         log.info("成功接收到WebSocket回显消息: {}", receivedWsMessage);
         assertNotNull(receivedWsMessage, "应收到WebSocket回显消息");
-        assertTrue(receivedWsMessage instanceof Data, "WebSocket回显消息应为Data类型");
+        assertTrue((receivedWsMessage instanceof Data), "WebSocket回显消息应为Data类型");
         Data wsEchoData = (Data) receivedWsMessage;
         assertEquals(MessageConstants.DATA_NAME_ECHO_DATA, wsEchoData.getName());
 

@@ -30,7 +30,6 @@ import com.tenframework.core.message.CommandResult;
 import com.tenframework.core.message.Data;
 import com.tenframework.core.message.Location;
 import com.tenframework.core.message.Message;
-import com.tenframework.core.message.MessageConstants;
 import com.tenframework.core.message.MessageType;
 import com.tenframework.core.message.VideoFrame;
 import com.tenframework.core.path.PathManager;
@@ -43,6 +42,7 @@ import org.agrona.concurrent.IdleStrategy;
 import org.agrona.concurrent.ManyToOneConcurrentArrayQueue;
 import org.agrona.concurrent.SleepingIdleStrategy;
 
+import static com.tenframework.core.message.MessageConstants.PROPERTY_CLIENT_LOCATION_URI;
 import static java.util.concurrent.Executors.newSingleThreadExecutor;
 
 /**
@@ -393,6 +393,20 @@ public final class Engine implements MessageSubmitter, CommandSubmitter { // 实
         }
     }
 
+    private String fetchGraphId(Message message) {
+        String graphId = null;
+        // 优先从客户端LocationUri中获取GraphId
+        String clientLocationUri = message.getPropertyAsString(PROPERTY_CLIENT_LOCATION_URI);
+        if (clientLocationUri != null) {
+            graphId = ClientLocationUriUtils.getGraphId(clientLocationUri);
+        }
+        // 内部消息传递过程中 不存在客户端LocationUri，则从源LocationGraphId中获取
+        if (message.getSourceLocation() != null) {
+            graphId = message.getSourceLocation().graphId();
+        }
+        return graphId;
+    }
+
     /**
      * 处理命令消息
      *
@@ -415,7 +429,7 @@ public final class Engine implements MessageSubmitter, CommandSubmitter { // 实
         }
 
         // 1. 获取消息的源GraphId
-        String sourceGraphId = command.getSourceLocation() != null ? command.getSourceLocation().graphId() : null;
+        String sourceGraphId = fetchGraphId(message);
         if (sourceGraphId == null) {
             log.warn("命令消息缺少有效的源GraphId，无法进行路由: engineId={}, commandName={}, commandId={}",
                     engineId, command.getName(), command.getCommandId());
@@ -558,7 +572,7 @@ public final class Engine implements MessageSubmitter, CommandSubmitter { // 实
             return;
         }
 
-        String clientLocationUri = (String)message.getProperty(MessageConstants.PROPERTY_CLIENT_LOCATION_URI);
+        String clientLocationUri = message.getPropertyAsString(PROPERTY_CLIENT_LOCATION_URI);
         if (InternalCommandType.isInternal(message.getName()) && clientLocationUri != null) {
             GraphInstance graphInstance = graphInstances.getByClientLocationUri(clientLocationUri);
 
@@ -644,7 +658,7 @@ public final class Engine implements MessageSubmitter, CommandSubmitter { // 实
                 engineId, message.getType(), message.getName());
 
         String graphId = null;
-        String clientLocationUri = message.getProperty(MessageConstants.PROPERTY_CLIENT_LOCATION_URI, String.class);
+        String clientLocationUri = message.getPropertyAsString(PROPERTY_CLIENT_LOCATION_URI);
         if (clientLocationUri != null) {
             graphId = ClientLocationUriUtils.getGraphId(clientLocationUri);
         }

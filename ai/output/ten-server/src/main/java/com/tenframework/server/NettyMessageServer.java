@@ -6,7 +6,7 @@ import com.tenframework.core.engine.Engine;
 import com.tenframework.server.handler.ByteBufToWebSocketFrameEncoder;
 import com.tenframework.server.handler.HttpRequestLogger;
 import com.tenframework.server.handler.WebSocketFrameToByteBufDecoder;
-import com.tenframework.server.handler.WebSocketMessageFrameHandler;
+import com.tenframework.server.handler.WebSocketMessageDispatcher;
 import com.tenframework.server.message.MessageEncoder;
 import com.tenframework.server.message.WebSocketMessageDecoder;
 import io.netty.bootstrap.ServerBootstrap;
@@ -57,7 +57,7 @@ public class NettyMessageServer {
                             ch.pipeline().addLast(new WebSocketServerProtocolHandler("/websocket"));
                             ch.pipeline().addLast(new WebSocketFrameToByteBufDecoder());
                             ch.pipeline().addLast(new WebSocketMessageDecoder());
-                            ch.pipeline().addLast(new WebSocketMessageFrameHandler(engine));
+                            ch.pipeline().addLast(new WebSocketMessageDispatcher(engine));
                             ch.pipeline().addLast(new MessageEncoder());
                             ch.pipeline().addLast(new ByteBufToWebSocketFrameEncoder());
                         }
