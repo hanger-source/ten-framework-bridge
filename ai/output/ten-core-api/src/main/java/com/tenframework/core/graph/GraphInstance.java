@@ -37,17 +37,14 @@ public class GraphInstance {
     private final String appUri;
     private final String graphName;
     private final MessageSubmitter messageSubmitter;
-
     /**
      * 该图实例下的Extension注册表，使用extensionName作为键
      */
     private final Map<String, Extension> extensionRegistry;
-
     /**
      * 该图实例下的ExtensionContext实例注册表，与Extension一一对应
      */
     private final Map<String, EngineAsyncExtensionEnv> asyncExtensionEnvRegistry; // 修改类型声明
-
     /**
      * 连接路由表，键为源Extension名称，值为该Extension发出的连接列表
      */
@@ -247,7 +244,7 @@ public class GraphInstance {
         }
 
         Extension extension = extensionRegistry.remove(extensionName);
-        EngineAsyncExtensionEnv context = asyncExtensionEnvRegistry.remove(extensionName); // 修改类型
+        EngineAsyncExtensionEnv env = asyncExtensionEnvRegistry.remove(extensionName); // 修改类型
 
         if (extension == null) {
             log.warn("Extension不存在于当前图，无法移除: graphId={}, extensionName={}", graphId, extensionName);
@@ -258,7 +255,7 @@ public class GraphInstance {
         try {
             // 1. 停止阶段
             long startTime = System.currentTimeMillis();
-            extension.onStop(context);
+            extension.onStop(env);
             long stopTime = System.currentTimeMillis() - startTime;
             log.debug("Extension停止完成: graphId={}, extensionName={}, 耗时={}ms (移除操作)",
                     graphId, extensionName, stopTime);
@@ -270,7 +267,7 @@ public class GraphInstance {
 
             // 2. 清理阶段
             startTime = System.currentTimeMillis();
-            extension.onDeinit(context);
+            extension.onDeinit(env);
             long deinitTime = System.currentTimeMillis() - startTime;
             log.debug("Extension清理完成: graphId={}, extensionName={}, 耗时={}ms (移除操作)",
                     graphId, extensionName, deinitTime);
@@ -285,8 +282,8 @@ public class GraphInstance {
                     graphId, extensionName, "onStop/onDeinit", e);
         } finally {
             // 即使清理失败，也要继续关闭Context
-            if (context != null) {
-                context.close();
+            if (env != null) {
+                env.close();
             }
         }
 

@@ -560,11 +560,18 @@ public final class Engine implements MessageSubmitter, CommandSubmitter { // 实
         if (isInternal(message.getName()) && clientLocationUri != null) {
             GraphInstance graphInstance = graphInstances.getByClientLocationUri(clientLocationUri);
 
-            graphInstance.getExtension(ClientConnectionExtension.NAME).ifPresent(extension -> {
-                graphInstance.getAsyncExtensionEnv(ClientConnectionExtension.NAME).ifPresent(extensionEnv -> {
-                    extension.onCommandResult(commandResult, extensionEnv);
+            if (graphInstance != null) {
+                graphInstance.getExtension(ClientConnectionExtension.NAME).ifPresent(extension -> {
+                    graphInstance.getAsyncExtensionEnv(ClientConnectionExtension.NAME).ifPresent(extensionEnv -> {
+                        extension.onCommandResult(commandResult, extensionEnv);
+                    });
                 });
-            });
+            } else {
+                ClientConnectionExtension extension = graphInstances.getClientConnectionExtension(clientLocationUri);
+                if (extension != null) {
+                    extension.onCommandResult(commandResult, null);
+                }
+            }
         }
 
         // 从PathTable中查找对应的PathOut
@@ -891,14 +898,8 @@ public final class Engine implements MessageSubmitter, CommandSubmitter { // 实
         graphInstances.put(clientLocationUri, graphInstance);
     }
 
-    /**
-     * 从Engine的映射中移除并返回GraphInstance。
-     *
-     * @param clientLocationUri 客户端位置URI
-     * @return 被移除的GraphInstance，如果不存在则为null
-     */
-    public GraphInstance removeGraphInstance(String clientLocationUri) {
-        return graphInstances.remove(clientLocationUri);
+    public void removeGraphInstance(String clientLocationUri) {
+        graphInstances.remove(clientLocationUri);
     }
 
     /**
@@ -913,28 +914,6 @@ public final class Engine implements MessageSubmitter, CommandSubmitter { // 实
      */
     public int getQueueCapacity() {
         return inboundMessageQueue.capacity();
-    }
-
-    /**
-     * 从Message中提取第一个目标位置的extensionName（辅助方法）
-     *
-     * @param message 消息对象
-     * @return extensionName，如果没有有效的目标位置则返回null
-     */
-    private String extractExtensionName(Message message) {
-        if (message == null || message.getDestinationLocations() == null
-                || message.getDestinationLocations().isEmpty()) {
-            return null;
-        }
-
-        // 取第一个目标位置
-        Location firstDestination = message.getDestinationLocations().get(0);
-        if (firstDestination == null || firstDestination.extensionName() == null
-                || firstDestination.extensionName().isEmpty()) {
-            return null;
-        }
-
-        return firstDestination.extensionName();
     }
 
     /**

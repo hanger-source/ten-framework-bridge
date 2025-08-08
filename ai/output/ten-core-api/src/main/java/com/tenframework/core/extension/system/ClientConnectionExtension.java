@@ -1,40 +1,41 @@
 package com.tenframework.core.extension.system;
 
+import java.util.concurrent.atomic.AtomicBoolean;
+
 import com.tenframework.core.engine.Engine;
 import com.tenframework.core.extension.AsyncExtensionEnv;
-import com.tenframework.core.extension.BaseExtension;
-import com.tenframework.core.extension.ExtensionMetrics;
-import com.tenframework.core.message.AudioFrame;
+import com.tenframework.core.extension.Extension;
 import com.tenframework.core.message.Command;
 import com.tenframework.core.message.CommandResult;
 import com.tenframework.core.message.Data;
 import com.tenframework.core.message.Location;
 import com.tenframework.core.message.MessageConstants;
-import com.tenframework.core.message.VideoFrame;
 import com.tenframework.core.util.ClientLocationUriUtils;
 import io.netty.channel.Channel;
+import io.netty.channel.ChannelFuture;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.msgpack.core.annotations.Nullable;
 
 /**
  * 客户端连接扩展。
  * 负责管理客户端Channel，并将消息在客户端与Engine之间路由。
  */
 @Slf4j
-public class ClientConnectionExtension extends BaseExtension {
+public class ClientConnectionExtension implements Extension {
 
     public static final String NAME = "client-connection-extension";
     private final Engine engine; // 新增Engine引用
     // 此ClientConnectionExtension实例所代表的客户端连接的上下文信息
     private String clientLocationUri;
     private String clientAppUri;
+    private final AtomicBoolean stopped = new AtomicBoolean(false);
+
+    @Setter
+    private transient OnClientConnectionStop onClientConnectionStop;
 
     public ClientConnectionExtension(Engine engine) {
         this.engine = engine;
-    }
-
-    @Override
-    public ExtensionMetrics getMetrics() {
-        return null;
     }
 
     @Override
@@ -104,7 +105,6 @@ public class ClientConnectionExtension extends BaseExtension {
             log.debug(
                     "ClientConnectionExtension: 重新提交客户端数据消息到Engine进行图内路由. name={}, clientLocationUri={}",
                     message.getName(), clientLocationUri); // 使用实例变量进行日志记录
-
         } else {
             // 这是从其他Extension路由到此的数据消息，意味着需要回传给客户端
             // 直接使用此ClientConnectionExtension实例自身维护的客户端上下文信息
@@ -124,27 +124,7 @@ public class ClientConnectionExtension extends BaseExtension {
     }
 
     @Override
-    protected void handleCommand(Command command, AsyncExtensionEnv context) {
-
-    }
-
-    @Override
-    protected void handleData(Data data, AsyncExtensionEnv context) {
-
-    }
-
-    @Override
-    protected void handleAudioFrame(AudioFrame audioFrame, AsyncExtensionEnv context) {
-
-    }
-
-    @Override
-    protected void handleVideoFrame(VideoFrame videoFrame, AsyncExtensionEnv context) {
-
-    }
-
-    @Override
-    public void onCommandResult(CommandResult commandResult, AsyncExtensionEnv context) {
+    public void onCommandResult(CommandResult commandResult, @Nullable AsyncExtensionEnv context) {
         // 直接使用此ClientConnectionExtension实例自身维护的客户端上下文信息
 
         if (clientLocationUri != null) {
@@ -154,8 +134,23 @@ public class ClientConnectionExtension extends BaseExtension {
                 log.debug(
                         "ClientConnectionExtension: 回传命令结果消息到客户端Channel. clientLocationUri: {}, channelId: {}, commandId: {}",
                         clientLocationUri, channelId, commandResult.getCommandId());
+                ChannelFuture writeFuture = targetChannel.writeAndFlush(commandResult);
+                writeFuture.addListener(future -> {
+                    if (future.isSuccess() && stopped.get()) {
+                        // 确保在消息发送成功且停止状态为true时才断开连接
+                        if (stopped.get()) {
+                            targetChannel.disconnect();
+                            if (onClientConnectionStop != null) {
+                                onClientConnectionStop.onStop(clientLocationUri);
+                            }
+                        }
+                    }
+                });
                 targetChannel.writeAndFlush(commandResult);
             } else {
+                if (onClientConnectionStop != null && stopped.get()) {
+                    onClientConnectionStop.onStop(clientLocationUri);
+                }
                 log.warn(
                         "ClientConnectionExtension: 无法回传命令结果消息，客户端Channel不存在或不活跃. clientLocationUri: {}, channelId: {}, commandId: {}",
                         clientLocationUri, channelId, commandResult.getCommandId());
@@ -167,4 +162,12 @@ public class ClientConnectionExtension extends BaseExtension {
         }
     }
 
+    @Override
+    public void onStop(AsyncExtensionEnv env) {
+        stopped.set(true);
+    }
+
+    public interface OnClientConnectionStop {
+        void onStop(String clientLocationUri);
+    }
 }

@@ -2,6 +2,7 @@ package com.tenframework.core.command;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 
 import com.tenframework.core.engine.Engine;
 import com.tenframework.core.graph.GraphInstance;
@@ -25,7 +26,7 @@ public class StopGraphCommandHandler implements GraphEventCommandHandler {
         String appUri = ClientLocationUriUtils.getAppUri(clientLocationUri);
 
         log.info("Engine收到stop_graph命令: graphId={}, appUri={}, clientLocationUri={}",
-            graphId, appUri, clientLocationUri);
+                graphId, appUri, clientLocationUri);
 
         CommandResult commandResult;
         if (clientLocationUri == null) {
@@ -33,14 +34,15 @@ public class StopGraphCommandHandler implements GraphEventCommandHandler {
             log.error("stop_graph命令参数缺失: clientLocationUri=null");
         } else {
             // 根据clientLocationUri获取并移除图实例
-            GraphInstance removedGraph = engine.removeGraphInstance(clientLocationUri);
-            if (removedGraph != null) {
+            Optional<GraphInstance> optional = engine.getGraphInstance(clientLocationUri);
+            if (optional.isPresent()) {
                 try {
-                    removedGraph.cleanupAllExtensions();
+                    engine.removeGraphInstance(clientLocationUri);
+                    optional.get().cleanupAllExtensions();
                     // 清理PathManager中与此图实例相关的PathOut
                     engine.cleanup(graphId);
                     commandResult = CommandResult.success(command.getCommandId(),
-                        Map.of("message", "Graph stopped successfully.",
+                            Map.of("message", "Graph stopped successfully.",
                                     MessageConstants.PROPERTY_CLIENT_LOCATION_URI, clientLocationUri,
                                     MessageConstants.PROPERTY_CLIENT_GRAPH_ID, graphId));
                     log.info("图实例停止成功: graphId={}", graphId);
@@ -53,7 +55,6 @@ public class StopGraphCommandHandler implements GraphEventCommandHandler {
                 log.warn("尝试停止不存在的图实例: graphId={}", graphId);
             }
         }
-
 
         Map<String, Object> properties = new HashMap<>(command.getProperties());
         properties.putAll(commandResult.getProperties());

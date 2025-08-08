@@ -3,6 +3,7 @@ package com.tenframework.core.graph;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+import com.tenframework.core.extension.system.ClientConnectionExtension;
 import com.tenframework.core.util.ClientLocationUriUtils;
 
 /**
@@ -11,10 +12,12 @@ import com.tenframework.core.util.ClientLocationUriUtils;
 public class GraphInstances {
     private final Map<String, GraphInstance> graphInstancesByClientLocationUri;
     private final Map<String, GraphInstance> graphInstancesByGraphId;
+    private final Map<String, ClientConnectionExtension> clientConnectionExtensionMap;
 
     public GraphInstances() {
         graphInstancesByClientLocationUri = new ConcurrentHashMap<>();
         graphInstancesByGraphId = new ConcurrentHashMap<>();
+        clientConnectionExtensionMap = new ConcurrentHashMap<>();
     }
 
     public GraphInstance getByGraphId(String sourceGraphId) {
@@ -34,9 +37,21 @@ public class GraphInstances {
     public GraphInstance remove(String clientLocationUri) {
         GraphInstance graphInstance = graphInstancesByClientLocationUri.remove(clientLocationUri);
         if (graphInstance != null) {
+            // 删除图之前 保留最后的ClientConnectionExtension
+            graphInstance.getExtension(ClientConnectionExtension.NAME).ifPresent(extension -> {
+                clientConnectionExtensionMap.put(clientLocationUri, (ClientConnectionExtension)extension);
+            });
             String graphId = ClientLocationUriUtils.getGraphId(clientLocationUri);
             graphInstancesByGraphId.remove(graphId);
         }
         return graphInstance;
+    }
+
+    public ClientConnectionExtension getClientConnectionExtension(String clientLocationUri) {
+        ClientConnectionExtension extension = clientConnectionExtensionMap.get(clientLocationUri);
+        synchronized (extension) {
+            extension.setOnClientConnectionStop(clientConnectionExtensionMap::remove);
+        }
+        return extension;
     }
 }

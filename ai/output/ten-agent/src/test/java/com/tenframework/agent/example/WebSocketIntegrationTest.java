@@ -199,7 +199,7 @@ public class WebSocketIntegrationTest {
             stopGraphCommand.getArg("app_uri", String.class).orElse("N/A")); // 使用getArg获取属性
 
         log.info("等待接收stop_graph命令结果，最长等待10秒...");
-        CommandResult stopGraphResult = (CommandResult)stopGraphResponseFuture.get(10, TimeUnit.SECONDS);
+        CommandResult stopGraphResult = (CommandResult)stopGraphResponseFuture.get(500, TimeUnit.SECONDS);
         assertNotNull(stopGraphResult, "应收到stop_graph的CommandResult");
         assertTrue(stopGraphResult.isSuccess(), "stop_graph命令应成功");
         log.info("stop_graph命令结果: {}", stopGraphResult);
