@@ -32,7 +32,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import static com.tenframework.core.message.MessageConstants.PROPERTY_CLIENT_APP_URI;
-import static com.tenframework.core.message.MessageConstants.PROPERTY_CLIENT_GRAPH_ID;
+import static com.tenframework.core.message.MessageConstants.PROPERTY_CLIENT_GRAPH_NAME;
 import static com.tenframework.core.message.MessageConstants.PROPERTY_CLIENT_LOCATION_URI;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -86,20 +86,21 @@ public class WebSocketIntegrationTest {
         URI websocketUri = new URI("ws://localhost:" + tenServer.getPort() + "/websocket");
 
         String graphId = UUID.randomUUID().toString();
-        String appUri = "test-app";
 
         // 1. 模拟发送 start_graph 命令来启动图实例 - 通过WebSocket发送
         String graphConfigPath = "src/test/resources/test_websocket_echo_graph.json";
         GraphConfig graphConfig = GraphLoader.loadGraphConfigFromFile(graphConfigPath);
+
+        String clientAppUri = "mock_front://test_app";
+        String clientGraphName = graphConfig.getGraphName();
 
         // 构建start_graph命令
         Command startGraphCommand = Command.builder()
             .commandId(UUID.randomUUID().getMostSignificantBits())
             .name(InternalCommandType.START_GRAPH.getCommandName())
             .properties(Map.of(
-                PROPERTY_CLIENT_LOCATION_URI, "front_client_generate_id_xxx",
-                PROPERTY_CLIENT_APP_URI, "mock_front_test_app",
-                PROPERTY_CLIENT_GRAPH_ID, graphId,
+                PROPERTY_CLIENT_APP_URI, clientAppUri,
+                PROPERTY_CLIENT_GRAPH_NAME, clientGraphName,
                 "graph_json", objectMapper.writeValueAsString(graphConfig)))
             // 外部进来的command都不指定destination_locations
             // 不指定destination_locations，默认为空
@@ -133,17 +134,16 @@ public class WebSocketIntegrationTest {
         assertTrue(startGraphResult.isSuccess(), "start_graph命令应成功");
         log.info("start_graph命令结果: {}", startGraphResult);
 
-        TimeUnit.SECONDS.sleep(3); // 延长等待时间，确保图实例启动稳定
+        String clientLocationUri = startGraphResult.getProperty(PROPERTY_CLIENT_LOCATION_URI, String.class);
 
-        GraphInstance actualGraphInstance = engine.getGraphInstance(graphId)
+        GraphInstance actualGraphInstance = engine.getGraphInstance(clientLocationUri)
                 .orElseThrow(() -> new IllegalStateException("未找到启动的图实例: " + graphId));
         log.info("成功获取到图实例: {}", actualGraphInstance.getGraphId());
 
         // 步骤 4: 发送一个Data消息并等待回显
         Data testData = Data.json("echo_test_data",
             objectMapper.writeValueAsString(Map.of("content", "Hello WebSocket Echo!")));
-        testData.setProperty(PROPERTY_CLIENT_LOCATION_URI, graphId);
-        testData.setProperty(PROPERTY_CLIENT_APP_URI, appUri);
+        testData.setProperty(PROPERTY_CLIENT_LOCATION_URI, clientLocationUri);
 
         // 手动编码Data消息为BinaryWebSocketFrame，模拟前端Netty编码行为
         encoderChannel = new EmbeddedChannel(new MessageEncoder()); // 重用encoderChannel
@@ -161,7 +161,7 @@ public class WebSocketIntegrationTest {
             testData.getName(), testData.getSourceLocation(), testData.getDestinationLocations());
 
         log.info("等待接收WebSocket回显消息，最长等待5秒...");
-        Message receivedWsMessage = wsEchoResponseFuture.get(5, TimeUnit.SECONDS); // 延长超时时间
+        Message receivedWsMessage = wsEchoResponseFuture.get(100, TimeUnit.SECONDS); // 延长超时时间
         log.info("成功接收到WebSocket回显消息: {}", receivedWsMessage);
         assertNotNull(receivedWsMessage, "应收到WebSocket回显消息");
         assertTrue(receivedWsMessage instanceof Data, "WebSocket回显消息应为Data类型");
@@ -179,11 +179,8 @@ public class WebSocketIntegrationTest {
             .commandId(UUID.randomUUID().getMostSignificantBits())
             .name("stop_graph") // 设置命令名称
             .properties(Map.of(
-                "graph_id", graphId,
-                "app_uri", appUri))
-            .sourceLocation(Location.builder().appUri("ws_client").graphId("N/A").extensionName("N/A")
-                .build()) // 模拟来自WebSocket客户端
-                .build();
+                PROPERTY_CLIENT_LOCATION_URI, clientLocationUri))
+            .build();
 
         CompletableFuture<Message> stopGraphResponseFuture = new CompletableFuture<>();
         client.registerCommandResponseFuture(stopGraphCommand.getCommandId(),

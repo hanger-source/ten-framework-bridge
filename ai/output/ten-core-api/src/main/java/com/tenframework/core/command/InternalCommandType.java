@@ -1,13 +1,16 @@
 package com.tenframework.core.command;
 
+import lombok.Getter;
+
 /**
  * 定义Engine支持的内部命令类型。
  */
+@Getter
 public enum InternalCommandType {
-    START_GRAPH("start_graph"),
-    STOP_GRAPH("stop_graph"),
-    ADD_EXTENSION_TO_GRAPH("add_extension_to_graph"),
-    REMOVE_EXTENSION_FROM_GRAPH("remove_extension_from_graph");
+    START_GRAPH("__start_graph__"),
+    STOP_GRAPH("__stop_graph__"),
+    ADD_EXTENSION_TO_GRAPH("__add_extension_to_graph__"),
+    REMOVE_EXTENSION_FROM_GRAPH("__remove_extension_from_graph__");
 
     private final String commandName;
 
@@ -15,8 +18,8 @@ public enum InternalCommandType {
         this.commandName = commandName;
     }
 
-    public String getCommandName() {
-        return commandName;
+    public static boolean isInternal(String name) {
+        return name.startsWith("__") && name.endsWith("__");
     }
 
     /**

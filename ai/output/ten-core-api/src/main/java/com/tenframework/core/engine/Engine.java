@@ -13,7 +13,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.stream.Stream;
 
 import com.tenframework.core.command.AddExtensionToGraphCommandHandler;
 import com.tenframework.core.command.InternalCommandHandler;
@@ -24,17 +23,20 @@ import com.tenframework.core.command.StopGraphCommandHandler;
 import com.tenframework.core.extension.Extension;
 import com.tenframework.core.extension.system.ClientConnectionExtension;
 import com.tenframework.core.graph.GraphInstance;
+import com.tenframework.core.graph.GraphInstances;
 import com.tenframework.core.message.AudioFrame;
 import com.tenframework.core.message.Command;
 import com.tenframework.core.message.CommandResult;
 import com.tenframework.core.message.Data;
 import com.tenframework.core.message.Location;
 import com.tenframework.core.message.Message;
+import com.tenframework.core.message.MessageConstants;
 import com.tenframework.core.message.MessageType;
 import com.tenframework.core.message.VideoFrame;
 import com.tenframework.core.path.PathManager;
 import com.tenframework.core.path.PathOut;
 import com.tenframework.core.route.RouteManager;
+import com.tenframework.core.util.ClientLocationUriUtils;
 import io.netty.channel.Channel;
 import lombok.extern.slf4j.Slf4j;
 import org.agrona.concurrent.IdleStrategy;
@@ -91,7 +93,7 @@ public final class Engine implements MessageSubmitter, CommandSubmitter { // 实
     /**
      * 维护graphId到GraphInstance的映射
      */
-    private final ConcurrentMap<String, GraphInstance> graphInstances;
+    private GraphInstances graphInstances;
     /**
      * 管理活动的Netty Channel，用于消息回传
      */
@@ -99,10 +101,6 @@ public final class Engine implements MessageSubmitter, CommandSubmitter { // 实
     /**
      * 维护channelId到相关联的Command ID集合的映射，用于断开连接时清理PathOut
      */
-
-    // ClientConnectionExtension 实例
-    private final ClientConnectionExtension clientConnectionExtension;
-
     private final RouteManager routeManager;
 
     private final Map<String, InternalCommandHandler> internalCommandHandlers;
@@ -139,13 +137,10 @@ public final class Engine implements MessageSubmitter, CommandSubmitter { // 实
         idleStrategy = new SleepingIdleStrategy(1_000_000L); // 1ms sleep time
 
         channelMap = new ConcurrentHashMap<>();
-        graphInstances = new ConcurrentHashMap<>();
+        graphInstances = new GraphInstances();
 
         // 初始化PathManager
         pathManager = new PathManager(this);
-
-        // 初始化ClientConnectionExtension
-        clientConnectionExtension = new ClientConnectionExtension(this);
 
         // 初始化RouteManager
         routeManager = new RouteManager(graphInstances);
@@ -268,8 +263,7 @@ public final class Engine implements MessageSubmitter, CommandSubmitter { // 实
             return false;
         }
 
-        if (message.getType() == MessageType.COMMAND
-            && Stream.of(InternalCommandType.values()).noneMatch(type -> type.name().equals(message.getName()))) {
+        if (message.getType() == MessageType.COMMAND && !InternalCommandType.isInternal(message.getName())) {
             Command command = (Command)message;
             command.setCommandId(Command.generateCommandId());
             CompletableFuture<Object> future = new CompletableFuture<>();
@@ -435,7 +429,7 @@ public final class Engine implements MessageSubmitter, CommandSubmitter { // 实
         }
 
         // 2. 查找源GraphInstance
-        GraphInstance graphInstance = graphInstances.get(sourceGraphId);
+        GraphInstance graphInstance = graphInstances.getByGraphId(sourceGraphId);
         if (graphInstance == null) {
             log.warn("源GraphInstance不存在或未加载: engineId={}, graphId={}, commandName={}, commandId={}",
                     engineId, sourceGraphId, command.getName(), command.getCommandId());
@@ -481,7 +475,7 @@ public final class Engine implements MessageSubmitter, CommandSubmitter { // 实
                 continue;
             }
 
-            Command messageToSend = command; // 默认使用原始消息
+            // 默认使用原始消息
             Command finalMessageToSend;
             if (targetLocations.size() > 1) {
                 try {
@@ -526,7 +520,7 @@ public final class Engine implements MessageSubmitter, CommandSubmitter { // 实
             try {
                 // 调用Extension的onCommand方法
                 // targetExtension.getContext() 替换为从graphInstance获取context
-                graphInstance.getExtensionContext(targetLocation.extensionName())
+                graphInstance.getAsyncExtensionEnv(targetLocation.extensionName())
                         .ifPresent(context -> currentTargetExtension.onCommand(finalMessageToSend, context));
 
                 log.debug("Extension处理命令完成: engineId={}, extensionName={}, commandName={}, commandId={}",
@@ -562,6 +556,17 @@ public final class Engine implements MessageSubmitter, CommandSubmitter { // 实
         if (commandId == 0) { // 检查commandId是否为0（无效值）
             log.warn("CommandResult缺少commandId或commandId无效: engineId={}", engineId);
             return;
+        }
+
+        String clientLocationUri = (String)message.getProperty(MessageConstants.PROPERTY_CLIENT_LOCATION_URI);
+        if (InternalCommandType.isInternal(message.getName()) && clientLocationUri != null) {
+            GraphInstance graphInstance = graphInstances.getByClientLocationUri(clientLocationUri);
+
+            graphInstance.getExtension(ClientConnectionExtension.NAME).ifPresent(extension -> {
+                graphInstance.getAsyncExtensionEnv(ClientConnectionExtension.NAME).ifPresent(extensionEnv -> {
+                    extension.onCommandResult(commandResult, extensionEnv);
+                });
+            });
         }
 
         // 从PathTable中查找对应的PathOut
@@ -638,29 +643,34 @@ public final class Engine implements MessageSubmitter, CommandSubmitter { // 实
         log.debug("处理数据消息: engineId={}, messageType={}, messageName={}",
                 engineId, message.getType(), message.getName());
 
-        String sourceAppUri;
-        String sourceGraphId;
+        String graphId = null;
+        String clientLocationUri = message.getProperty(MessageConstants.PROPERTY_CLIENT_LOCATION_URI, String.class);
+        if (clientLocationUri != null) {
+            graphId = ClientLocationUriUtils.getGraphId(clientLocationUri);
+        }
+        if (message.getSourceLocation() != null) {
+            graphId = message.getSourceLocation().graphId();
+        }
 
-        sourceAppUri = message.getSourceLocation() != null ? message.getSourceLocation().appUri() : null;
-        sourceGraphId = message.getSourceLocation() != null ? message.getSourceLocation().graphId() : null;
-
-        if (sourceGraphId == null || sourceAppUri == null) {
-            log.warn("数据消息缺少有效的源AppUri或GraphId，无法进行路由: engineId={}, messageType={}, messageName={}",
-                    engineId, message.getType(), message.getName());
-            return;
+        if (graphId == null) {
+            log.warn("数据消息缺少有效的 graphId，无法进行路由: engineId={}, messageType={}, messageName={}, message={}",
+                engineId, message.getType(), message.getName(), message.getName());
         }
 
         // 2. 查找源GraphInstance
-        GraphInstance graphInstance = graphInstances.get(sourceGraphId);
+        GraphInstance graphInstance = graphInstances.getByGraphId(graphId);
         if (graphInstance == null) {
             log.warn("源GraphInstance不存在或未加载: engineId={}, graphId={}, messageType={}, messageName={}",
-                    engineId, sourceGraphId, message.getType(), message.getName());
+                    engineId, graphId, message.getType(), message.getName());
             return;
         }
 
         // 3. 解析消息的实际目的地列表，委托给RouteManager
-        log.debug("Engine: 正在解析数据消息目标Extension. GraphId: {}, MessageName: {}", sourceGraphId, message.getName());
+        log.debug("Engine: 正在解析数据消息目标Extension. GraphId: {}, MessageName: {}", graphId, message.getName());
+
         List<Location> targetLocations = routeManager.resolveMessageDestinations(message);
+        // 本身自带的 可能是extension 赋予的
+        targetLocations.addAll(message.getDestinationLocations());
 
         if (targetLocations.isEmpty()) {
             log.warn("数据消息没有解析到任何目标Extension: engineId={}, messageType={}, messageName={}",
@@ -696,15 +706,15 @@ public final class Engine implements MessageSubmitter, CommandSubmitter { // 实
             try {
                 // 根据消息类型调用Extension的相应方法
                 switch (finalMessageToSend.getType()) {
-                    case DATA -> graphInstance.getExtensionContext(targetLocation.extensionName())
+                    case DATA -> graphInstance.getAsyncExtensionEnv(targetLocation.extensionName())
                             .ifPresent(context -> currentTargetExtension.onData((Data) finalMessageToSend, context));
                     case AUDIO_FRAME ->
-                        graphInstance.getExtensionContext(targetLocation.extensionName())
+                        graphInstance.getAsyncExtensionEnv(targetLocation.extensionName())
                                 .ifPresent(
                                         context -> currentTargetExtension.onAudioFrame((AudioFrame) finalMessageToSend,
                                                 context));
                     case VIDEO_FRAME ->
-                        graphInstance.getExtensionContext(targetLocation.extensionName())
+                        graphInstance.getAsyncExtensionEnv(targetLocation.extensionName())
                                 .ifPresent(
                                         context -> currentTargetExtension.onVideoFrame((VideoFrame) finalMessageToSend,
                                                 context));
@@ -806,9 +816,6 @@ public final class Engine implements MessageSubmitter, CommandSubmitter { // 实
         // 通知PathManager处理连接断开事件，它会清理相关的PathOut
         pathManager.handleChannelDisconnected(channelId);
 
-        // 通知ClientConnectionExtension清理其内部映射
-        clientConnectionExtension.removeClientChannelMapping(channelId);
-
         // 从channelMap中移除，确保完全清理
         channelMap.remove(channelId);
     }
@@ -862,33 +869,33 @@ public final class Engine implements MessageSubmitter, CommandSubmitter { // 实
     }
 
     /**
-     * 获取指定graphId的GraphInstance实例。
+     * 获取指定clientLocationUri的GraphInstance实例。
      *
-     * @param graphId 图实例ID
+     * @param clientLocationUri 客户端位置URI
      * @return GraphInstance的Optional，如果不存在则为空
      */
-    public Optional<GraphInstance> getGraphInstance(String graphId) {
-        return Optional.ofNullable(graphInstances.get(graphId));
+    public Optional<GraphInstance> getGraphInstance(String clientLocationUri) {
+        return Optional.ofNullable(graphInstances.getByClientLocationUri(clientLocationUri));
     }
 
     /**
      * 将GraphInstance添加到Engine的映射中。
      *
-     * @param graphId       图实例ID
+     * @param clientLocationUri       客户端位置URI
      * @param graphInstance 图实例对象
      */
-    public void addGraphInstance(String graphId, GraphInstance graphInstance) {
-        graphInstances.put(graphId, graphInstance);
+    public void addGraphInstance(String clientLocationUri, GraphInstance graphInstance) {
+        graphInstances.put(clientLocationUri, graphInstance);
     }
 
     /**
      * 从Engine的映射中移除并返回GraphInstance。
      *
-     * @param graphId 图实例ID
+     * @param clientLocationUri 客户端位置URI
      * @return 被移除的GraphInstance，如果不存在则为null
      */
-    public GraphInstance removeGraphInstance(String graphId) {
-        return graphInstances.remove(graphId);
+    public GraphInstance removeGraphInstance(String clientLocationUri) {
+        return graphInstances.remove(clientLocationUri);
     }
 
     /**

@@ -4,15 +4,14 @@ import java.io.IOException;
 import java.util.Map;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.tenframework.core.message.Location;
 import com.tenframework.core.message.AudioFrame;
 import com.tenframework.core.message.Command;
 import com.tenframework.core.message.CommandResult;
 import com.tenframework.core.message.Data;
+import com.tenframework.core.message.Location;
 import com.tenframework.core.message.MessageConstants;
 import com.tenframework.core.message.VideoFrame;
 import lombok.extern.slf4j.Slf4j;
-import com.tenframework.core.extension.AsyncExtensionEnv;
 
 /**
  * 简单的Echo Extension示例
@@ -91,11 +90,8 @@ public class SimpleEchoExtension extends BaseExtension {
             originalPayload.put("content", echoContent);
             log.debug("更新后的payload: {}", originalPayload);
 
-            // 3. 将更新后的payload序列化回JSON字节
-            byte[] echoedContentBytes = objectMapper.writeValueAsBytes(originalPayload);
-            log.debug("回显数据序列化为 {} 字节", echoedContentBytes.length);
-
-            Data echoData = Data.binary(MessageConstants.DATA_NAME_ECHO_DATA, echoedContentBytes); // 使用常量
+            Data echoData = Data.json(MessageConstants.DATA_NAME_ECHO_DATA,
+                objectMapper.writeValueAsString(originalPayload));
             echoData.setProperties(Map.of("original_name", dataName, "count", ++messageCount));
 
             // source Location 作为destination Location

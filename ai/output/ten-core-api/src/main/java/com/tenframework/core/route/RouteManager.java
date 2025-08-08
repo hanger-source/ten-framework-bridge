@@ -2,9 +2,9 @@ package com.tenframework.core.route;
 
 import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.ConcurrentMap;
 
 import com.tenframework.core.graph.GraphInstance;
+import com.tenframework.core.graph.GraphInstances;
 import com.tenframework.core.message.Location;
 import com.tenframework.core.message.Message;
 import lombok.extern.slf4j.Slf4j;
@@ -17,12 +17,10 @@ import static java.util.stream.Collectors.toList;
 @Slf4j
 public class RouteManager {
 
-    private final ConcurrentMap<String, GraphInstance> graphInstances;
-    // Removed: private final MessageSubmitter messageSubmitter;
+    private final GraphInstances graphInstances;
 
-    public RouteManager(ConcurrentMap<String, GraphInstance> graphInstances) {
+    public RouteManager(GraphInstances graphInstances) {
         this.graphInstances = graphInstances;
-        // Removed: this.messageSubmitter = messageSubmitter;
     }
 
     /**
@@ -40,7 +38,7 @@ public class RouteManager {
         }
 
         String sourceGraphId = message.getSourceLocation().graphId();
-        GraphInstance currentGraphInstance = graphInstances.get(sourceGraphId);
+        GraphInstance currentGraphInstance = graphInstances.getByGraphId(sourceGraphId);
         if (currentGraphInstance == null) {
             log.warn("RouteManager: Source graph instance not found for message. GraphId: {}, Message: {}",
                     sourceGraphId, message.getName());

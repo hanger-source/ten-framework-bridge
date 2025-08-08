@@ -1,22 +1,24 @@
 package com.tenframework.core.extension;
 
-import com.tenframework.core.engine.Engine;
-import com.tenframework.core.message.Command;
-import com.tenframework.core.message.Data;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.AfterEach;
-
-import java.util.Map;
-import java.util.concurrent.TimeUnit;
 import java.util.List;
-import com.tenframework.core.message.Location;
-import com.tenframework.core.graph.GraphInstance;
-import com.tenframework.core.message.CommandResult;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
-import static org.junit.jupiter.api.Assertions.*;
+import com.tenframework.core.engine.Engine;
+import com.tenframework.core.graph.GraphInstance;
+import com.tenframework.core.message.Command;
+import com.tenframework.core.message.CommandResult;
+import com.tenframework.core.message.Data;
+import com.tenframework.core.message.Location;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * EchoExtension单元测试
@@ -81,7 +83,7 @@ class EchoExtensionTest {
 
                 // 验证Extension已注册
                 assertTrue(graphInstance.getExtension(EXTENSION_NAME).isPresent(), "Extension应该存在");
-                assertTrue(graphInstance.getExtensionContext(EXTENSION_NAME).isPresent(), "AsyncExtensionEnv应该存在");
+                assertTrue(graphInstance.getAsyncExtensionEnv(EXTENSION_NAME).isPresent(), "AsyncExtensionEnv应该存在");
                 assertEquals(1, graphInstance.getExtensionRegistry().size(), "Extension数量应该为1");
 
                 // 注销Extension
@@ -90,7 +92,7 @@ class EchoExtensionTest {
 
                 // 验证Extension已注销
                 assertFalse(graphInstance.getExtension(EXTENSION_NAME).isPresent(), "Extension应该不存在");
-                assertFalse(graphInstance.getExtensionContext(EXTENSION_NAME).isPresent(), "AsyncExtensionEnv应该不存在");
+                assertFalse(graphInstance.getAsyncExtensionEnv(EXTENSION_NAME).isPresent(), "AsyncExtensionEnv应该不存在");
                 assertEquals(0, graphInstance.getExtensionRegistry().size(), "Extension数量应该为0");
 
                 // 2. 模拟发送 stop_graph 命令
@@ -359,7 +361,7 @@ class EchoExtensionTest {
 
                 graphInstance.registerExtension(EXTENSION_NAME, echoExtension, properties); // 注册Extension到GraphInstance
 
-                var contextOpt = graphInstance.getExtensionContext(EXTENSION_NAME);
+                var contextOpt = graphInstance.getAsyncExtensionEnv(EXTENSION_NAME);
                 assertTrue(contextOpt.isPresent(), "AsyncExtensionEnv应该存在");
 
                 var context = contextOpt.get();

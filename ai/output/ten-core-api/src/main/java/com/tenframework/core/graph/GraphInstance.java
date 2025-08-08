@@ -3,6 +3,7 @@ package com.tenframework.core.graph;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -35,6 +36,7 @@ import static java.util.stream.Collectors.toList;
 public class GraphInstance {
     private final String graphId;
     private final String appUri;
+    private final String graphName;
     private final MessageSubmitter messageSubmitter;
 
     /**
@@ -60,8 +62,9 @@ public class GraphInstance {
     // 用于标记图实例是否启动失败
     private final AtomicBoolean startFailed = new AtomicBoolean(false);
 
-    public GraphInstance(String graphId, String appUri, MessageSubmitter messageSubmitter, GraphConfig graphConfig) {
-        this.graphId = graphId;
+    public GraphInstance(String appUri, GraphConfig graphConfig, MessageSubmitter messageSubmitter) {
+        this.graphName =graphConfig.getGraphName();
+        this.graphId = UUID.randomUUID().toString();
         this.appUri = appUri;
         this.messageSubmitter = messageSubmitter;
         extensionRegistry = new ConcurrentHashMap<>();
@@ -325,7 +328,7 @@ public class GraphInstance {
      * @param extensionName Extension名称
      * @return ExtensionContext实例的Optional，如果不存在则为空
      */
-    public Optional<EngineAsyncExtensionEnv> getExtensionContext(String extensionName) { // 修改返回类型
+    public Optional<EngineAsyncExtensionEnv> getAsyncExtensionEnv(String extensionName) { // 修改返回类型
         return Optional.ofNullable(asyncExtensionEnvRegistry.get(extensionName));
     }
 

@@ -1,16 +1,16 @@
 package com.tenframework.server.handler;
 
+import com.tenframework.core.command.InternalCommandType;
 import com.tenframework.core.engine.Engine;
-import com.tenframework.core.extension.system.ClientConnectionExtension;
-import com.tenframework.core.message.Command;
 import com.tenframework.core.message.Location;
 import com.tenframework.core.message.Message;
 import com.tenframework.core.message.MessageType;
+import com.tenframework.core.util.ClientLocationUriUtils;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import lombok.extern.slf4j.Slf4j;
 
-import static com.tenframework.core.message.MessageConstants.PROPERTY_CLIENT_APP_URI;
+import static com.tenframework.core.message.MessageConstants.NOT_APPLICABLE;
 import static com.tenframework.core.message.MessageConstants.PROPERTY_CLIENT_CHANNEL_ID;
 import static com.tenframework.core.message.MessageConstants.PROPERTY_CLIENT_GRAPH_ID;
 import static com.tenframework.core.message.MessageConstants.PROPERTY_CLIENT_LOCATION_URI;
@@ -28,42 +28,25 @@ public class WebSocketMessageFrameHandler extends SimpleChannelInboundHandler<Me
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, Message msg) {
         String channelId = ctx.channel().id().asShortText();
+        msg.setProperty(PROPERTY_CLIENT_CHANNEL_ID, channelId);
 
-        String clientLocationUri = msg.getProperty(PROPERTY_CLIENT_LOCATION_URI, String.class); // 获取客户端Location URI
-        String clientGraphId = msg.getProperty(PROPERTY_CLIENT_GRAPH_ID, String.class);
-        String clientAppUri = msg.getProperty(PROPERTY_CLIENT_APP_URI, String.class);
+        if (MessageType.COMMAND == msg.getType() && InternalCommandType.START_GRAPH.getCommandName().equals(msg.getName())) {
+            msg.setProperty(PROPERTY_CLIENT_GRAPH_ID, NOT_APPLICABLE);
+        } else {
+            String clientLocationUri = msg.getProperty(PROPERTY_CLIENT_LOCATION_URI, String.class); // 获取客户端Location URI
+            String clientChannelId = ClientLocationUriUtils.getChannelId(clientLocationUri);
+            String clientGraphId = ClientLocationUriUtils.getGraphId(clientLocationUri);
+            String clientAppUri = ClientLocationUriUtils.getAppUri(clientLocationUri);
 
-        // 客户端入站消息需要将Channel ID和ClientLocation
-        // URI作为属性带上，以便ClientConnectionExtension能获取并建立映射
-        if (msg.getType() == MessageType.COMMAND) {
-            // 对于Command消息，不强制设置destinationLocation，由Engine根据CommandName路由
-            msg.setProperty(PROPERTY_CLIENT_CHANNEL_ID, channelId); // 仅设置channelId
-            msg.setDestinationLocations(null);
+            if (clientChannelId != null && !clientChannelId.equals(channelId)) {
+                log.warn("WebSocketMessageFrameHandler: 忽略来自{}的消息，因为其ChannelId与当前ChannelId不一致: messageName={}, channelId={}, clientLocationUri={}",
+                    clientLocationUri, msg.getName(), channelId, clientLocationUri);
+            }
             msg.setSourceLocation(new Location(clientAppUri, clientGraphId, SYS_EXTENSION_NAME));
             log.debug(
-                "WebSocketMessageFrameHandler: 收到Command消息，不设置默认路由，由Engine处理: messageName={}, commandId={}",
-                msg.getName(), ((Command)msg).getCommandId());
-        } else {
-            if (clientLocationUri != null && !clientLocationUri.isEmpty() && channelId != null
-                && !channelId.isEmpty()) {
-                if (clientGraphId != null && !clientGraphId.isEmpty()) {
-                    msg.setProperty(PROPERTY_CLIENT_LOCATION_URI, clientLocationUri); // 确保属性存在
-                    msg.setProperty(PROPERTY_CLIENT_CHANNEL_ID, channelId);
-                    // client过来的数据 自动根据 clientGraphId 进行路由 默认交给 ClientConnectionExtension
-                    msg.setDestinationLocation(new Location(PROPERTY_CLIENT_APP_URI, clientGraphId,
-                        ClientConnectionExtension.NAME));
-                } else {
-                    log.warn(
-                        "WebSocketMessageFrameHandler: 入站消息缺少PROPERTY_CLIENT_GRAPH_ID: messageType={}, channelId={}, "
-                            + "clientLocationUri={}",
-                        msg.getType(), channelId, clientLocationUri);
-                }
-            } else {
-                log.warn(
-                    "WebSocketMessageFrameHandler: 入站消息缺少PROPERTY_CLIENT_LOCATION_URI或Channel ID，可能无法回传: "
-                        + "messageType={}, channelId={}, clientLocationUri={}",
-                    msg.getType(), channelId, clientLocationUri);
-            }
+                "WebSocketMessageFrameHandler: 收到来自{}消息，不设置默认路由，由Engine处理: messageName={}",
+                clientLocationUri, msg.getName());
+
         }
 
         // 直接将消息提交给Engine，由Engine进行路由

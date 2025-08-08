@@ -4,8 +4,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tenframework.core.engine.Engine;
 import com.tenframework.core.extension.Extension;
 import com.tenframework.core.extension.system.ClientConnectionExtension;
@@ -15,8 +13,7 @@ import com.tenframework.core.graph.GraphInstance;
 import com.tenframework.core.graph.GraphLoader;
 import com.tenframework.core.graph.NodeConfig;
 import com.tenframework.core.message.Command;
-import com.tenframework.core.message.Data;
-import com.tenframework.core.message.Location;
+import com.tenframework.core.message.CommandResult;
 import com.tenframework.core.message.MessageType;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
@@ -24,9 +21,9 @@ import lombok.extern.slf4j.Slf4j;
 import static com.tenframework.core.message.MessageConstants.PROPERTY_CLIENT_APP_URI;
 import static com.tenframework.core.message.MessageConstants.PROPERTY_CLIENT_CHANNEL_ID;
 import static com.tenframework.core.message.MessageConstants.PROPERTY_CLIENT_GRAPH_ID;
+import static com.tenframework.core.message.MessageConstants.PROPERTY_CLIENT_GRAPH_NAME;
 import static com.tenframework.core.message.MessageConstants.PROPERTY_CLIENT_LOCATION_URI;
 import static com.tenframework.core.message.MessageConstants.SYS_EXTENSION_NAME;
-import static com.tenframework.core.message.MessageConstants.VALUE_SERVER_SYS_APP_URI;
 
 /**
  * 处理 "start_graph" 命令的处理器。
@@ -34,13 +31,10 @@ import static com.tenframework.core.message.MessageConstants.VALUE_SERVER_SYS_AP
 @Slf4j
 public class StartGraphCommandHandler implements InternalCommandHandler {
 
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
-
-    private static void registerGraph(Engine engine, String graphJson, String graphId, String appUri,
-        String clientLocationUri, String clientAppUri, String associatedChannelId)
-        throws JsonProcessingException, ClassNotFoundException, InstantiationException, IllegalAccessException {
-        GraphConfig graphConfig = GraphLoader.loadGraphConfigFromJson(graphJson);
-        GraphInstance newGraphInstance = new GraphInstance(graphId, appUri, engine, graphConfig);
+    private static void registerGraph(Engine engine,
+        GraphInstance graphInstance,
+        GraphConfig graphConfig, String clientAppUri, String clientLocationUri)
+        throws ClassNotFoundException, InstantiationException, IllegalAccessException {
 
         if (graphConfig.getNodes() != null) {
             for (NodeConfig nodeConfig : graphConfig.getNodes()) {
@@ -59,7 +53,7 @@ public class StartGraphCommandHandler implements InternalCommandHandler {
                     connectionConfig.setDestinations(List.of(ClientConnectionExtension.NAME));
                     List<ConnectionConfig> connectionConfigs = new java.util.ArrayList<>();
                     connectionConfigs.add(connectionConfig);
-                    newGraphInstance.getConnectionRoutes().put(SYS_EXTENSION_NAME, connectionConfigs);
+                    graphInstance.getConnectionRoutes().put(SYS_EXTENSION_NAME, connectionConfigs);
                 }
                 if (instance == null && extensionType != null && !extensionType.isEmpty()) {
                     Class<?> clazz = Class.forName(extensionType);
@@ -70,67 +64,71 @@ public class StartGraphCommandHandler implements InternalCommandHandler {
                     clientConnectionProperties.put(PROPERTY_CLIENT_LOCATION_URI,
                         clientLocationUri);
                     clientConnectionProperties.put(PROPERTY_CLIENT_APP_URI, clientAppUri);
-                    clientConnectionProperties.put(PROPERTY_CLIENT_GRAPH_ID, graphId);
-                    clientConnectionProperties.put(PROPERTY_CLIENT_CHANNEL_ID, associatedChannelId);
+                    clientConnectionProperties.put(PROPERTY_CLIENT_GRAPH_ID, graphInstance.getGraphId());
                     if (!(instance instanceof Extension extension)) {
                         throw new IllegalArgumentException(
                             "Extension class does not implement Extension interface: " + extensionType);
                     }
                     nodeProperties.putAll(clientConnectionProperties);
-                    newGraphInstance.registerExtension(extensionName, extension, nodeProperties);
+                    graphInstance.registerExtension(extensionName, extension, nodeProperties);
                     log.info("Extension已注册到图: graphId={}, extensionName={}, extensionType={}",
-                        graphId, extensionName, extensionType);
+                        graphInstance.getGraphId(), extensionName, extensionType);
                 }
             }
         }
 
-        engine.addGraphInstance(graphId, newGraphInstance);
+        engine.addGraphInstance(clientLocationUri, graphInstance);
     }
 
     @SneakyThrows
     @Override
     public void handle(Command command, Engine engine) {
-        String graphId = (String)command.getProperties().get(PROPERTY_CLIENT_GRAPH_ID);
-        String appUri = (String)command.getProperties().get(PROPERTY_CLIENT_APP_URI);
-        Object graphJsonObj = command.getProperties().get("graph_json");
-        String associatedChannelId = (String)command.getProperties().get("__channel_id__");
-
-        // 从原始命令中获取客户端上下文属性
-        String clientLocationUri = command.getProperty(PROPERTY_CLIENT_LOCATION_URI,
-            String.class);
+        String graphName = (String)command.getProperties().get(PROPERTY_CLIENT_GRAPH_NAME);
         String clientAppUri = command.getProperty(PROPERTY_CLIENT_APP_URI, String.class);
+        Object graphJsonObj = command.getProperties().get("graph_json");
+        String channelId = (String)command.getProperties().get(PROPERTY_CLIENT_CHANNEL_ID);
 
-        log.info("Engine收到start_graph命令: graphId={}, appUri={}", graphId, appUri);
 
-        Map<String, Object> returnResult;
+        log.info("Engine收到start_graph命令: graphName={}, clientAppUri={}", graphName, clientAppUri);
 
-        if (graphId == null || graphId.isEmpty() || appUri == null || appUri.isEmpty() || graphJsonObj == null) {
-            returnResult = Map.of("error", "start_graph命令缺少graph_id, app_uri或graph_json属性");
-            log.error("start_graph命令参数缺失: graphId={}, appUri={}, graphJson={}", graphId, appUri, graphJsonObj);
+        CommandResult commandResult;
+
+        if (graphName == null || graphName.isEmpty() || clientAppUri == null || clientAppUri.isEmpty() || graphJsonObj == null) {
+            commandResult = CommandResult.error(command.getCommandId(),
+                "start_graph命令缺少graphName, app_uri或graph_json属性");
+            log.error("start_graph命令参数缺失: graphName={}, clientAppUri={}, graphJson={}", graphName, clientAppUri, graphJsonObj);
         } else if (!(graphJsonObj instanceof String graphJson)) {
-            returnResult = Map.of("error", "graph_json属性不是有效的JSON字符串");
-            log.error("start_graph命令graph_json类型错误: graphId={}, appUri={}, graphJsonType={}", graphId, appUri,
+            commandResult = CommandResult.error(command.getCommandId(),
+                Map.of("error", "graph_json属性不是有效的JSON字符串").get("error"));
+            log.error("start_graph命令graph_json类型错误: graphName={}, clientAppUri={}, graphJsonType={}", graphName, clientAppUri,
                 graphJsonObj.getClass().getName());
-        } else if (engine.getGraphInstance(graphId).isPresent()) { // 使用engine.getGraphInstance
-            returnResult = Map.of("error", "图实例已存在: " + graphId);
-            log.warn("尝试启动已存在的图实例: graphId={}", graphId);
         } else {
             try {
-                registerGraph(engine, graphJson, graphId, appUri, clientLocationUri, clientAppUri, associatedChannelId);
+                GraphConfig graphConfig = GraphLoader.loadGraphConfigFromJson(graphJson);
+                GraphInstance instance = new GraphInstance(clientAppUri, graphConfig, engine);
 
-                returnResult = Map.of("message", "Graph started successfully.",
-                    PROPERTY_CLIENT_LOCATION_URI, clientLocationUri);
-                log.info("图实例启动成功: graphId={}, appUri={}", graphId, appUri);
+                String clientLocationUri = clientAppUri + "/" + graphName + "/" + instance.getGraphId() + "@" + channelId;
+                registerGraph(engine, instance, graphConfig, clientLocationUri, clientLocationUri);
+                commandResult = CommandResult.success(command.getCommandId(),
+                    Map.of("message", "Graph started successfully.",
+                        PROPERTY_CLIENT_LOCATION_URI, clientLocationUri));
+                commandResult.setProperty(PROPERTY_CLIENT_LOCATION_URI, clientLocationUri);
+                commandResult.setProperty(PROPERTY_CLIENT_GRAPH_ID, instance.getGraphId());
+
+                log.info("图实例启动成功: graphName={}, graphId={}, appUri={}", graphName, instance.getGraphId(), clientAppUri);
 
             } catch (Exception e) {
-                returnResult = Map.of("error", "启动图实例失败: " + e.getMessage());
+                commandResult = CommandResult.error(command.getCommandId(),"启动图实例失败: " + e.getMessage());
             }
         }
 
-        Data data = Data.json("return", OBJECT_MAPPER.writeValueAsString(returnResult));
-        data.setSourceLocation(new Location(VALUE_SERVER_SYS_APP_URI, graphId, SYS_EXTENSION_NAME));
-        data.setDestinationLocation(new Location(appUri, graphId, ClientConnectionExtension.NAME));
-        engine.submitMessage(data);
+        Map<String, Object> properties = new HashMap<>(command.getProperties());
+        properties.remove("graph_json");
+        properties.remove(PROPERTY_CLIENT_GRAPH_ID);
+        properties.putAll(commandResult.getProperties());
+        commandResult.setName(command.getName());
+        commandResult.setProperties(properties);
+        engine.submitMessage(commandResult);
     }
 
     @Override
