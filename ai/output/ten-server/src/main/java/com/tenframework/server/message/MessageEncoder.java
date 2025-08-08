@@ -13,6 +13,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.msgpack.core.ExtensionTypeHeader;
 import org.msgpack.core.MessageBufferPacker;
 import org.msgpack.core.MessagePack;
+import io.netty.buffer.ByteBuf;
+import org.msgpack.core.MessageType;
+
+import static com.tenframework.core.message.MessageUtils.TEN_MSGPACK_EXT_TYPE_MSG;
 
 /**
  * TEN框架消息编码器，将内部Message对象编码为MsgPack格式的字节流

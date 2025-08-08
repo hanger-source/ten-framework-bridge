@@ -1,20 +1,14 @@
 package com.tenframework.core.command;
 
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 import com.tenframework.core.engine.Engine;
-import com.tenframework.core.extension.Extension;
-import com.tenframework.core.extension.system.ClientConnectionExtension;
-import com.tenframework.core.graph.ConnectionConfig;
 import com.tenframework.core.graph.GraphConfig;
 import com.tenframework.core.graph.GraphInstance;
 import com.tenframework.core.graph.GraphLoader;
-import com.tenframework.core.graph.NodeConfig;
 import com.tenframework.core.message.Command;
 import com.tenframework.core.message.CommandResult;
-import com.tenframework.core.message.MessageType;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 
@@ -23,63 +17,12 @@ import static com.tenframework.core.message.MessageConstants.PROPERTY_CLIENT_CHA
 import static com.tenframework.core.message.MessageConstants.PROPERTY_CLIENT_GRAPH_ID;
 import static com.tenframework.core.message.MessageConstants.PROPERTY_CLIENT_GRAPH_NAME;
 import static com.tenframework.core.message.MessageConstants.PROPERTY_CLIENT_LOCATION_URI;
-import static com.tenframework.core.message.MessageConstants.SYS_EXTENSION_NAME;
 
 /**
  * 处理 "start_graph" 命令的处理器。
  */
 @Slf4j
 public class StartGraphCommandHandler implements GraphEventCommandHandler {
-
-    private static void registerGraph(Engine engine,
-            GraphInstance graphInstance,
-            GraphConfig graphConfig, String clientAppUri, String clientLocationUri)
-            throws ClassNotFoundException, InstantiationException, IllegalAccessException {
-
-        if (graphConfig.getNodes() != null) {
-            for (NodeConfig nodeConfig : graphConfig.getNodes()) {
-                String extensionName = nodeConfig.getName();
-                String extensionType = nodeConfig.getType();
-                Map<String, Object> nodeProperties = nodeConfig.getProperties() != null
-                        ? nodeConfig.getProperties()
-                        : new HashMap<>();
-                Object instance = null;
-                if (ClientConnectionExtension.NAME.equals(extensionName)) {
-                    extensionType = ClientConnectionExtension.class.getName();
-                    instance = new ClientConnectionExtension(engine);
-                    // 系统扩展到ClientConnectionExtension
-                    ConnectionConfig connectionConfig = new ConnectionConfig();
-                    connectionConfig.setSource(SYS_EXTENSION_NAME);
-                    connectionConfig.setType(MessageType.DATA.getValue());
-                    connectionConfig.setDestinations(List.of(ClientConnectionExtension.NAME));
-                    List<ConnectionConfig> connectionConfigs = new java.util.ArrayList<>();
-                    connectionConfigs.add(connectionConfig);
-                    graphInstance.getConnectionRoutes().put(SYS_EXTENSION_NAME, connectionConfigs);
-                }
-                if (instance == null && extensionType != null && !extensionType.isEmpty()) {
-                    Class<?> clazz = Class.forName(extensionType);
-                    instance = clazz.newInstance();
-                }
-                if (instance != null) {
-                    Map<String, Object> clientConnectionProperties = new HashMap<>();
-                    clientConnectionProperties.put(PROPERTY_CLIENT_LOCATION_URI,
-                            clientLocationUri);
-                    clientConnectionProperties.put(PROPERTY_CLIENT_APP_URI, clientAppUri);
-                    clientConnectionProperties.put(PROPERTY_CLIENT_GRAPH_ID, graphInstance.getGraphId());
-                    if (!(instance instanceof Extension extension)) {
-                        throw new IllegalArgumentException(
-                                "Extension class does not implement Extension interface: " + extensionType);
-                    }
-                    nodeProperties.putAll(clientConnectionProperties);
-                    graphInstance.registerExtension(extensionName, extension, nodeProperties);
-                    log.info("Extension已注册到图: graphId={}, extensionName={}, extensionType={}",
-                            graphInstance.getGraphId(), extensionName, extensionType);
-                }
-            }
-        }
-
-        engine.addGraphInstance(clientLocationUri, graphInstance);
-    }
 
     @SneakyThrows
     @Override
@@ -112,7 +55,7 @@ public class StartGraphCommandHandler implements GraphEventCommandHandler {
 
                 String clientLocationUri = clientAppUri + "/" + graphName + "/" + instance.getGraphId() + "@"
                         + channelId;
-                registerGraph(engine, instance, graphConfig, clientLocationUri, clientLocationUri);
+                engine.getGraphInstances().registerGraph(clientLocationUri, instance);
                 commandResult = CommandResult.success(command.getCommandId(),
                         Map.of("message", "Graph started successfully.",
                                 PROPERTY_CLIENT_LOCATION_URI, clientLocationUri));
@@ -134,10 +77,5 @@ public class StartGraphCommandHandler implements GraphEventCommandHandler {
         commandResult.setName(command.getName());
         commandResult.setProperties(properties);
         engine.submitMessage(commandResult);
-    }
-
-    @Override
-    public String getCommandName() {
-        return "start_graph";
     }
 }

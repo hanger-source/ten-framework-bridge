@@ -12,7 +12,6 @@ import {
 } from "@/store/reducers/global";
 import Avatar from "@/components/Agent/AvatarTrulience";
 import MicrophoneBlock from "@/components/Agent/Microphone";
-import dynamic from "next/dynamic";
 import TalkingheadBlock from "@/components/Agent/TalkingHead";
 import {
   WebSocketEvents,
@@ -31,6 +30,7 @@ import {
   VoiceType,
 } from "@/types";
 import NetworkIndicator from "@/components/Dynamic/NetworkIndicator";
+import DynamicChatCard from "@/components/Chat/ChatCard";
 
 let hasInit: boolean = false;
 
@@ -58,10 +58,6 @@ export default function RTCCard({
   );
 
   const isCompactLayout = useIsCompactLayout();
-
-  const DynamicChatCard = dynamic(() => import("@/components/Chat/ChatCard"), {
-    ssr: false,
-  });
 
   React.useEffect(() => {
     if (!options.channel) {

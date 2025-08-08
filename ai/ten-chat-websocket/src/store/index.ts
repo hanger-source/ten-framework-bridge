@@ -10,7 +10,7 @@ export const makeStore = () => {
     reducer: {
       global: globalReducer,
     },
-    devTools: process.env.NODE_ENV !== "production",
+    devTools: import.meta.env.DEV,
   });
 };
 

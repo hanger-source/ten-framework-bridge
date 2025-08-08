@@ -27,6 +27,11 @@ import { Settings } from "lucide-react";
 import SettingsDialog from "@/components/Settings/SettingsDialog";
 import { useAgentSettings } from "@/hooks/useAgentSettings";
 
+// 导入类型
+interface IPingResponse {
+  message: string;
+}
+
 let intervalId: NodeJS.Timeout | null = null;
 
 export default function Action(props: { className?: string }) {
@@ -55,9 +60,12 @@ export default function Action(props: { className?: string }) {
   }, [channel]);
 
   const checkAgentConnected = async () => {
-    const res: IPingResponse = await apiPing(channel);
-    if (res?.code == 0) {
+    try {
+      const res = await apiPing(channel);
+      // 如果 ping 成功，说明 Agent 已连接
       dispatch(setAgentConnected(true));
+    } catch (error) {
+      console.log("Agent not connected:", error);
     }
   };
 
@@ -67,10 +75,15 @@ export default function Action(props: { className?: string }) {
     }
     setLoading(true);
     if (agentConnected) {
-      await apiStopService(channel);
-      dispatch(setAgentConnected(false));
-      toast.success("Agent 已断开连接");
-      stopPing();
+      try {
+        await apiStopService(channel);
+        dispatch(setAgentConnected(false));
+        toast.success("Agent 已断开连接");
+        stopPing();
+      } catch (error) {
+        console.error("Error stopping service:", error);
+        toast.error("断开连接失败");
+      }
     } else {
       const selectedGraph = graphList.find(
         (graph) => graph.uuid === selectedGraphId,
@@ -82,30 +95,23 @@ export default function Action(props: { className?: string }) {
       }
 
       const { token, env } = agentSettings;
-      const res = await apiStartService({
-        channel,
-        userId,
-        graphName: selectedGraph.name,
-        language,
-        voiceType,
-        token: token || undefined,
-        envProperties: env,
-      });
-      const { code, msg } = res || {};
-      if (code != 0) {
-        if (code == "10001") {
-          toast.error(
-            "The number of users experiencing the program simultaneously has exceeded the limit. Please try again later.",
-          );
-        } else {
-          toast.error(`code:${code},msg:${msg}`);
-        }
-        setLoading(false);
-        throw new Error(msg);
+      try {
+        await apiStartService({
+          channel,
+          userId,
+          graphName: selectedGraph.name,
+          language,
+          voiceType,
+          token: token || undefined,
+          envProperties: env,
+        });
+        dispatch(setAgentConnected(true));
+        toast.success("Agent 已连接");
+        startPing();
+      } catch (error) {
+        console.error("Error starting service:", error);
+        toast.error("连接失败");
       }
-      dispatch(setAgentConnected(true));
-      toast.success("Agent 已连接");
-      startPing();
     }
     setLoading(false);
   };
@@ -141,7 +147,6 @@ export default function Action(props: { className?: string }) {
       >
         {/* -- Description Part */}
         <div className="hidden md:block">
-          {/* <span className="text-sm font-bold text-gray-800">描述</span> */}
           <span className="ml-2 text-xs text-gray-600 whitespace-nowrap">
             实时对话式 AI 智能体
           </span>

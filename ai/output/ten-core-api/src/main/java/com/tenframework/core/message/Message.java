@@ -1,148 +1,54 @@
 package com.tenframework.core.message;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonSubTypes;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import lombok.experimental.Accessors;
+
 import java.util.List;
 import java.util.Map;
 
-import com.fasterxml.jackson.annotation.JsonSubTypes;
-import com.fasterxml.jackson.annotation.JsonTypeInfo;
-
 /**
- * TEN框架消息系统的根接口
- * 使用sealed interface确保类型安全和完整性
- * 对应C语言中的ten_msg_t结构
+ * 所有消息类型的抽象基类，对齐C/Python中的ten_msg_t结构体。
+ * 定义了消息的基本属性，并通过Jackson注解支持多态序列化/反序列化。
  */
 @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "type")
 @JsonSubTypes({
-    @JsonSubTypes.Type(value = Command.class, name = "cmd"),
-    @JsonSubTypes.Type(value = CommandResult.class, name = "cmd_result"),
-    @JsonSubTypes.Type(value = Data.class, name = "data"),
-    @JsonSubTypes.Type(value = AudioFrame.class, name = "audio_frame"),
-    @JsonSubTypes.Type(value = VideoFrame.class, name = "video_frame")
+                @JsonSubTypes.Type(value = CommandMessage.class, name = "CMD"),
+                @JsonSubTypes.Type(value = CommandResultMessage.class, name = "CMD_RESULT"),
+                @JsonSubTypes.Type(value = DataMessage.class, name = "DATA"),
+                @JsonSubTypes.Type(value = VideoFrameMessage.class, name = "VIDEO_FRAME"),
+                @JsonSubTypes.Type(value = AudioFrameMessage.class, name = "AUDIO_FRAME")
 })
-public sealed interface Message
-    permits AbstractMessage {
+@JsonIgnoreProperties(ignoreUnknown = true) // 忽略未知字段，增加兼容性
+@Data
+@NoArgsConstructor // 需要默认构造函数供Jackson使用
+@Accessors(chain = true) // 允许链式设置
+public abstract class Message {
+
+        @JsonProperty("type")
+        private MessageType type;
+
+        @JsonProperty("id")
+        private String id;
+
+        @JsonProperty("src_loc")
+        private Location srcLoc;
+
+        @JsonProperty("dest_locs")
+        private List<Location> destLocs;
+
+        @JsonProperty("properties")
+        private Map<String, Object> properties;
 
         /**
-         * 获取消息类型
-         */
-        MessageType getType();
-
-        /**
-         * 获取消息名称，用于路由
-         * 如果消息名称为空，只能流向图中未指定名称的目标扩展
-         */
-        String getName();
-
-        /**
-         * 设置消息名称
-         */
-        void setName(String name);
-
-        /**
-         * 获取源位置
-         */
-        Location getSourceLocation();
-
-        /**
-         * 设置源位置
-         */
-        void setSourceLocation(Location location);
-
-        /**
-         * 获取目标位置列表
-         * 支持1对多的消息分发
-         */
-        List<Location> getDestinationLocations();
-
-        /**
-         * 设置目标位置列表
-         */
-        void setDestinationLocations(List<Location> locations);
-
-        /**
-         * 添加目标位置
-         */
-        void addDestinationLocation(Location location);
-
-        /**
-         * 清空并设置单个目标位置
-         */
-        void setDestinationLocation(Location location);
-
-        /**
-         * 获取消息属性
-         * 支持动态属性存储和访问
-         */
-        Map<String, Object> getProperties();
-
-        /**
-         * 设置消息属性
-         */
-        void setProperties(Map<String, Object> properties);
-
-        /**
-         * 获取指定属性值
-         */
-        Object getProperty(String key);
-
-        /**
-         * 获取指定属性值，带类型转换
-         */
-        <T> T getProperty(String key, Class<T> type);
-
-        default String getPropertyAsString(String key) {
-                return getProperty(key, String.class);
-        }
-
-        /**
-         * 设置属性值
-         */
-        void setProperty(String key, Object value);
-
-        /**
-         * 检查属性是否存在
-         */
-        boolean hasProperty(String key);
-
-        /**
-         * 移除属性
-         */
-        Object removeProperty(String key);
-
-        /**
-         * 获取时间戳（毫秒）
-         */
-        long getTimestamp();
-
-        /**
-         * 设置时间戳
-         */
-        void setTimestamp(long timestamp);
-
-        /**
-         * 深拷贝消息
-         * 确保在多路分发时每个接收方都有独立的副本
+         * 获取消息的实际内容（Payload）。
+         * 具体实现由子类提供。
          *
-         * @return 深拷贝的消息实例
+         * @return 消息的Payload对象
          */
-        Message clone() throws CloneNotSupportedException;
-
-        /**
-         * 验证消息完整性
-         *
-         * @return 如果消息有效返回true，否则返回false
-         */
-        boolean checkIntegrity();
-
-        /**
-         * 获取消息的调试字符串表示
-         */
-        default String toDebugString() {
-                return String.format("%s[name=%s, src=%s, dest=%s, timestamp=%d]",
-                    getType().getValue(),
-                    getName(),
-                    getSourceLocation(),
-                    getDestinationLocations(),
-                    getTimestamp());
-        }
+        public abstract Object toPayload();
 }

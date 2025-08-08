@@ -53,9 +53,12 @@ public class GraphInstance {
     // 用于标记图实例是否启动失败
     private final AtomicBoolean startFailed = new AtomicBoolean(false);
 
+    private final GraphConfig graphConfig;
+
     public GraphInstance(String appUri, GraphConfig graphConfig, MessageSubmitter messageSubmitter) {
         this.graphName = graphConfig.getGraphName();
         this.graphId = UUID.randomUUID().toString();
+        this.graphConfig = graphConfig;
         this.appUri = appUri;
         this.messageSubmitter = messageSubmitter;
         extensionRegistry = new ConcurrentHashMap<>();

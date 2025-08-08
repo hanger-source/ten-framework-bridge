@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import NextLink from "next/link";
 import {
   Tooltip,
   TooltipContent,
@@ -18,7 +17,6 @@ import { useAppSelector, useAppDispatch, COLOR_LIST } from "@/common";
 import { setThemeColor } from "@/store/reducers/global";
 import { cn } from "@/lib/utils";
 import { HexColorPicker } from "react-colorful";
-import dynamic from "next/dynamic";
 
 import styles from "./Header.module.css";
 
@@ -165,9 +163,4 @@ export const ThemePalettePopover = () => {
   );
 };
 
-const NetworkIndicator = dynamic(
-  () => import("@/components/Dynamic/NetworkIndicator"),
-  {
-    ssr: false,
-  },
-);
+import NetworkIndicator from "@/components/Dynamic/NetworkIndicator";

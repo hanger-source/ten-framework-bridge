@@ -1,28 +1,58 @@
 import * as React from "react";
-import {
-  useAutoScroll,
-  useAppSelector,
-} from "@/common";
-import { Bot, Brain } from "lucide-react";
-import { EMessageDataType, EMessageType, type IChatItem } from "@/types";
+import { Bot, Brain, MessageCircleQuestion } from "lucide-react";
+import { EMessageDataType, EMessageType, type IChatItem } from "@/types/chat";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 
 export default function MessageList(props: { className?: string }) {
   const { className } = props;
 
-  const chatItems = useAppSelector((state) => state.global.chatItems);
+  // 模拟聊天数据
+  const chatItems: IChatItem[] = [
+    {
+      userId: "agent",
+      userName: "AI助手",
+      text: "你好！我是你的AI助手，有什么可以帮助你的吗？",
+      data_type: EMessageDataType.TEXT,
+      type: EMessageType.AGENT,
+      isFinal: true,
+      time: Date.now() - 10000,
+    },
+    {
+      userId: "user",
+      userName: "用户",
+      text: "你好，我想了解一下这个项目",
+      data_type: EMessageDataType.TEXT,
+      type: EMessageType.USER,
+      isFinal: true,
+      time: Date.now() - 8000,
+    },
+    {
+      userId: "agent",
+      userName: "AI助手",
+      text: "这是一个基于 Ten Framework Bridge 的聊天应用，集成了 Live2D 虚拟形象和实时语音交互功能。",
+      data_type: EMessageDataType.TEXT,
+      type: EMessageType.AGENT,
+      isFinal: true,
+      time: Date.now() - 5000,
+    },
+  ];
 
   const containerRef = React.useRef<HTMLDivElement>(null);
 
-  useAutoScroll(containerRef);
+  // 自动滚动到底部
+  React.useEffect(() => {
+    if (containerRef.current) {
+      containerRef.current.scrollTop = containerRef.current.scrollHeight;
+    }
+  }, [chatItems]);
 
   return (
     <div
       ref={containerRef}
       className={cn("flex-grow space-y-2 overflow-y-auto p-4", className)}
     >
-      {chatItems.map((item) => {
+      {chatItems.map((item, index) => {
         return <MessageItem data={item} key={item.time} />;
       })}
     </div>
@@ -54,7 +84,12 @@ export function MessageItem(props: { data: IChatItem }) {
             </Avatar>
           )
         ) : null}
-        <div className="max-w-[80%] rounded-lg bg-secondary p-2 text-secondary-foreground">
+        <div
+          className={cn("max-w-[80%] rounded-lg p-2", {
+            "bg-secondary text-secondary-foreground": data.type === EMessageType.AGENT,
+            "bg-primary text-primary-foreground": data.type === EMessageType.USER,
+          })}
+        >
           {data.data_type === EMessageDataType.IMAGE ? (
             <img src={data.text} alt="chat" className="w-full" />
           ) : (

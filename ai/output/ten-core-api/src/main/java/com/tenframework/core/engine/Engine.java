@@ -19,6 +19,7 @@ import com.tenframework.core.command.GraphEventCommandHandler;
 import com.tenframework.core.command.RemoveExtensionFromGraphCommandHandler;
 import com.tenframework.core.command.StartGraphCommandHandler;
 import com.tenframework.core.command.StopGraphCommandHandler;
+import com.tenframework.core.extension.EngineAsyncExtensionEnv;
 import com.tenframework.core.extension.Extension;
 import com.tenframework.core.extension.system.ClientConnectionExtension;
 import com.tenframework.core.graph.GraphInstance;
@@ -45,7 +46,7 @@ import static com.tenframework.core.command.GraphEventCommandType.ADD_EXTENSION_
 import static com.tenframework.core.command.GraphEventCommandType.REMOVE_EXTENSION_FROM_GRAPH;
 import static com.tenframework.core.command.GraphEventCommandType.START_GRAPH;
 import static com.tenframework.core.command.GraphEventCommandType.STOP_GRAPH;
-import static com.tenframework.core.command.GraphEventCommandType.isInternal;
+import static com.tenframework.core.command.GraphEventCommandType.isGraphEvent;
 import static com.tenframework.core.message.MessageConstants.PROPERTY_CLIENT_LOCATION_URI;
 import static java.util.concurrent.Executors.newSingleThreadExecutor;
 
@@ -141,7 +142,7 @@ public final class Engine implements MessageSubmitter, CommandSubmitter { // 实
         idleStrategy = new SleepingIdleStrategy(1_000_000L); // 1ms sleep time
 
         channelMap = new ConcurrentHashMap<>();
-        graphInstances = new GraphInstances();
+        graphInstances = new GraphInstances(this);
 
         // 初始化PathManager
         pathManager = new PathManager(this);
@@ -168,6 +169,10 @@ public final class Engine implements MessageSubmitter, CommandSubmitter { // 实
         });
 
         log.info("Engine已创建: engineId={}, queueCapacity={}", engineId, capacity);
+    }
+
+    public GraphInstances getGraphInstances() {
+        return graphInstances;
     }
 
     /**
@@ -265,7 +270,7 @@ public final class Engine implements MessageSubmitter, CommandSubmitter { // 实
             return false;
         }
 
-        if (message.getType() == MessageType.COMMAND && !isInternal(message.getName())) {
+        if (message.getType() == MessageType.COMMAND && !isGraphEvent(message.getName())) {
             Command command = (Command)message;
             command.setCommandId(Command.generateCommandId());
             CompletableFuture<Object> future = new CompletableFuture<>();
@@ -556,20 +561,23 @@ public final class Engine implements MessageSubmitter, CommandSubmitter { // 实
             return;
         }
 
-        String clientLocationUri = message.getPropertyAsString(PROPERTY_CLIENT_LOCATION_URI);
-        if (isInternal(message.getName()) && clientLocationUri != null) {
-            GraphInstance graphInstance = graphInstances.getByClientLocationUri(clientLocationUri);
 
-            if (graphInstance != null) {
-                graphInstance.getExtension(ClientConnectionExtension.NAME).ifPresent(extension -> {
-                    graphInstance.getAsyncExtensionEnv(ClientConnectionExtension.NAME).ifPresent(extensionEnv -> {
-                        extension.onCommandResult(commandResult, extensionEnv);
-                    });
-                });
-            } else {
-                ClientConnectionExtension extension = graphInstances.getClientConnectionExtension(clientLocationUri);
-                if (extension != null) {
-                    extension.onCommandResult(commandResult, null);
+        String clientLocationUri = message.getPropertyAsString(PROPERTY_CLIENT_LOCATION_URI);
+        if (isGraphEvent(message.getName())) {
+            if (clientLocationUri != null) {
+
+                ClientConnectionExtension extension;
+                EngineAsyncExtensionEnv env;
+                GraphInstance graphInstance = graphInstances.getByClientLocationUri(clientLocationUri);
+
+                if (graphInstance != null) {
+                    extension = (ClientConnectionExtension)graphInstance
+                        .getExtension(ClientConnectionExtension.NAME).orElse(null);
+                    env = graphInstance.getAsyncExtensionEnv(ClientConnectionExtension.NAME).orElse(null);
+                } else {
+                    if (extension != null) {
+                        extension.onCommandResult(commandResult, null);
+                    }
                 }
             }
         }
@@ -876,30 +884,6 @@ public final class Engine implements MessageSubmitter, CommandSubmitter { // 实
 
     public long getReferenceCount() {
         return referenceCount.get();
-    }
-
-    /**
-     * 获取指定clientLocationUri的GraphInstance实例。
-     *
-     * @param clientLocationUri 客户端位置URI
-     * @return GraphInstance的Optional，如果不存在则为空
-     */
-    public Optional<GraphInstance> getGraphInstance(String clientLocationUri) {
-        return Optional.ofNullable(graphInstances.getByClientLocationUri(clientLocationUri));
-    }
-
-    /**
-     * 将GraphInstance添加到Engine的映射中。
-     *
-     * @param clientLocationUri       客户端位置URI
-     * @param graphInstance 图实例对象
-     */
-    public void addGraphInstance(String clientLocationUri, GraphInstance graphInstance) {
-        graphInstances.put(clientLocationUri, graphInstance);
-    }
-
-    public void removeGraphInstance(String clientLocationUri) {
-        graphInstances.remove(clientLocationUri);
     }
 
     /**

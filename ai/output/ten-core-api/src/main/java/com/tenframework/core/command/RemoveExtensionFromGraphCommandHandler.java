@@ -84,8 +84,4 @@ public class RemoveExtensionFromGraphCommandHandler implements GraphEventCommand
         }
     }
 
-    @Override
-    public String getCommandName() {
-        return "remove_extension_from_graph";
-    }
 }

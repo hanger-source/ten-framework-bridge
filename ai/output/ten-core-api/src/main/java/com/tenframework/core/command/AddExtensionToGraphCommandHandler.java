@@ -112,9 +112,4 @@ public class AddExtensionToGraphCommandHandler implements GraphEventCommandHandl
                     associatedChannelId, result);
         }
     }
-
-    @Override
-    public String getCommandName() {
-        return "add_extension_to_graph";
-    }
 }

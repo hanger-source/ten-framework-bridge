@@ -771,7 +771,7 @@ export const AppTemplateWidget = (props: {
                     </DialogDescription>
                   </DialogHeader>
                   <AppFileManager
-                    className="h-[400px] w-[600px]"
+                    className="h-[400px] w-[400px]"
                     onSave={(folderPath) => {
                       field.onChange(folderPath);
                       setShowAppFolder(false);

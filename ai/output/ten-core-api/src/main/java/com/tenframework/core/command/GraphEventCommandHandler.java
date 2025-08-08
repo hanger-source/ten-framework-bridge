@@ -14,11 +14,4 @@ public interface GraphEventCommandHandler {
      * @param engine  Engine实例，用于命令处理中可能需要的Engine操作
      */
     void handle(Command command, Engine engine);
-
-    /**
-     * 获取此处理器可以处理的命令名称。
-     *
-     * @return 命令名称
-     */
-    String getCommandName();
 }

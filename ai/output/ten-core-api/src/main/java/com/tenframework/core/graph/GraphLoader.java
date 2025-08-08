@@ -1,10 +1,13 @@
 package com.tenframework.core.graph;
 
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.InputStream;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import java.io.File;
-import java.io.IOException;
 
 public class GraphLoader {
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper()
@@ -30,6 +33,14 @@ public class GraphLoader {
      */
     public static GraphConfig loadGraphConfigFromFile(String filePath) throws IOException {
         return OBJECT_MAPPER.readValue(new File(filePath), GraphConfig.class);
+    }
+
+    public static GraphConfig loadGraphConfigFromClassPath(String classPath) throws IOException {
+        InputStream inputStream = GraphLoader.class.getClassLoader().getResourceAsStream(classPath);
+        if (inputStream == null) {
+            throw new FileNotFoundException("Graph config file not found: " + classPath);
+        }
+        return OBJECT_MAPPER.readValue(inputStream, GraphConfig.class);
     }
 
     /**

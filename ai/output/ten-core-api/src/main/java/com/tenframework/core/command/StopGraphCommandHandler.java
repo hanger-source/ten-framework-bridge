@@ -64,8 +64,4 @@ public class StopGraphCommandHandler implements GraphEventCommandHandler {
         engine.submitMessage(commandResult);
     }
 
-    @Override
-    public String getCommandName() {
-        return GraphEventCommandType.STOP_GRAPH.getCommandName();
-    }
 }

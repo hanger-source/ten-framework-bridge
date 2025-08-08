@@ -1,118 +1,44 @@
 package com.tenframework.core.message;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonValue;
 
 /**
- * 消息类型枚举
- * 对应C语言中的TEN_MSG_TYPE枚举
+ * 消息类型枚举，对齐C/Python中的TEN_MSG_TYPE。
  */
 public enum MessageType {
+    INVALID((byte) 0x00), // TEN_MSG_TYPE_INVALID
+    CMD((byte) 0x01), // TEN_MSG_TYPE_CMD
+    CMD_RESULT((byte) 0x02), // TEN_MSG_TYPE_CMD_RESULT
+    CMD_CLOSE_APP((byte) 0x03), // TEN_MSG_TYPE_CMD_CLOSE_APP
+    CMD_START_GRAPH((byte) 0x04), // TEN_MSG_TYPE_CMD_START_GRAPH
+    CMD_STOP_GRAPH((byte) 0x05), // TEN_MSG_TYPE_CMD_STOP_GRAPH
+    CMD_TIMER((byte) 0x06), // TEN_MSG_TYPE_CMD_TIMER
+    CMD_TIMEOUT((byte) 0x07), // TEN_MSG_TYPE_CMD_TIMEOUT
+    DATA((byte) 0x08), // TEN_MSG_TYPE_DATA
+    VIDEO_FRAME((byte) 0x09), // TEN_MSG_TYPE_VIDEO_FRAME
+    AUDIO_FRAME((byte) 0x0A); // TEN_MSG_TYPE_AUDIO_FRAME
+    // TEN_MSG_TYPE_LAST 是一个占位符，不需要在Java枚举中表示
 
-    /**
-     * 无效消息类型
-     */
-    INVALID("invalid"),
+    private final byte value;
 
-    /**
-     * 命令消息 - 控制流和业务意图传递
-     */
-    COMMAND("cmd"),
-
-    /**
-     * 命令结果消息 - 命令执行结果的回溯
-     */
-    COMMAND_RESULT("cmd_result"),
-
-    /**
-     * 关闭应用命令
-     */
-    COMMAND_CLOSE_APP("cmd_close_app"),
-
-    /**
-     * 启动图命令
-     */
-    COMMAND_START_GRAPH("cmd_start_graph"),
-
-    /**
-     * 停止图命令
-     */
-    COMMAND_STOP_GRAPH("cmd_stop_graph"),
-
-    /**
-     * 定时器命令
-     */
-    COMMAND_TIMER("cmd_timer"),
-
-    /**
-     * 超时命令
-     */
-    COMMAND_TIMEOUT("cmd_timeout"),
-
-    /**
-     * 数据消息 - 实时信息载荷传输
-     */
-    DATA("data"),
-
-    /**
-     * 视频帧消息
-     */
-    VIDEO_FRAME("video_frame"),
-
-    /**
-     * 音频帧消息
-     */
-    AUDIO_FRAME("audio_frame");
-
-    private final String value;
-
-    MessageType(String value) {
+    MessageType(byte value) {
         this.value = value;
     }
 
     @JsonValue
-    public String getValue() {
+    public byte getValue() {
         return value;
     }
 
-    /**
-     * 检查是否是命令类型消息
-     */
-    public boolean isCommand() {
-        return this == COMMAND ||
-                this == COMMAND_CLOSE_APP ||
-                this == COMMAND_START_GRAPH ||
-                this == COMMAND_STOP_GRAPH ||
-                this == COMMAND_TIMER ||
-                this == COMMAND_TIMEOUT;
-    }
-
-    /**
-     * 检查是否是命令结果类型消息
-     */
-    public boolean isCommandResult() {
-        return this == COMMAND_RESULT;
-    }
-
-    /**
-     * 检查是否是数据类型消息（包括音视频帧）
-     */
-    public boolean isData() {
-        return this == DATA || this == VIDEO_FRAME || this == AUDIO_FRAME;
-    }
-
-    /**
-     * 检查是否是媒体帧消息
-     */
-    public boolean isMediaFrame() {
-        return this == VIDEO_FRAME || this == AUDIO_FRAME;
-    }
-
-    /**
-     * 检查是否需要在引擎关闭时继续处理
-     */
-    public boolean shouldHandleWhenClosing() {
-        return this == COMMAND_CLOSE_APP ||
-                this == COMMAND_STOP_GRAPH ||
-                this == COMMAND_TIMEOUT;
+    @JsonCreator
+    public static MessageType fromValue(byte value) {
+        for (MessageType type : MessageType.values()) {
+            if (type.value == value) {
+                return type;
+            }
+        }
+        // 对于未知的字节值，返回INVALID
+        return INVALID;
     }
 }

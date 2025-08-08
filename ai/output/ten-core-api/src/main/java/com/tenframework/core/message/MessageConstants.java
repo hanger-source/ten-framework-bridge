@@ -5,6 +5,9 @@ public final class MessageConstants {
 
     public static final String NOT_APPLICABLE = "N/A";
 
+    //  ====================  系统  ================
+    public static final String SYS_APP_URI = "sys://app";
+    public static final String SYS_GRAPH_ID = "000000";
     public static final String SYS_EXTENSION_NAME = "sys_engine";
 
     //  ====================  客户端  ================

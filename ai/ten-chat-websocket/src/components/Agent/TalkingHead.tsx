@@ -24,6 +24,18 @@ function calcMouthOpenByRMS(dataArray: Uint8Array): number {
 // @ts-expect-error // 聪明的开发杭二: 将 '@ts-ignore' 替换为 '@ts-expect-error'
 window.PIXI = PIXI;
 
+// 动态加载 Live2D Cubism 运行时
+if (typeof window !== 'undefined') {
+  if (!(window as any).Live2DCubismCore) {
+    const script = document.createElement('script');
+    script.src = 'https://cubism.live2d.com/sdk-web/cubismcore/live2dcubismcore.min.js';
+    script.onload = () => {
+      console.log('Live2D Cubism runtime loaded');
+    };
+    document.head.appendChild(script);
+  }
+}
+
 // 聪明的开发杭二: 修改 audioTrack prop 类型为 Uint8Array
 export default function Talkinghead({
   audioTrack,
@@ -53,33 +65,48 @@ export default function Talkinghead({
 
     let destroyed = false;
 
-    Live2DModel.from(MODEL_URL).then((model: Live2DModel) => {
-      if (destroyed) return;
-      modelRef.current = model;
-      app.stage.addChild(model);
+        // 等待 Live2D Cubism 运行时加载完成
+    const loadModel = () => {
+      if ((window as any).Live2DCubismCore) {
+        Live2DModel.from(MODEL_URL).then((model: Live2DModel) => {
+          if (destroyed) return;
+          modelRef.current = model;
+          app.stage.addChild(model);
 
-      function fitModel() {
-        if (!containerRef.current || !app.renderer) return;
-        const width = containerRef.current.offsetWidth || 600;
-        const height = containerRef.current.offsetHeight || 600;
-        app.renderer.resize(width, height);
-        // 你可以根据实际模型原始尺寸调整
-        const modelWidth = 800;
-        const modelHeight = 1000;
-        const scale = Math.min(width / modelWidth, height / modelHeight) * 0.95;
-        model.scale.set(scale);
-        // anchor(0.5, 0)，头部对齐顶部，y=20
-        model.anchor.set(0.5, 0);
-        model.x = width / 2;
-        model.y = 20;
+          function fitModel() {
+            if (!containerRef.current || !app.renderer) return;
+            const width = containerRef.current.offsetWidth || 600;
+            const height = containerRef.current.offsetHeight || 600;
+            app.renderer.resize(width, height);
+            // 你可以根据实际模型原始尺寸调整
+            const modelWidth = 800;
+            const modelHeight = 1000;
+            const scale = Math.min(width / modelWidth, height / modelHeight) * 0.95;
+            model.scale.set(scale);
+            // anchor(0.5, 0)，头部对齐顶部，y=20
+            model.anchor.set(0.5, 0);
+            model.x = width / 2;
+            model.y = 20;
+          }
+          fitModel();
+          window.addEventListener("resize", fitModel);
+          // 记录清理函数，组件卸载时移除监听
+          fitModelCleanupRef.current = () => {
+            window.removeEventListener("resize", fitModel);
+          };
+        }).catch((error: unknown) => {
+          console.error('Failed to load Live2D model:', error);
+          if (containerRef.current) {
+            containerRef.current.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #666; font-size: 14px;">Live2D 模型加载失败</div>';
+          }
+        });
+      } else {
+        // 如果运行时还没加载完成，等待一段时间后重试
+        setTimeout(loadModel, 100);
       }
-      fitModel();
-      window.addEventListener("resize", fitModel);
-      // 记录清理函数，组件卸载时移除监听
-      fitModelCleanupRef.current = () => {
-        window.removeEventListener("resize", fitModel);
-      };
-    });
+    };
+
+    loadModel();
 
     return () => {
       destroyed = true;
@@ -151,7 +178,7 @@ export default function Talkinghead({
       if (stopped || !audioTrack || audioTrack.length === 0) return;
 
       audioCtx = new (window.AudioContext ||
-        (window as {webkitAudioContext: typeof AudioContext}).webkitAudioContext)();
+        (window as any).webkitAudioContext)();
       analyser = audioCtx.createAnalyser();
       analyser.fftSize = 2048;
 

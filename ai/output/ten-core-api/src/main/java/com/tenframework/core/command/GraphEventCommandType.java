@@ -18,7 +18,7 @@ public enum GraphEventCommandType {
         this.commandName = commandName;
     }
 
-    public static boolean isInternal(String name) {
+    public static boolean isGraphEvent(String name) {
         return name.startsWith("__") && name.endsWith("__");
     }
 

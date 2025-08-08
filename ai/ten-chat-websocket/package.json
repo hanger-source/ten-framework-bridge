@@ -6,10 +6,9 @@
     "node": ">=20"
   },
   "scripts": {
-    "dev": "next dev --turbopack",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint",
+    "dev": "node ./node_modules/vite/bin/vite.js",
+    "build": "vite build",
+    "preview": "vite preview",
     "proto": "pbjs -t json-module -w commonjs -o src/protobuf/SttMessage.js src/protobuf/SttMessage.proto"
   },
   "dependencies": {
@@ -36,8 +35,7 @@
     "extendable-media-recorder-wav-encoder": "^7.0.130",
     "jszip": "^3.10.1",
     "lucide-react": "^0.454.0",
-    "next": "^15.0.3",
-    "next-themes": "^0.4.3",
+    "react-router-dom": "^6.24.1",
     "pixi-live2d-display": "0.5.0-beta",
     "pixi-live2d-display-lipsyncpatch": "0.5.0-beta",
     "pixi.js": "7.0.0",
@@ -62,14 +60,16 @@
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "@types/react-redux": "^7.1.22",
+    "@types/react-router-dom": "^5.3.3",
+    "@vitejs/plugin-react": "^4.3.1",
     "autoprefixer": "^10.4.20",
     "eslint": "^8",
-    "eslint-config-next": "^15.0.3",
     "postcss": "^8.4.47",
     "protobufjs-cli": "^1.1.2",
     "sass": "^1.77.5",
     "tailwindcss": "^3.4.14",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vite": "^7.1.1"
   },
-  "packageManager": "pnpm@10.2.0"
+  "packageManager": "bun@latest"
 }

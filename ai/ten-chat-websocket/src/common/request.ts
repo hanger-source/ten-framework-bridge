@@ -161,12 +161,12 @@ export const apiStartService = async (
   };
   try {
     const resp = await axios.post<ApiResponse<IStartServiceResponse>>(url, data);
-  if (resp.data.code !== "0") {
+    if (resp.data.code !== "0") {
       console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiStartService: API returned error code ${resp.data.code}. Message: ${resp.data.msg}`, resp.data);
-    throw new Error(resp.data.msg);
-  }
+      throw new Error(resp.data.msg);
+    }
     console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiStartService: Request successful. Response:`, resp.data.data);
-  return resp.data.data;
+    return resp.data.data;
   } catch (error: any) {
     console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiStartService: Request failed. Error: ${error.message || 'Unknown error'}`, error);
     throw error; // Re-throw the error after logging
@@ -182,12 +182,12 @@ export const apiStopService = async (channel: string): Promise<IStopServiceRespo
   };
   try {
     const resp = await axios.post<ApiResponse<IStopServiceResponse>>(url, data);
-  if (resp.data.code !== "0") {
+    if (resp.data.code !== "0") {
       console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiStopService: API returned error code ${resp.data.code}. Message: ${resp.data.msg}`, resp.data);
-    throw new Error(resp.data.msg);
-  }
+      throw new Error(resp.data.msg);
+    }
     console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiStopService: Request successful. Response:`, resp.data.data);
-  return resp.data.data;
+    return resp.data.data;
   } catch (error: unknown) {
     console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiStopService: Request failed. Error: ${(error as Error).message || 'Unknown error'}`, error);
     throw error; // Re-throw the error after logging
@@ -200,12 +200,12 @@ export const apiGetDocumentList = async (): Promise<IDocumentListResponse> => {
   const url = `/api/vector/document/preset/list`;
   try {
     const resp = await axios.get<ApiResponse<IDocumentListResponse>>(url);
-  if (resp.data.code !== "0") {
+    if (resp.data.code !== "0") {
       console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiGetDocumentList: API returned error code ${resp.data.code}. Message: ${resp.data.msg}`, resp.data);
-    throw new Error(resp.data.msg);
-  }
+      throw new Error(resp.data.msg);
+    }
     console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiGetDocumentList: Request successful. Response:`, resp.data.data);
-  return resp.data.data;
+    return resp.data.data;
   } catch (error: any) {
     console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiGetDocumentList: Request failed. Error: ${error.message || 'Unknown error'}`, error);
     throw error; // Re-throw the error after logging
@@ -228,12 +228,12 @@ export const apiUpdateDocument = async (options: {
   };
   try {
     const resp = await axios.post<ApiResponse<unknown>>(url, data);
-  if (resp.data.code !== "0") {
+    if (resp.data.code !== "0") {
       console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiUpdateDocument: API returned error code ${resp.data.code}. Message: ${resp.data.msg}`, resp.data);
-    throw new Error(resp.data.msg);
-  }
+      throw new Error(resp.data.msg);
+    }
     console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiUpdateDocument: Request successful. Response:`, resp.data.data);
-  return resp.data.data;
+    return resp.data.data;
   } catch (error: any) {
     console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiUpdateDocument: Request failed. Error: ${error.message || 'Unknown error'}`, error);
     throw error; // Re-throw the error after logging
@@ -250,12 +250,12 @@ export const apiPing = async (channel: string): Promise<IPingResponse> => {
   };
   try {
     const resp = await axios.post<ApiResponse<IPingResponse>>(url, data);
-  if (resp.data.code !== "0") {
+    if (resp.data.code !== "0") {
       console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiPing: API returned error code ${resp.data.code}. Message: ${resp.data.msg}`, resp.data);
-    throw new Error(resp.data.msg);
-  }
+      throw new Error(resp.data.msg);
+    }
     console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiPing: Request successful. Response:`, resp.data.data);
-  return resp.data.data;
+    return resp.data.data;
   } catch (error: any) {
     console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiPing: Request failed. Error: ${error.message || 'Unknown error'}`, error);
     throw error; // Re-throw the error after logging
@@ -268,8 +268,8 @@ export const apiFetchAddonsExtensions = async (): Promise<
   console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiFetchAddonsExtensions: Initiating request.`);
   try {
     const resp = await axios.post<ApiResponse<AddonDef[]>>(`/api/dev/v1/apps/addons`, {
-    base_dir: "/app/agents",
-  });
+      base_dir: "/app/agents",
+    });
     if (resp.data.code !== "0") {
       console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiFetchAddonsExtensions: API returned error code ${resp.data.code}. Message: ${resp.data.msg}`, resp.data);
       throw new Error(resp.data.msg);
@@ -296,8 +296,8 @@ export const apiCheckCompatibleMessages = async (payload: {
     let resp: unknown = await axios.post(`/api/dev/v1/messages/compatible`, payload);
     resp = (resp as ApiResponse<unknown>).data;
     if ((resp as ApiResponse<unknown>).code !== "0") {
-        console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiCheckCompatibleMessages: API returned error code ${(resp as ApiResponse<unknown>).code}. Message: ${(resp as ApiResponse<unknown>).msg}`, resp);
-        throw new Error((resp as ApiResponse<unknown>).msg);
+      console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiCheckCompatibleMessages: API returned error code ${(resp as ApiResponse<unknown>).code}. Message: ${(resp as ApiResponse<unknown>).msg}`, resp);
+      throw new Error((resp as ApiResponse<unknown>).msg);
     }
     console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiCheckCompatibleMessages: Request successful. Response:`, resp);
     return resp;
@@ -310,34 +310,34 @@ export const apiCheckCompatibleMessages = async (payload: {
 export const apiFetchGraphs = async (): Promise<Graph[]> => {
   console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiFetchGraphs: Initiating request.`);
   try {
-  if (isEditModeOn) {
+    if (isEditModeOn) {
       const resp = await axios.post<ApiResponse<IGraphApiResponse>>(`/api/dev/v1/graphs`, {});
       if (resp.data.code !== "0") {
         console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiFetchGraphs (Edit Mode): API returned error code ${resp.data.code}. Message: ${resp.data.msg}`, resp.data);
         throw new Error(resp.data.msg);
       }
       console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiFetchGraphs (Edit Mode): Request successful. Fetched ${resp.data.data.graphs.length} graphs.`);
-    return resp.data.data.graphs.map((graph) => ({
-      name: graph.name,
-      uuid: graph.uuid,
-      autoStart: graph.auto_start,
-      nodes: [],
-      connections: [],
-    }));
-  } else {
+      return resp.data.data.graphs.map((graph) => ({
+        name: graph.name,
+        uuid: graph.uuid,
+        autoStart: graph.auto_start,
+        nodes: [],
+        connections: [],
+      }));
+    } else {
       const resp = await axios.get<ApiResponse<IGraphApiResponse>>(`/api/agents/graphs`);
       if (resp.data.code !== "0") {
         console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiFetchGraphs (Production Mode): API returned error code ${resp.data.code}. Message: ${resp.data.msg}`, resp.data);
         throw new Error(resp.data.msg);
       }
-      console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiFetchGraphs (Production Mode): Request successful. Fetched ${resp.data.data.graphs.length} graphs.`);
-    return resp.data.data.graphs.map((graph) => ({
-      name: graph.name,
-      uuid: graph.uuid,
-      autoStart: graph.auto_start,
-      nodes: [],
-      connections: [],
-    }));
+      console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiFetchGraphs (Production Mode): Request successful. Fetched ${resp.data.data?.graphs?.length ?? 0} graphs.`);
+      return (resp.data.data?.graphs || []).map((graph) => ({
+        name: graph.name,
+        uuid: graph.uuid,
+        autoStart: graph.auto_start,
+        nodes: [],
+        connections: [],
+      }));
     }
   } catch (error: any) {
     console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiFetchGraphs: Request failed. Error: ${error.message || 'Unknown error'}`, error);
@@ -349,8 +349,8 @@ export const apiLoadApp = async (): Promise<unknown> => {
   console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiLoadApp: Initiating request.`);
   try {
     const resp = await axios.post<ApiResponse<unknown>>(`/api/dev/v1/apps/load`, {
-    base_dir: "/app/agents",
-  });
+      base_dir: "/app/agents",
+    });
     if (resp.data.code !== "0") {
       console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiLoadApp: API returned error code ${resp.data.code}. Message: ${resp.data.msg}`, resp.data);
       throw new Error(resp.data.msg);
@@ -367,8 +367,8 @@ export const apiFetchGraphNodes = async (graphId: string): Promise<Node[]> => {
   console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiFetchGraphNodes: Initiating request for graphId: ${graphId}`);
   try {
     const resp = await axios.post<ApiResponse<IGraphNodeApiResponse>>(`/api/dev/v1/graphs/nodes`, {
-    graph_id: graphId,
-  });
+      graph_id: graphId,
+    });
     if (resp.data.code !== "0") {
       console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiFetchGraphNodes: API returned error code ${resp.data.code}. Message: ${resp.data.msg}`, resp.data);
       throw new Error(resp.data.msg);
@@ -393,8 +393,8 @@ export const apiFetchGraphConnections = async (
   console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiFetchGraphConnections: Initiating request for graphId: ${graphId}`);
   try {
     const resp = await axios.post<ApiResponse<IGraphConnectionApiResponse>>(`/api/dev/v1/graphs/connections`, {
-    graph_id: graphId,
-  });
+      graph_id: graphId,
+    });
     if (resp.data.code !== "0") {
       console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiFetchGraphConnections: API returned error code ${resp.data.code}. Message: ${resp.data.msg}`, resp.data);
       throw new Error(resp.data.msg);
@@ -418,10 +418,10 @@ export const apiFetchGraphConnections = async (
                 originalPath: rule.originalPath,
               })),
               keepOriginal: dest.msgConversion.keepOriginal,
-          }
-          : undefined,
+            }
+            : undefined,
+        })),
       })),
-    })),
       data: connection.data?.map((data) => ({
         name: data.name,
         dest: data.dest.map((dest) => ({
@@ -437,10 +437,10 @@ export const apiFetchGraphConnections = async (
                 originalPath: rule.originalPath,
               })),
               keepOriginal: dest.msgConversion.keepOriginal,
-          }
-          : undefined,
+            }
+            : undefined,
+        })),
       })),
-    })),
       audio_frame: connection.audio_frame?.map((audioFrame) => ({
         name: audioFrame.name,
         dest: audioFrame.dest.map((dest) => ({
@@ -456,10 +456,10 @@ export const apiFetchGraphConnections = async (
                 originalPath: rule.originalPath,
               })),
               keepOriginal: dest.msgConversion.keepOriginal,
-          }
-          : undefined,
+            }
+            : undefined,
+        })),
       })),
-    })),
       video_frame: connection.video_frame?.map((videoFrame) => ({
         name: videoFrame.name,
         dest: videoFrame.dest.map((dest) => ({
@@ -475,11 +475,11 @@ export const apiFetchGraphConnections = async (
                 originalPath: rule.originalPath,
               })),
               keepOriginal: dest.msgConversion.keepOriginal,
-          }
-          : undefined,
+            }
+            : undefined,
+        })),
       })),
-    })),
-  }));
+    }));
   } catch (error: any) {
     console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiFetchGraphConnections: Request failed. Error: ${error.message || 'Unknown error'}`, error);
     throw error; // Re-throw the error after logging
@@ -490,9 +490,9 @@ export const apiGetDefaultProperty = async (module: string): Promise<unknown> =>
   console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiGetDefaultProperty: Initiating request for module: ${module}`);
   try {
     const resp = await axios.post<ApiResponse<IDefaultPropertyResponse>>(`/api/dev/v1/extensions/property/get`, {
-    addon_name: module,
-    app_base_dir: "/app/agents",
-  });
+      addon_name: module,
+      app_base_dir: "/app/agents",
+    });
     if (resp.data.code !== "0") {
       console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiGetDefaultProperty: API returned error code ${resp.data.code}. Message: ${resp.data.msg}`, resp.data);
       throw new Error(resp.data.msg);
@@ -514,14 +514,14 @@ export const apiAddNode = async (
   console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiAddNode: Initiating request to add node to graph: ${graphId} with name: ${name}, module: ${module}.`);
   try {
     const resp: unknown = await axios.post(`/api/dev/v1/graphs/nodes/add`, {
-    graph_id: graphId,
-    name,
-    addon: module,
-    property: properties,
-  });
+      graph_id: graphId,
+      name,
+      addon: module,
+      property: properties,
+    });
     if ((resp as ApiResponse<unknown>).code !== "0") {
-        console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiAddNode: API returned error code ${(resp as ApiResponse<unknown>).code}. Message: ${(resp as ApiResponse<unknown>).msg}`, resp);
-        throw new Error((resp as ApiResponse<unknown>).msg);
+      console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiAddNode: API returned error code ${(resp as ApiResponse<unknown>).code}. Message: ${(resp as ApiResponse<unknown>).msg}`, resp);
+      throw new Error((resp as ApiResponse<unknown>).msg);
     }
     console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiAddNode: Request successful. Added node to graph: ${graphId}. Response:`, resp);
     return (resp as ApiResponse<unknown>).data.data;
@@ -540,14 +540,14 @@ export const apiReplaceNodeModule = async (
   console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiReplaceNodeModule: Initiating request to replace node module in graph: ${graphId}, node: ${name}.`);
   try {
     const resp: unknown = await axios.post(`/api/dev/v1/graphs/nodes/replace`, {
-    graph_id: graphId,
-    name,
-    addon: module,
-    property: properties,
-  });
+      graph_id: graphId,
+      name,
+      addon: module,
+      property: properties,
+    });
     if ((resp as ApiResponse<unknown>).code !== "0") {
-        console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiReplaceNodeModule: API returned error code ${(resp as ApiResponse<unknown>).code}. Message: ${(resp as ApiResponse<unknown>).msg}`, resp);
-        throw new Error((resp as ApiResponse<unknown>).msg);
+      console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiReplaceNodeModule: API returned error code ${(resp as ApiResponse<unknown>).code}. Message: ${(resp as ApiResponse<unknown>).msg}`, resp);
+      throw new Error((resp as ApiResponse<unknown>).msg);
     }
     console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiReplaceNodeModule: Request successful. Replaced module for node: ${name} in graph: ${graphId}. Response:`, resp);
     return (resp as ApiResponse<unknown>).data.data;
@@ -565,13 +565,13 @@ export const apiRemoveNode = async (
   console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiRemoveNode: Initiating request to remove node from graph: ${graphId}, node: ${name}.`);
   try {
     const resp: unknown = await axios.post(`/api/dev/v1/graphs/nodes/delete`, {
-    graph_id: graphId,
-    name,
-    addon: module,
-  });
+      graph_id: graphId,
+      name,
+      addon: module,
+    });
     if ((resp as ApiResponse<unknown>).code !== "0") {
-        console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiRemoveNode: API returned error code ${(resp as ApiResponse<unknown>).code}. Message: ${(resp as ApiResponse<unknown>).msg}`, resp);
-        throw new Error((resp as ApiResponse<unknown>).msg);
+      console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiRemoveNode: API returned error code ${(resp as ApiResponse<unknown>).code}. Message: ${(resp as ApiResponse<unknown>).msg}`, resp);
+      throw new Error((resp as ApiResponse<unknown>).msg);
     }
     console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiRemoveNode: Request successful. Removed node: ${name} from graph: ${graphId}. Response:`, resp);
     return (resp as ApiResponse<unknown>).data.data;
@@ -591,15 +591,15 @@ export const apiAddConnection = async (
   console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiAddConnection: Initiating request to add connection to graph: ${graphId}. Source: ${srcExtension}, Dest: ${dest_extension}, MsgType: ${msgType}, MsgName: ${msgName}.`);
   try {
     const resp: unknown = await axios.post(`/api/dev/v1/graphs/connections/add`, {
-    graph_id: graphId,
-    src_extension: srcExtension,
-    msg_type: msgType,
-    msg_name: msgName,
-    dest_extension: dest_extension,
-  });
+      graph_id: graphId,
+      src_extension: srcExtension,
+      msg_type: msgType,
+      msg_name: msgName,
+      dest_extension: dest_extension,
+    });
     if ((resp as ApiResponse<unknown>).code !== "0") {
-        console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiAddConnection: API returned error code ${(resp as ApiResponse<unknown>).code}. Message: ${(resp as ApiResponse<unknown>).msg}`, resp);
-        throw new Error((resp as ApiResponse<unknown>).msg);
+      console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiAddConnection: API returned error code ${(resp as ApiResponse<unknown>).code}. Message: ${(resp as ApiResponse<unknown>).msg}`, resp);
+      throw new Error((resp as ApiResponse<unknown>).msg);
     }
     console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiAddConnection: Request successful. Added connection to graph: ${graphId}. Response:`, resp);
     return (resp as ApiResponse<unknown>).data.data;
@@ -619,15 +619,15 @@ export const apiRemoveConnection = async (
   console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiRemoveConnection: Initiating request to remove connection from graph: ${graphId}. Source: ${srcExtension}, Dest: ${dest_extension}, MsgType: ${msgType}, MsgName: ${msgName}.`);
   try {
     const resp: unknown = await axios.post(`/api/dev/v1/graphs/connections/delete`, {
-    graph_id: graphId,
-    src_extension: srcExtension,
-    msg_type: msgType,
-    msg_name: msgName,
-    dest_extension: dest_extension,
-  });
+      graph_id: graphId,
+      src_extension: srcExtension,
+      msg_type: msgType,
+      msg_name: msgName,
+      dest_extension: dest_extension,
+    });
     if ((resp as ApiResponse<unknown>).code !== "0") {
-        console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiRemoveConnection: API returned error code ${(resp as ApiResponse<unknown>).code}. Message: ${(resp as ApiResponse<unknown>).msg}`, resp);
-        throw new Error((resp as ApiResponse<unknown>).msg);
+      console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiRemoveConnection: API returned error code ${(resp as ApiResponse<unknown>).code}. Message: ${(resp as ApiResponse<unknown>).msg}`, resp);
+      throw new Error((resp as ApiResponse<unknown>).msg);
     }
     console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiRemoveConnection: Request successful. Removed connection from graph: ${graphId}. Response:`, resp);
     return (resp as ApiResponse<unknown>).data.data;
@@ -745,17 +745,17 @@ export const apiUpdateGraph = async (
 
   try {
     let resp = await axios.post<ApiResponse<unknown>>(`/api/dev/v1/graphs/update`, {
-    graph_id: graphId,
-    nodes: payload.nodes,
-    connections: payload.connections,
-  });
+      graph_id: graphId,
+      nodes: payload.nodes,
+      connections: payload.connections,
+    });
     resp = resp.data;
     if ((resp as ApiResponse<unknown>).code !== "0") {
-        console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiUpdateGraph: API returned error code ${(resp as ApiResponse<unknown>).code}. Message: ${(resp as ApiResponse<unknown>).msg}`, resp);
-        throw new Error((resp as ApiResponse<unknown>).msg);
+      console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiUpdateGraph: API returned error code ${(resp as ApiResponse<unknown>).code}. Message: ${(resp as ApiResponse<unknown>).msg}`, resp);
+      throw new Error((resp as ApiResponse<unknown>).msg);
     }
     console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiUpdateGraph: Request successful. Updated graph: ${graphId}. Response:`, resp);
-  return resp;
+    return resp;
   } catch (error: any) {
     console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiUpdateGraph: Request failed. Error: ${error.message || 'Unknown error'}`, error);
     throw error; // Re-throw the error after logging
@@ -773,8 +773,8 @@ export const apiFetchAddonModulesDefaultProperties = async (): Promise<
       throw new Error(resp.data.msg);
     }
     const properties = resp.data.data.data;
-  const result: Record<string, Partial<AddonDef>> = {};
-  for (const property of properties) {
+    const result: Record<string, Partial<AddonDef>> = {};
+    for (const property of properties) {
       result[property.addon] = property.property as Partial<AddonDef>;
     }
     console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiFetchAddonModulesDefaultProperties: Request successful. Fetched ${properties.length} default properties.`);
@@ -791,11 +791,11 @@ export const apiSaveProperty = async () => {
     let resp = await axios.put<ApiResponse<unknown>>(`/api/dev/v1/property`);
     resp = resp.data;
     if ((resp as ApiResponse<unknown>).code !== "0") {
-        console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiSaveProperty: API returned error code ${(resp as ApiResponse<unknown>).code}. Message: ${(resp as ApiResponse<unknown>).msg}`, resp);
-        throw new Error((resp as ApiResponse<unknown>).msg);
+      console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiSaveProperty: API returned error code ${(resp as ApiResponse<unknown>).code}. Message: ${(resp as ApiResponse<unknown>).msg}`, resp);
+      throw new Error((resp as ApiResponse<unknown>).msg);
     }
     console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiSaveProperty: Request successful.`);
-  return resp;
+    return resp;
   } catch (error: any) {
     console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiSaveProperty: Request failed. Error: ${error.message || 'Unknown error'}`, error);
     throw error; // Re-throw the error after logging
