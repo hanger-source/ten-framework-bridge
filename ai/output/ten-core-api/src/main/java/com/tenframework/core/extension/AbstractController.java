@@ -1,11 +1,13 @@
 package com.tenframework.core.extension;
 
+import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 import com.tenframework.core.message.AudioFrameMessage;
 import com.tenframework.core.message.CommandResult;
 import com.tenframework.core.message.DataMessage;
+import com.tenframework.core.message.Location;
 import com.tenframework.core.message.VideoFrameMessage;
 import com.tenframework.core.message.command.Command;
 import lombok.extern.slf4j.Slf4j;
@@ -187,32 +189,8 @@ public abstract class AbstractController implements Extension {
         context.sendResult(successResult);
     }
 
-    /**
-     * 转发命令到其他Extension
-     */
-    protected void forwardCommand(Command command, AsyncExtensionEnv context, String targetExtension) {
-        // 这里需要访问Engine来转发命令
-        // 在实际实现中，可能需要通过Engine的API来实现
-        log.debug("转发命令到Extension: command={}, target={}", command.getName(), targetExtension);
-        // 示例：可以构建一个新的命令，并修改其目的地，然后通过 env.sendCommand 发送
-        // command.setDestLocs(Collections.singletonList(new
-        // Location().setGraphId(env.getGraphId()).setNodeId(targetExtension)));
-        // env.sendCommand(command);
-    }
-
-    /**
-     * 广播命令到多个Extension
-     */
-    protected void broadcastCommand(Command command, AsyncExtensionEnv context, String... targetExtensions) {
-        for (String target : targetExtensions) {
-            forwardCommand(command, context, target);
-        }
-    }
-
     @Override
     public String getAppUri() {
-        // AbstractController 可能不直接持有 AppUri，从 AsyncExtensionEnv 获取
-        return null; // 或者可以从 env 获取： asyncExtensionEnv != null ? asyncExtensionEnv.getAppUri() :
-        // "unknown";
+        return asyncExtensionEnv != null ? asyncExtensionEnv.getAppUri() : "unknown"; // 从 env 获取 appUri
     }
 }

@@ -2,239 +2,141 @@ package com.tenframework.core.extension;
 
 import com.tenframework.core.app.App;
 import com.tenframework.core.engine.Engine;
-import com.tenframework.core.graph.ExtensionInfo;
-import com.tenframework.core.graph.GraphDefinition;
 import com.tenframework.core.message.AudioFrameMessage;
 import com.tenframework.core.message.CommandResult;
 import com.tenframework.core.message.DataMessage;
-import com.tenframework.core.message.Location;
 import com.tenframework.core.message.Message;
 import com.tenframework.core.message.MessageType;
 import com.tenframework.core.message.VideoFrameMessage;
 import com.tenframework.core.message.command.Command;
+import com.tenframework.core.message.command.CloseAppCommand;
+import com.tenframework.core.message.command.StartGraphCommand;
+import com.tenframework.core.message.command.StopGraphCommand;
+import com.tenframework.core.message.command.TimerCommand;
+import com.tenframework.core.message.command.TimeoutCommand;
 import com.tenframework.core.path.PathManager;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
-import java.lang.reflect.Constructor;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.Collections;
+import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 
 /**
- * ExtensionContext 封装了 Extension 的运行时环境和生命周期管理。
- * 它为 Extension 提供与 Engine 交互的能力，并管理 Extension 实例的加载和消息分发。
- * 对齐C语言中的ten_extension_context_t结构体。
+ * `ExtensionContext` 封装了 `Extension` 的运行时环境。
+ * 它提供了 `Extension` 与 `Engine` 交互的接口，包括消息发送、命令提交和属性操作。
+ * 每个 Extension 实例都有一个对应的 ExtensionContext。
+ * <p>
+ * 类似于 C 语言中的 `ten_extension_context_t`。
  */
 @Slf4j
-public class ExtensionContext { // 不再实现 AsyncExtensionEnv 接口
+@Getter
+public class ExtensionContext {
 
-    private final Engine engine; // 引用所属的 Engine
-    private final GraphDefinition graphDefinition; // 引用 Engine 正在运行的 Graph 定义
-    private final PathManager pathManager; // 引用 PathManager
-    private final AsyncExtensionEnv asyncExtensionEnv; // 新增：引用 AsyncExtensionEnv 实例
+    private final Engine engine; // 引用所属的 Engine 实例
+    private final App app; // 引用所属的 App 实例
+    private final PathManager pathManager; // 消息路由管理器
+    private final AsyncExtensionEnv asyncExtensionEnv; // Extension 异步环境接口
 
-    // 管理所有活跃的 Extension 实例，key 为 Extension 的 nodeId/instanceName
-    private final Map<String, Extension> activeExtensions;
+    private String extensionName; // 当前 Extension 的名称
+    private String graphId; // 当前 Extension 所属的 Graph ID
+    private String appUri; // 当前 Extension 所属的 App URI
 
-    public ExtensionContext(Engine engine, GraphDefinition graphDefinition, PathManager pathManager,
-            AsyncExtensionEnv asyncExtensionEnv) { // 构造函数接收 AsyncExtensionEnv
+    public ExtensionContext(Engine engine, App app, PathManager pathManager, AsyncExtensionEnv asyncExtensionEnv) {
         this.engine = engine;
-        this.graphDefinition = graphDefinition;
+        this.app = app;
         this.pathManager = pathManager;
         this.asyncExtensionEnv = asyncExtensionEnv;
-        activeExtensions = new ConcurrentHashMap<>();
-        log.info("ExtensionContext created for Engine: {}", engine.getEngineId());
+
+        this.extensionName = asyncExtensionEnv.getExtensionName();
+        this.graphId = asyncExtensionEnv.getGraphId();
+        this.appUri = asyncExtensionEnv.getAppUri();
+
+        log.info("ExtensionContext created for Extension: {}, Graph: {}, App: {}", extensionName, graphId, appUri);
     }
 
     /**
-     * 加载并初始化 Extension 实例。
-     * 根据 ExtensionInfo 中的 addonName 来动态加载 Extension 类。
-     * 这个方法应在 Engine 初始化运行时环境时被调用。
-     *
-     * @param extensionInfo 要加载的 Extension 的配置信息
-     * @return 加载并初始化后的 Extension 实例
-     */
-    public Extension loadExtension(ExtensionInfo extensionInfo) {
-        String addonName = extensionInfo.getExtensionAddonName();
-        String extensionName = extensionInfo.getExtensionName(); // 这里的 extensionName 应该就是 nodeId
-
-        Optional<Class<? extends Extension>> extensionClassOptional = engine.getApp().getRegisteredExtension(addonName);
-
-        if (extensionClassOptional.isEmpty()) {
-            log.error("ExtensionContext: 无法找到注册的 Extension Addon: {}. 无法加载 Extension: {}.", addonName, extensionName);
-            return null;
-        }
-
-        Class<? extends Extension> extensionClass = extensionClassOptional.get();
-        Extension extension = null;
-        try {
-            // 尝试使用带 ExtensionInfo 和 Engine 的构造函数 (如果存在)
-            try {
-                Constructor<? extends Extension> constructor = extensionClass.getConstructor(ExtensionInfo.class,
-                        Engine.class);
-                extension = constructor.newInstance(extensionInfo, engine);
-            } catch (NoSuchMethodException e) {
-                // 如果没有找到，尝试使用带 ExtensionInfo 的构造函数
-                try {
-                    Constructor<? extends Extension> constructor = extensionClass.getConstructor(ExtensionInfo.class);
-                    extension = constructor.newInstance(extensionInfo);
-                } catch (NoSuchMethodException e2) {
-                    // 如果还没有找到，尝试使用无参数构造函数
-                    extension = extensionClass.getConstructor().newInstance();
-                }
-            }
-
-            // 统一设置 extensionName 和 appUri (通过 asyncExtensionEnv 获取)
-            // 如果 Extension 是 BaseExtension 的子类，这些可能已经在其构造函数中处理
-            if (extension instanceof BaseExtension) {
-                ((BaseExtension) extension).setExtensionName(extensionName); // 设置 Extension 的名称
-            }
-            // TODO: 这里需要确保 Extension 能够获取到 AppUri 和 GraphId
-            // AsyncExtensionEnv 应该能够提供这些信息，或者在 Extension 的 onConfigure 阶段设置
-
-            // 调用生命周期方法
-            extension.onConfigure(asyncExtensionEnv);
-            extension.onInit(asyncExtensionEnv);
-            extension.onStart(asyncExtensionEnv);
-
-            activeExtensions.put(extensionName, extension);
-            log.info("ExtensionContext: Extension {} (Addon: {}) 已成功加载和初始化。", extensionName, addonName);
-            return extension;
-        } catch (Exception e) {
-            log.error("ExtensionContext: 加载或初始化 Extension {} (Addon: {}) 失败: {}", extensionName, addonName,
-                    e.getMessage(), e);
-            return null;
-        }
-    }
-
-    /**
-     * 根据 nodeId 卸载 Extension 实例并清理其资源。
-     *
-     * @param nodeId Extension 的唯一标识符。
-     */
-    public void unloadExtension(String nodeId) {
-        Extension extension = activeExtensions.remove(nodeId);
-        if (extension != null) {
-            try {
-                extension.onStop(asyncExtensionEnv);
-                extension.onDeinit(asyncExtensionEnv);
-                log.info("ExtensionContext: Extension {} 已卸载并清理。", nodeId);
-            } catch (Exception e) {
-                log.error("ExtensionContext: 卸载或清理 Extension {} 失败: {}", nodeId, e.getMessage(), e);
-            }
-        } else {
-            log.warn("ExtensionContext: 尝试卸载不存在的 Extension: {}", nodeId);
-        }
-    }
-
-    /**
-     * 根据 nodeId 获取活跃的 Extension 实例。
-     *
-     * @param nodeId Extension 的唯一标识符 (通常是 Location.nodeId)
-     * @return 对应的 Extension 实例，如果不存在则返回 null
-     */
-    public Extension getExtension(String nodeId) {
-        return activeExtensions.get(nodeId);
-    }
-
-    /**
-     * 将消息分发到目标 Extension。
-     * 这个方法通常由 ExtensionMessageDispatcher 调用。
-     *
-     * @param message 待分发的消息
-     */
-    public void dispatchMessageToExtension(Message message) {
-        // 根据消息的目的地 (destLocs) 找到对应的 Extension 并分发消息
-        if (message.getDestLocs() != null && !message.getDestLocs().isEmpty()) {
-            for (Location destLoc : message.getDestLocs()) {
-                // 确保是当前 Engine 内部的 Extension
-                if (destLoc.getGraphId() != null && destLoc.getGraphId().equals(engine.getGraphId())) {
-                    Extension targetExtension = getExtension(destLoc.getNodeId());
-                    if (targetExtension != null) {
-                        log.debug("ExtensionContext: 消息 {} (Type: {}) 分发到 Extension {}.{}", message.getId(),
-                                message.getType(),
-                                destLoc.getGraphId(), destLoc.getNodeId());
-                        // 根据消息类型调用 Extension 接口中细化的方法
-                        switch (message.getType()) {
-                            case CMD_START_GRAPH:
-                            case CMD_STOP_GRAPH:
-                            case CMD_ADD_EXTENSION_TO_GRAPH:
-                            case CMD_REMOVE_EXTENSION_FROM_GRAPH:
-                            case CMD_TIMER:
-                            case CMD_TIMEOUT:
-                            case CMD_CLOSE_APP:
-                                targetExtension.onCommand((Command) message, asyncExtensionEnv);
-                                break;
-                            case DATA_MESSAGE: // Changed from DATA
-                                targetExtension.onData((DataMessage) message, asyncExtensionEnv);
-                                break;
-                            case AUDIO_FRAME_MESSAGE: // Changed from AUDIO_FRAME
-                                targetExtension.onAudioFrame((AudioFrameMessage) message, asyncExtensionEnv);
-                                break;
-                            case VIDEO_FRAME_MESSAGE: // Changed from VIDEO_FRAME
-                                targetExtension.onVideoFrame((VideoFrameMessage) message, asyncExtensionEnv);
-                                break;
-                            case CMD_RESULT:
-                                targetExtension.onCommandResult((CommandResult) message, asyncExtensionEnv);
-                                break;
-                            case INVALID:
-                            default:
-                                log.warn("ExtensionContext: 未知或无效消息类型 {} 无法分发到 Extension {}，消息 {} 被丢弃。",
-                                        message.getType(), destLoc.getNodeId(), message.getId());
-                                break;
-                        }
-                    } else {
-                        log.warn("ExtensionContext: 无法找到目标 Extension: {}.{}，消息 {} 被丢弃。",
-                                destLoc.getGraphId(), destLoc.getNodeId(), message.getId());
-                    }
-                } else {
-                    log.warn("ExtensionContext: 消息目的地 {} 不属于当前 Engine {}，消息 {} 被丢弃。",
-                            destLoc.getGraphId(), engine.getEngineId(), message.getId());
-                }
-            }
-        } else {
-            log.warn("ExtensionContext: 消息 {} 没有目的地，无法分发。", message.getId());
-        }
-    }
-
-    /**
-     * 清理所有活跃 Extension 的资源。
-     * 在 Engine 关闭时被调用。
+     * 清理 ExtensionContext，例如在 Extension 停止时。
      */
     public void cleanup() {
-        log.info("ExtensionContext: 正在清理所有 Extension 资源...");
-        for (Extension extension : activeExtensions.values()) {
-            try {
-                extension.onStop(asyncExtensionEnv);
-                extension.onDeinit(asyncExtensionEnv); // 调用 Extension 的去初始化方法
-            } catch (Exception e) {
-                log.error("ExtensionContext: 清理 Extension {} 资源失败: {}", extension.getAppUri(), e.getMessage(),
-                        e);
-            }
+        log.info("ExtensionContext for Extension {} cleaned up.", extensionName);
+    }
+
+    /**
+     * 根据消息的目的地路由消息到相应的 Extension。
+     * 这是 Engine 消息分发到 Extension 的入口点。
+     *
+     * @param message 待分发的消息。
+     */
+    public void dispatchMessageToExtension(Message message) {
+        String msgId = message.getId();
+        MessageType msgType = message.getType();
+        String destExtensionName = message.getDestLocations() != null && !message.getDestLocations().isEmpty()
+                ? message.getDestLocations().get(0).getNodeId() // 假设第一个 destLoc 的 nodeId 是目标 ExtensionName
+                : null; // 或者根据业务逻辑决定默认值或抛出异常
+
+        if (destExtensionName == null || !destExtensionName.equals(extensionName)) {
+            log.warn("ExtensionContext {}: 消息 {} (Type: {}) 目的地不匹配或没有指定 Extension Name，无法分发。",
+                    extensionName, msgId, msgType);
+            return; // 消息不是发给这个 Extension 的
         }
-        activeExtensions.clear();
 
-        // 关闭 AsyncExtensionEnv 的资源，例如虚拟线程池
-        if (asyncExtensionEnv instanceof EngineAsyncExtensionEnv) {
-            ((EngineAsyncExtensionEnv) asyncExtensionEnv).close();
+        log.debug("ExtensionContext {}: 准备向 Extension 实例分发消息: ID={}, Type={}",
+                extensionName, msgId, msgType);
+
+        // 获取 Extension 实例
+        Optional<Extension> extensionOptional = app.getRegisteredExtensionInstance(extensionName, graphId);
+        if (extensionOptional.isEmpty()) {
+            log.error("ExtensionContext {}: 未找到 Extension 实例 {}，无法分发消息 {} (Type: {})。",
+                    extensionName, extensionName, msgId, msgType);
+            return;
         }
-        log.info("ExtensionContext: 所有 Extension 资源清理完成。", engine.getEngineId());
-    }
+        Extension extension = extensionOptional.get();
 
-    // 提供给外部访问核心组件的 getter
-    public Engine getEngine() {
-        return engine;
-    }
-
-    public GraphDefinition getGraphDefinition() {
-        return graphDefinition;
-    }
-
-    public PathManager getPathManager() {
-        return pathManager;
-    }
-
-    public AsyncExtensionEnv getAsyncExtensionEnv() { // 新增 getter
-        return asyncExtensionEnv;
+        // 根据消息类型分发
+        switch (msgType) {
+            case CMD:
+                // 通用命令消息，由 Extension 的 onCommand 方法处理
+                extension.onCommand((Command) message, asyncExtensionEnv);
+                break;
+            case CMD_RESULT:
+                extension.onCommandResult((CommandResult) message, asyncExtensionEnv);
+                break;
+            case DATA:
+                extension.onData((DataMessage) message, asyncExtensionEnv);
+                break;
+            case AUDIO_FRAME:
+                extension.onAudioFrame((AudioFrameMessage) message, asyncExtensionEnv);
+                break;
+            case VIDEO_FRAME:
+                extension.onVideoFrame((VideoFrameMessage) message, asyncExtensionEnv);
+                break;
+            // 其他具体命令类型（如 CMD_START_GRAPH, CMD_TIMER 等）已在 Engine 层面处理，不应分发到 Extension
+            case CMD_CLOSE_APP:
+            case CMD_START_GRAPH:
+            case CMD_STOP_GRAPH:
+            case CMD_TIMER:
+            case CMD_TIMEOUT:
+                log.warn("ExtensionContext {}: 收到不应由 Extension 直接处理的命令 {} (Type: {})，已忽略。",
+                        extensionName, msgId, msgType);
+                // 对于这些命令，可能需要返回一个不支持的结果，或者直接忽略
+                if (message instanceof Command) {
+                    Command command = (Command) message;
+                    asyncExtensionEnv.sendResult(
+                            CommandResult.fail(command.getId(), "Unsupported App/Engine level command for Extension."));
+                }
+                break;
+            default:
+                log.warn("ExtensionContext {}: 收到未知消息类型 {} (ID: {})，已忽略。",
+                        extensionName, msgType, msgId);
+                // 对于未知消息类型，如果它是一个 Command，也发送一个不支持的结果
+                if (message instanceof Command) {
+                    Command command = (Command) message;
+                    asyncExtensionEnv
+                            .sendResult(CommandResult.fail(command.getId(), "Unknown command type for Extension."));
+                }
+                break;
+        }
     }
 }

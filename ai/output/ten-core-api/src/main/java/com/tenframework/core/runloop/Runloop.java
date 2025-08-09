@@ -70,7 +70,7 @@ public class Runloop {
 
         Thread agentThread = new Thread(agentRunner, coreAgent.roleName() + "-Runner");
         agentThread.setDaemon(false);
-        agentThread.setUncaughtExceptionHandler((_, ex) -> log.error("Runloop AgentRunner 线程发生未捕获异常", ex));
+        agentThread.setUncaughtExceptionHandler((thread, ex) -> log.error("Runloop AgentRunner 线程发生未捕获异常", ex));
         agentThread.start();
         coreThread = agentThread;
 

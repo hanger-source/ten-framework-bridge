@@ -1,31 +1,53 @@
 package com.tenframework.server;
 
 import java.net.BindException;
+import java.net.InetSocketAddress;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.TimeUnit;
 
-import com.tenframework.core.engine.Engine;
+import com.tenframework.core.app.App;
+import com.tenframework.core.message.TenMessagePackMapperProvider;
+import com.tenframework.server.handler.NettyConnectionHandler;
+import com.tenframework.server.handler.WebSocketMessageDispatcher;
+import io.netty.bootstrap.ServerBootstrap;
+import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelInitializer;
+import io.netty.channel.ChannelOption;
+import io.netty.channel.EventLoopGroup;
+import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.socket.SocketChannel;
+import io.netty.channel.socket.nio.NioServerSocketChannel;
+import io.netty.handler.codec.http.HttpObjectAggregator;
+import io.netty.handler.codec.http.HttpServerCodec;
+import io.netty.handler.codec.http.websocketx.WebSocketFrameAggregator;
+import io.netty.handler.codec.http.websocketx.WebSocketServerProtocolHandler;
+import io.netty.handler.logging.LogLevel;
+import io.netty.handler.logging.LoggingHandler;
+import io.netty.handler.stream.ChunkedWriteHandler;
 import lombok.extern.slf4j.Slf4j;
 
+/**
+ * TenServer 类封装了 Netty 服务器的启动、停止和配置。
+ * 它是服务器的核心组件，负责监听传入连接并设置消息处理管道。
+ */
 @Slf4j
 public class TenServer {
 
     private static final int MAX_RETRY_ATTEMPTS = 5;
     private static final long RETRY_DELAY_MILLIS = 500;
 
-    private static final int DEFAULT_PORT = 8080; // 统一端口
+    private final int initialPort;
+    private final App app; // 将 Engine 替换为 App
+    private EventLoopGroup bossGroup;
+    private EventLoopGroup workerGroup;
+    private ChannelFuture channelFuture;
 
-    private final int initialPort; // 统一端口
-    private final Engine engine;
-    private NettyMessageServer nettyMessageServer;
-    // private NettyHttpServer nettyHttpServer; // 不再需要
+    private int currentPort;
 
-    private int currentPort; // 统一端口
-
-    public TenServer(int port, Engine engine) { // 修改构造函数参数
+    public TenServer(int port, App app) { // 构造函数接收 App 实例
         initialPort = port;
-        this.engine = engine;
+        this.app = app;
         currentPort = port;
     }
 
@@ -39,66 +61,88 @@ public class TenServer {
     }
 
     public CompletableFuture<Void> start() {
+        CompletableFuture<Void> serverStartFuture = new CompletableFuture<>();
         for (int attempt = 0; attempt < MAX_RETRY_ATTEMPTS; attempt++) {
             try {
-                CompletableFuture<Void> startAttemptFuture = tryStart();
-                return startAttemptFuture;
-            } catch (CompletionException e) {
+                bossGroup = new NioEventLoopGroup(1); // 一个用于接受传入连接的线程
+                workerGroup = new NioEventLoopGroup(); // 用于处理已接受连接的事件
+
+                ServerBootstrap b = new ServerBootstrap();
+                b.group(bossGroup, workerGroup)
+                    .channel(NioServerSocketChannel.class)
+                    .handler(new LoggingHandler(LogLevel.INFO)) // 添加日志处理器
+                    .childHandler(new ChannelInitializer<SocketChannel>() {
+                        @Override
+                        protected void initChannel(SocketChannel ch) throws Exception {
+                            ch.pipeline().addLast(
+                                new HttpServerCodec(), // HTTP 编解码器
+                                new HttpObjectAggregator(65536), // HTTP 消息聚合器
+                                new ChunkedWriteHandler(), // 处理大文件传输
+                                // WebSocket 协议处理器，路径为 "/websocket"
+                                // 在握手完成后，HTTP 请求会被替换为 WebSocket 帧
+                                new WebSocketServerProtocolHandler("/websocket"),
+                                new WebSocketFrameAggregator(8192), // 聚合 WebSocket 帧
+                                new MessagePackCodec(TenMessagePackMapperProvider.getMapper()), // MsgPack 编解码器
+                                new NettyConnectionHandler(app), // 负责 Connection 生命周期管理和消息转发给 App
+                                // WebSocketMessageDispatcher 现在只处理核心消息分发
+                                new WebSocketMessageDispatcher(app) // WebSocket 消息调度器，传入 App
+                            );
+                        }
+                    })
+                    .option(ChannelOption.SO_BACKLOG, 128) // TCP/IP 连接队列的最大长度
+                    .childOption(ChannelOption.SO_KEEPALIVE, true); // 启用 TCP Keep-Alive
+
+                channelFuture = b.bind(currentPort).sync(); // 同步绑定端口
+                currentPort = ((InetSocketAddress)channelFuture.channel().localAddress()).getPort();
+                log.info("TenServer successfully started on port {}", currentPort);
+                serverStartFuture.complete(null);
+                return serverStartFuture;
+
+            } catch (Exception e) {
                 if (e.getCause() instanceof BindException) {
-                    log.warn("Port already in use on attempt {}/{}. Retrying with new port...", attempt + 1,
-                            MAX_RETRY_ATTEMPTS);
+                    log.warn("Port {} already in use on attempt {}/{}. Retrying with new port...",
+                        currentPort, attempt + 1, MAX_RETRY_ATTEMPTS);
                     currentPort = findAvailablePort(); // 重新查找可用端口
                     try {
                         TimeUnit.MILLISECONDS.sleep(RETRY_DELAY_MILLIS);
                     } catch (InterruptedException interruptedException) {
                         Thread.currentThread().interrupt();
-                        return CompletableFuture.failedFuture(new IllegalStateException(
+                        serverStartFuture.completeExceptionally(new IllegalStateException(
                                 "Server startup interrupted during retry.", interruptedException));
+                        return serverStartFuture;
                     }
                 } else {
-                    return CompletableFuture.failedFuture(e);
+                    serverStartFuture.completeExceptionally(e);
+                    return serverStartFuture;
                 }
-            } catch (Exception e) {
-                return CompletableFuture.failedFuture(e);
             }
         }
-        return CompletableFuture.failedFuture(new RuntimeException(
+        serverStartFuture.completeExceptionally(new RuntimeException(
                 "Failed to start TenServer after " + MAX_RETRY_ATTEMPTS + " attempts due to port binding issues."));
-    }
-
-    private CompletableFuture<Void> tryStart() throws Exception {
-        log.info("TenServer starting on port {}", currentPort); // 日志更新
-
-        nettyMessageServer = new NettyMessageServer(currentPort, engine); // 传入统一端口
-
-        return nettyMessageServer.start().whenComplete((_, cause) -> {
-                if (cause == null) {
-                    currentPort = nettyMessageServer.getBoundPort();
-                    log.info("TenServer successfully started on port {}", currentPort); // 日志更新
-                    }
-                })
-                .exceptionally(e -> {
-                    log.error("TenServer failed to start.", e);
-                    throw new java.util.concurrent.CompletionException(e);
-                });
+        return serverStartFuture;
     }
 
     public CompletableFuture<Void> shutdown() {
         log.info("TenServer shutting down.");
-
-        CompletableFuture<Void> messageServerShutdownFuture = CompletableFuture.completedFuture(null);
-        if (nettyMessageServer != null) {
-            messageServerShutdownFuture = nettyMessageServer.shutdown();
+        CompletableFuture<Void> shutdownFuture = CompletableFuture.completedFuture(null);
+        if (channelFuture != null) {
+            shutdownFuture = channelFuture.channel().closeFuture().thenRun(() -> {
+                // Channel 关闭后，关闭 EventLoopGroup
+                if (bossGroup != null) {
+                    bossGroup.shutdownGracefully();
+                }
+                if (workerGroup != null) {
+                    workerGroup.shutdownGracefully();
+                }
+            }).exceptionally(e -> {
+                log.error("Error during channel close: {}", e.getMessage());
+                throw new CompletionException(e);
+            });
         }
-
-        return messageServerShutdownFuture
-                .exceptionally(e -> {
-                    log.error("TenServer shutdown encountered errors.", e);
-                    throw new java.util.concurrent.CompletionException(e);
-                });
+        return shutdownFuture;
     }
 
-    public int getPort() { // 统一获取端口的方法
+    public int getPort() {
         return currentPort;
     }
 }

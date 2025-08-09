@@ -26,8 +26,6 @@ import java.util.Map;
         @JsonSubTypes.Type(value = CloseAppCommand.class, name = "CMD_CLOSE_APP"),
         @JsonSubTypes.Type(value = TimerCommand.class, name = "CMD_TIMER"),
         @JsonSubTypes.Type(value = TimeoutCommand.class, name = "CMD_TIMEOUT"),
-        @JsonSubTypes.Type(value = AddExtensionToGraphCommand.class, name = "CMD_ADD_EXTENSION_TO_GRAPH"),
-        @JsonSubTypes.Type(value = RemoveExtensionFromGraphCommand.class, name = "CMD_REMOVE_EXTENSION_FROM_GRAPH"),
 })
 @JsonIgnoreProperties(ignoreUnknown = true)
 @Data

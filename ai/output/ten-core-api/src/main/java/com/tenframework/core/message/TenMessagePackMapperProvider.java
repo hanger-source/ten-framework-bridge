@@ -3,10 +3,9 @@ package com.tenframework.core.message;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.json.JsonMapper;
-import com.fasterxml.jackson.module.paramnames.ParameterNamesModule;
 import org.msgpack.jackson.dataformat.MessagePackFactory;
 
-import static com.tenframework.core.message.MessageUtils.TEN_MSGPACK_EXT_TYPE_MSG;
+import static com.tenframework.core.message.MessageConstants.TEN_MSGPACK_EXT_TYPE_MSG; // Changed import path
 
 /**
  * 提供统一配置的ObjectMapper实例，用于MsgPack序列化和反序列化。
@@ -25,7 +24,7 @@ public class TenMessagePackMapperProvider {
         // 示例：如果Message是具体类
 
         OBJECT_MAPPER = JsonMapper.builder(factory)
-                .addModule(new ParameterNamesModule())
+                // .addModule(new ParameterNamesModule()) // Removed ParameterNamesModule
                 .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS) // 可选：日期不转换为时间戳
                 .build();
     }
@@ -36,7 +35,7 @@ public class TenMessagePackMapperProvider {
 
     /**
      * 获取预配置的ObjectMapper实例。
-     * 
+     *
      * @return ObjectMapper实例
      */
     public static ObjectMapper getObjectMapper() {

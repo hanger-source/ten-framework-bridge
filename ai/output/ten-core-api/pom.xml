@@ -10,6 +10,19 @@
         <version>1.0.0-SNAPSHOT</version>
     </parent>
 
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <maven.compiler.source>21</maven.compiler.source>
+        <maven.compiler.target>21</maven.compiler.target>
+        <netty.version>4.1.112.Final</netty.version>
+        <slf4j.version>2.0.13</slf4j.version>
+        <lombok.version>1.18.36</lombok.version>
+        <agrona.version>1.18.0</agrona.version>
+        <msgpack.version>0.9.10</msgpack.version>
+        <mvel2.version>2.5.0.Final</mvel2.version>
+        <jackson.version>2.18.4</jackson.version> <!-- Updated Jackson version -->
+    </properties>
+
     <artifactId>ten-core-api</artifactId>
     <name>ten-core-api</name>
     <description>核心API定义，包含消息系统、位置定位、基础接口等</description>
@@ -68,7 +81,7 @@
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
-            <version>1.18.36</version> <!-- 更新版本到1.18.36 -->
+            <version>${lombok.version}</version> <!-- 更新版本到1.18.36 -->
             <scope>provided</scope>
         </dependency>
 
@@ -82,19 +95,19 @@
         <dependency>
             <groupId>org.msgpack</groupId>
             <artifactId>msgpack-core</artifactId>
-            <version>0.9.10</version>
+            <version>${msgpack.version}</version>
         </dependency>
         <dependency>
             <groupId>org.msgpack</groupId>
             <artifactId>jackson-dataformat-msgpack</artifactId>
-            <version>0.9.10</version>
+            <version>${msgpack.version}</version>
         </dependency>
 
         <!-- MVEL Expression Language -->
         <dependency>
             <groupId>org.mvel</groupId>
             <artifactId>mvel2</artifactId>
-            <version>2.5.0.Final</version> <!-- 使用最新稳定版本 -->
+            <version>${mvel2.version}</version> <!-- 使用最新稳定版本 -->
         </dependency>
 
         <!-- 测试依赖 -->
@@ -113,7 +126,7 @@
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-simple</artifactId>
-            <version>2.0.13</version> <!-- 使用与slf4j-api兼容的版本 -->
+            <version>${slf4j.version}</version> <!-- 使用与slf4j-api兼容的版本 -->
             <scope>test</scope>
         </dependency>
 
@@ -143,7 +156,7 @@
                     <target>21</target>
                     <forceJavacCompilerUse>true</forceJavacCompilerUse>
                     <compilerArgs>
-                        <arg>--enable-preview</arg> <!-- 重新启用预览功能 -->
+                        <arg>--enable-preview</arg>
                         <arg>--add-opens</arg>
                         <arg>java.base/jdk.internal.misc=ALL-UNNAMED</arg>
                         <arg>--add-opens</arg>
@@ -153,7 +166,7 @@
                         <path>
                             <groupId>org.projectlombok</groupId>
                             <artifactId>lombok</artifactId>
-                            <version>1.18.36</version> <!-- 更新版本到1.18.36 -->
+                            <version>${lombok.version}</version> <!-- 更新版本到1.18.36 -->
                         </path>
                     </annotationProcessorPaths>
                 </configuration>
@@ -163,8 +176,8 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.5.2</version>
                 <configuration>
-                    <argLine>--enable-preview --add-opens
-                        java.base/jdk.internal.misc=ALL-UNNAMED --add-opens
+                    <argLine>--enable-preview --add-opens java.base/jdk.internal.misc=ALL-UNNAMED
+                        --add-opens
                         java.base/java.util.zip=ALL-UNNAMED</argLine>
                 </configuration>
             </plugin>

@@ -4,112 +4,108 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
-import com.tenframework.core.message.command.AddExtensionToGraphCommand;
 import com.tenframework.core.message.command.CloseAppCommand;
+import com.tenframework.core.message.command.Command;
 import com.tenframework.core.message.command.StartGraphCommand;
 import com.tenframework.core.message.command.StopGraphCommand;
 import com.tenframework.core.message.command.TimerCommand;
 import com.tenframework.core.message.command.TimeoutCommand;
-import com.tenframework.core.message.command.RemoveExtensionFromGraphCommand;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import com.tenframework.core.util.MessageUtils;
+import lombok.Getter;
+import lombok.Setter;
+import lombok.ToString;
 import lombok.experimental.Accessors;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 /**
- * 所有消息类型的抽象基类，对齐C/Python中的ten_msg_t结构体。
- * 定义了消息的基本属性，并通过Jackson注解支持多态序列化/反序列化。
+ * `Message` 是 Ten 框架中所有通信数据的基础抽象类。
+ * 它定义了消息的通用结构，包括唯一ID、类型、源位置、目的位置以及可选的名称和属性。
+ * 通过 `@JsonTypeInfo` 和 `@JsonSubTypes` 实现多态序列化和反序列化。
  */
-@JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "type")
+@JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY, property = "type")
 @JsonSubTypes({
-                @JsonSubTypes.Type(value = CommandResult.class, name = "CMD_RESULT"),
-                @JsonSubTypes.Type(value = DataMessage.class, name = "DATA_MESSAGE"),
-                @JsonSubTypes.Type(value = VideoFrameMessage.class, name = "VIDEO_FRAME"),
-                @JsonSubTypes.Type(value = AudioFrameMessage.class, name = "AUDIO_FRAME"),
+                @JsonSubTypes.Type(value = Command.class, name = "CMD"), // 通用命令类型
+                @JsonSubTypes.Type(value = CommandResult.class, name = "CMD_RESULT"), // 命令结果
+                @JsonSubTypes.Type(value = DataMessage.class, name = "DATA"), // 数据消息
+                @JsonSubTypes.Type(value = VideoFrameMessage.class, name = "VIDEO_FRAME"), // 视频帧
+                @JsonSubTypes.Type(value = AudioFrameMessage.class, name = "AUDIO_FRAME"), // 音频帧
+                // 具体命令类型，这些命令的名称需要在 Command 类中单独指定
                 @JsonSubTypes.Type(value = CloseAppCommand.class, name = "CMD_CLOSE_APP"),
                 @JsonSubTypes.Type(value = StartGraphCommand.class, name = "CMD_START_GRAPH"),
                 @JsonSubTypes.Type(value = StopGraphCommand.class, name = "CMD_STOP_GRAPH"),
                 @JsonSubTypes.Type(value = TimerCommand.class, name = "CMD_TIMER"),
-                @JsonSubTypes.Type(value = TimeoutCommand.class, name = "CMD_TIMEOUT"),
-                @JsonSubTypes.Type(value = AddExtensionToGraphCommand.class, name = "CMD_ADD_EXTENSION_TO_GRAPH"),
-                @JsonSubTypes.Type(value = RemoveExtensionFromGraphCommand.class, name = "CMD_REMOVE_EXTENSION_FROM_GRAPH"),
+                @JsonSubTypes.Type(value = TimeoutCommand.class, name = "CMD_TIMEOUT")
 })
-@JsonIgnoreProperties(ignoreUnknown = true) // 忽略未知字段，增加兼容性
-@Data // Lombok 注解
-@NoArgsConstructor // 需要默认构造函数供Jackson使用
-@Accessors(chain = true) // 允许链式设置
+@JsonIgnoreProperties(ignoreUnknown = true) // 忽略 JSON 中不存在于类中的字段
+@Getter
+@Setter
+@Accessors(chain = true) // 启用链式设置器
+@ToString(exclude = { "data" }) // 排除 data 字段，因为它可能很大
 public abstract class Message {
 
-        @JsonProperty("type")
-        protected MessageType type;
+        @JsonProperty("id") // 消息的唯一标识符
+        private String id;
 
-        @JsonProperty("id")
-        protected String id;
+        @JsonProperty("type") // 消息类型
+        private MessageType type;
 
-        @JsonProperty("src_loc")
-        protected Location srcLoc;
+        @JsonProperty("src_loc") // 消息的源位置
+        private Location srcLoc;
 
-        @JsonProperty("dest_locs")
-        protected List<Location> destLocs;
+        @JsonProperty("dest_locs") // 消息的目的位置列表
+        private List<Location> destLocs;
 
-        @JsonProperty("properties")
-        protected Map<String, Object> properties;
+        @JsonProperty("name") // 消息名称 (可选，用于路由或语义)
+        private String name;
 
-        @JsonProperty("timestamp")
-        protected long timestamp;
+        @JsonProperty("properties") // 消息的附加属性 (可选)f
+        private Map<String, Object> properties;
 
-        // 全参构造函数，方便子类调用
-        public Message(String id, Location srcLoc, MessageType type, List<Location> destLocs,
+        @JsonProperty("timestamp") // 时间戳
+        private long timestamp;
+
+        // 构造函数
+        public Message() {
+                this.id = MessageUtils.generateUniqueId();
+                this.type = MessageType.INVALID;
+                this.srcLoc = new Location();
+                this.destLocs = Collections.emptyList();
+                this.name = "";
+                this.properties = new HashMap<>();
+                this.timestamp = System.currentTimeMillis();
+        }
+
+        public Message(String id, MessageType type, Location srcLoc, List<Location> destLocs, String name,
                         Map<String, Object> properties, long timestamp) {
                 this.id = id;
-                this.srcLoc = srcLoc;
                 this.type = type;
+                this.srcLoc = srcLoc;
                 this.destLocs = destLocs;
-                this.properties = properties;
+                this.name = name;
+                this.properties = properties != null ? properties : new HashMap<>();
                 this.timestamp = timestamp;
         }
 
-        // 保护性构造函数，供 Lombok @NoArgsConstructor 之外的初始化使用
-        protected Message(MessageType type, Location srcLoc, List<Location> destLocs) {
-                this.type = type;
-                this.srcLoc = srcLoc;
-                this.destLocs = destLocs;
-                this.id = UUID.randomUUID().toString(); // 生成 UUID
-                this.properties = new HashMap<>(); // 初始化 properties Map
-                this.timestamp = System.currentTimeMillis(); // 设置时间戳
+        // Overloaded constructors to match previous usage
+        public Message(String id, MessageType type, Location srcLoc, List<Location> destLocs, String name,
+                        Map<String, Object> properties) {
+                this(id, type, srcLoc, destLocs, name, properties, System.currentTimeMillis());
         }
 
-        // Getters (Lombok 会生成，但为了清晰性，这里保留部分关键 Getter)
-        public String getId() {
-                return id;
+        public Message(String id, MessageType type, Location srcLoc, List<Location> destLocs,
+                        Map<String, Object> properties) {
+                this(id, type, srcLoc, destLocs, null, properties, System.currentTimeMillis());
         }
 
-        public MessageType getType() {
-                return type;
+        public Message(String id, MessageType type, Location srcLoc, List<Location> destLocs, String name) {
+                this(id, type, srcLoc, destLocs, name, null, System.currentTimeMillis());
         }
 
-        public Location getSrcLoc() {
-                return srcLoc;
-        }
-
-        public List<Location> getDestLocs() {
-                return destLocs;
-        }
-
-        public Map<String, Object> getProperties() {
-                return properties;
-        }
-
-        public long getTimestamp() {
-                return timestamp;
-        }
-
-        // Setters (Lombok 会生成，但为了清晰性，这里保留部分关键 Setter)
-        public void setProperties(Map<String, Object> properties) {
-                this.properties = properties;
+        public Message(String id, MessageType type, Location srcLoc, List<Location> destLocs) {
+                this(id, type, srcLoc, destLocs, null, null, System.currentTimeMillis());
         }
 }

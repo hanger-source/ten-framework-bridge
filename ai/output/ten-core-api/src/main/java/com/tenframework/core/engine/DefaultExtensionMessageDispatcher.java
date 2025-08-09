@@ -13,8 +13,6 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentMap;
 
-import static com.tenframework.core.message.MessageType.*;
-
 /**
  * `DefaultExtensionMessageDispatcher` 是 `ExtensionMessageDispatcher` 接口的默认实现。
  * 它负责将消息从 `Engine` 派发到相应的 `Extension` 实例。
@@ -51,15 +49,8 @@ public class DefaultExtensionMessageDispatcher implements ExtensionMessageDispat
 
         if (targetLocations.isEmpty()) {
             log.warn("DefaultExtensionMessageDispatcher: 消息 {} 没有明确的 Extension 目的地，无法派发。", message.getId());
-            // 对于命令，如果没有目的地，可能需要返回错误结果
-            if (message instanceof Command) {
-                Command command = (Command) message;
-                if (commandFutures.containsKey(Long.parseLong(command.getId()))) {
-                    CompletableFuture<Object> future = commandFutures.get(Long.parseLong(command.getId()));
-                    future.completeExceptionally(new RuntimeException("Command has no valid destination."));
-                    commandFutures.remove(Long.parseLong(command.getId()));
-                }
-            }
+            // 对于命令，如果没有目的地，可能需要返回错误结果。
+            // 但这部分逻辑现在应该在 Engine.processMessage 中处理，这里只作为最后的警告。
             return;
         }
 
@@ -93,6 +84,7 @@ public class DefaultExtensionMessageDispatcher implements ExtensionMessageDispat
                 log.error("DefaultExtensionMessageDispatcher: 派发消息 {} 到 Extension {} 失败: {}",
                         message.getId(), targetLocation.getNodeId(), e.getMessage(), e);
                 // 对于命令，如果派发失败，应该使对应的 CompletableFuture 失败
+                // 这部分逻辑现在也主要由 Engine.processMessage 负责，这里作为兜底。
                 if (message instanceof Command) {
                     Command command = (Command) message;
                     long commandId = Long.parseLong(command.getId());

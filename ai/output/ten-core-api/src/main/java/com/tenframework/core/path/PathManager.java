@@ -226,60 +226,17 @@ public class PathManager {
             log.debug("PathManager: 命令结果已回溯: originalCommandId={}, parentCommandId={}",
                     commandResult.getCommandId(), pathOut.getParentCommandId());
         }
-        // 移除旧的 ClientConnectionExtension 路由逻辑
-        // else if (commandResult.getProperties() != null
-        // &&
-        // commandResult.getProperties().containsKey(MessageConstants.PROPERTY_CLIENT_CHANNEL_ID))
-        // {
-        // String clientChannelId =
-        // commandResult.getProperty(MessageConstants.PROPERTY_CLIENT_CHANNEL_ID,
-        // String.class);
-        // String clientLocationUri =
-        // commandResult.getProperty(MessageConstants.PROPERTY_CLIENT_LOCATION_URI,
-        // String.class);
-        // String clientAppUri =
-        // commandResult.getProperty(MessageConstants.PROPERTY_CLIENT_APP_URI,
-        // String.class);
-        // String clientGraphId =
-        // commandResult.getProperty(MessageConstants.PROPERTY_CLIENT_GRAPH_ID,
-        // String.class);
-
-        // Location clientLoc = null;
-        // if (clientLocationUri != null && clientAppUri != null && clientGraphId !=
-        // null) {
-        // clientLoc = Location.builder()
-        // .appUri(clientAppUri)
-        // .graphId(clientGraphId)
-        // .extensionName(ClientConnectionExtension.NAME)
-        // .build();
-        // }
-
-        // if (clientLoc != null) {
-        // commandResult.setDestinationLocations(List.of(clientLoc));
-        // } else {
-        // commandResult.setDestinationLocations(List.of(Location.builder()
-        // .appUri("system-app")
-        // .graphId("system-graph")
-        // .extensionName(ClientConnectionExtension.NAME)
-        // .build()));
-        // }
-
-        // messageSubmitter.submitMessage(commandResult);
-        // log.debug("PathManager: 根命令结果路由到ClientConnectionExtension. ChannelId: {},
-        // Result: {}",
-        // clientChannelId, commandResult);
-        // }
 
         removeOutPath(pathOut.getCommandId());
     }
 
-    /**
-     * 移除 handleChannelDisconnected 方法，因为 Channel 管理和清理现在由 App/Connection 层负责。
-     * / **
-     * * 处理连接断开事件，清理与该Channel相关的PathOut和DataInPath
-     * *
-     * * @param channelId 断开连接的Channel ID
-     * / **
+    // 移除 handleChannelDisconnected 方法，因为 Channel 管理和清理现在由 App/Connection 层负责。
+    /*
+     * 处理连接断开事件，清理与该Channel相关的PathOut和DataInPath
+     *
+     * @param channelId 断开连接的Channel ID
+     */
+    /*
      * public void handleChannelDisconnected(String channelId) {
      * if (channelId == null || channelId.isEmpty()) {
      * log.warn("PathManager: 尝试处理空的或无效的Channel ID断开事件");

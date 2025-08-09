@@ -1,6 +1,21 @@
 package com.tenframework.core.app;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.tenframework.core.command.app.AppCommandHandler;
+import com.tenframework.core.command.app.CloseAppCommandHandler;
+import com.tenframework.core.command.app.StartGraphCommandHandler;
+import com.tenframework.core.command.app.StopGraphCommandHandler;
 import com.tenframework.core.connection.Connection;
 import com.tenframework.core.engine.Engine;
 import com.tenframework.core.extension.Extension;
@@ -10,29 +25,14 @@ import com.tenframework.core.graph.PredefinedGraphEntry;
 import com.tenframework.core.message.CommandResult;
 import com.tenframework.core.message.Location;
 import com.tenframework.core.message.Message;
-import com.tenframework.core.message.MessageConstants;
 import com.tenframework.core.message.MessageType;
 import com.tenframework.core.message.command.Command;
 import com.tenframework.core.message.command.StartGraphCommand;
-import com.tenframework.core.path.PathTable;
 import com.tenframework.core.remote.Remote;
 import com.tenframework.core.runloop.Runloop;
 import com.tenframework.core.util.MessageUtils;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-
-import java.io.File;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.stream.Collectors;
 
 /**
  * App 类作为 Ten 框架的顶层容器和协调器。
@@ -40,25 +40,25 @@ import java.util.stream.Collectors;
  * 对应 C 语言中的 ten_app_t 结构体。
  */
 @Slf4j
-public class App implements MessageReceiver, CommandReceiver, Runnable {
+@Getter
+public class App implements MessageReceiver, Runnable {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
-
-    @Getter
-    private String appUri;
-    private Runloop appRunloop;
     private final Map<String, Engine> engines; // 管理所有活跃的 Engine 实例，key 为 graphId
     private final List<Connection> orphanConnections; // 尚未绑定到 Engine 的连接
-    private final PathTable pathTable; // App 级别的 PathTable
+    // private final PathTable pathTable; // App 级别 PathTable - 移除 App 级别 PathTable
     private final Map<String, Remote> remotes; // 外部远程连接 (跨 App/Engine 通信)
-
     private final boolean hasOwnRunloopPerEngine; // 每个 Engine 是否有自己的 Runloop
-
+    // 新增：Extension 注册机制
+    private final Map<String, Class<? extends Extension>> availableExtensions;
+    private String appUri;
+    private Runloop appRunloop;
     private GraphConfig appConfig; // 新增：App 的整体配置，对应 property.json
     // 新增：预定义图的映射，方便通过名称查找
     private Map<String, PredefinedGraphEntry> predefinedGraphsByName;
-    // 新增：Extension 注册机制
-    private final Map<String, Class<? extends Extension>> availableExtensions;
+
+    // 新增：App 级别的命令处理器映射
+    private final Map<MessageType, AppCommandHandler> appCommandHandlers;
 
     /**
      * App 的构造函数。
@@ -70,21 +70,24 @@ public class App implements MessageReceiver, CommandReceiver, Runnable {
     public App(String appUri, boolean hasOwnRunloopPerEngine, String configFilePath) {
         this.appUri = appUri;
         this.hasOwnRunloopPerEngine = hasOwnRunloopPerEngine;
-        this.engines = new ConcurrentHashMap<>();
-        this.orphanConnections = Collections.synchronizedList(new java.util.ArrayList<>());
-        this.pathTable = new PathTable(); // App 级别 PathTable
-        this.remotes = new ConcurrentHashMap<>(); // 初始化远程连接映射
-        this.availableExtensions = new ConcurrentHashMap<>(); // 初始化 Extension 注册表
+        engines = new ConcurrentHashMap<>();
+        orphanConnections = Collections.synchronizedList(new java.util.ArrayList<>());
+        // this.pathTable = new PathTable(); // App 级别 PathTable - 移除 App 级别 PathTable
+        remotes = new ConcurrentHashMap<>(); // 初始化远程连接映射
+        availableExtensions = new ConcurrentHashMap<>(); // 初始化 Extension 注册表
 
         // 加载配置
         if (configFilePath != null && !configFilePath.isEmpty()) {
             loadConfig(configFilePath);
         } else {
-            this.appConfig = new GraphConfig(); // 创建一个空的默认配置
+            appConfig = new GraphConfig(); // 创建一个空的默认配置
             log.warn("App: 未提供配置文件路径，使用默认空配置。");
         }
 
-        this.appRunloop = new Runloop("AppRunloop-" + appUri);
+        appRunloop = new Runloop("AppRunloop-" + appUri);
+
+        appCommandHandlers = new HashMap<>(); // 初始化 App 命令处理器映射
+        registerAppCommandHandlers(); // 注册 App 级别的命令处理器
 
         log.info("App {} created with hasOwnRunloopPerEngine={}", appUri, hasOwnRunloopPerEngine);
     }
@@ -99,27 +102,37 @@ public class App implements MessageReceiver, CommandReceiver, Runnable {
     public App(String appUri, boolean hasOwnRunloopPerEngine, GraphConfig appConfig) {
         this.appUri = appUri;
         this.hasOwnRunloopPerEngine = hasOwnRunloopPerEngine;
-        this.engines = new ConcurrentHashMap<>();
-        this.orphanConnections = Collections.synchronizedList(new java.util.ArrayList<>());
-        this.pathTable = new PathTable(); // App 级别 PathTable
-        this.remotes = new ConcurrentHashMap<>(); // 初始化远程连接映射
-        this.availableExtensions = new ConcurrentHashMap<>(); // 初始化 Extension 注册表
+        engines = new ConcurrentHashMap<>();
+        orphanConnections = Collections.synchronizedList(new java.util.ArrayList<>());
+        // this.pathTable = new PathTable(); // App 级别 PathTable - 移除 App 级别 PathTable
+        remotes = new ConcurrentHashMap<>(); // 初始化远程连接映射
+        availableExtensions = new ConcurrentHashMap<>(); // 初始化 Extension 注册表
 
         this.appConfig = appConfig != null ? appConfig : new GraphConfig(); // 使用传入的配置或默认空配置
-        this.appRunloop = new Runloop("AppRunloop-" + appUri);
+        appRunloop = new Runloop("AppRunloop-" + appUri);
+
+        appCommandHandlers = new HashMap<>(); // 初始化 App 命令处理器映射
+        registerAppCommandHandlers(); // 注册 App 级别的命令处理器
 
         log.info("App {} created with hasOwnRunloopPerEngine={}", appUri, hasOwnRunloopPerEngine);
+    }
+
+    private void registerAppCommandHandlers() {
+        // 注册所有 App 级别的命令处理器
+        appCommandHandlers.put(MessageType.CMD_START_GRAPH, new StartGraphCommandHandler());
+        appCommandHandlers.put(MessageType.CMD_STOP_GRAPH, new StopGraphCommandHandler());
+        appCommandHandlers.put(MessageType.CMD_CLOSE_APP, new CloseAppCommandHandler());
     }
 
     // 私有方法：加载配置文件
     private void loadConfig(String configFilePath) {
         try {
             String jsonContent = Files.readString(Paths.get(configFilePath));
-            this.appConfig = OBJECT_MAPPER.readValue(jsonContent, GraphConfig.class);
+            appConfig = OBJECT_MAPPER.readValue(jsonContent, GraphConfig.class);
             log.info("App: 从 {} 加载配置成功。", configFilePath);
         } catch (IOException e) {
             log.error("App: 加载配置文件 {} 失败: {}", configFilePath, e.getMessage());
-            this.appConfig = new GraphConfig(); // 加载失败时使用空配置
+            appConfig = new GraphConfig(); // 加载失败时使用空配置
         }
     }
 
@@ -220,96 +233,36 @@ public class App implements MessageReceiver, CommandReceiver, Runnable {
         log.debug("App: 接收到入站消息: ID={}, Type={}, Src={}", message.getId(), message.getType(),
                 message.getSourceLocation());
         appRunloop.postTask(() -> {
-            if (message.getType() == MessageType.CMD_START_GRAPH) {
-                StartGraphCommand startCmd = (StartGraphCommand) message;
-                handleStartGraphCommand(startCmd, connection);
-            } else if (message.getDestLocs() != null && !message.getDestLocs().isEmpty()) {
-                // 对于所有其他消息，尝试路由到目标 Engine 或 Remote
-                routeMessageToDestination(message, connection);
-            } else {
-                log.warn("App: 消息 {} (Type: {}) 没有目的地，无法处理。", message.getId(), message.getType());
+            if (message instanceof Command) {
+                Command command = (Command) message;
+                AppCommandHandler handler = appCommandHandlers.get(command.getType());
+                if (handler != null) {
+                    try {
+                        handler.handle(this, command, connection);
+                    } catch (Exception e) {
+                        log.error("App {}: 命令处理器处理命令 {} 失败: {}", appUri, command.getId(), e.getMessage(), e);
+                        if (connection != null) {
+                            CommandResult errorResult = CommandResult.fail(command.getId(),
+                                    "App command handling failed: " + e.getMessage());
+                            connection.sendOutboundMessage(errorResult);
+                        }
+                    }
+                } else {
+                    log.warn("App {}: 未知 App 级别命令类型或没有注册处理器: {}", appUri, command.getType());
+                    if (connection != null) {
+                        CommandResult errorResult = CommandResult.fail(command.getId(),
+                                "Unknown App command type or no handler registered: " + command.getType());
+                        connection.sendOutboundMessage(errorResult);
+                    }
+                }
+            } else { // 对于非命令消息，尝试路由到目标 Engine 或 Remote
+                if (message.getDestLocs() != null && !message.getDestLocs().isEmpty()) {
+                    routeMessageToDestination(message, connection);
+                } else {
+                    log.warn("App: 消息 {} (Type: {}) 没有目的地，无法处理。", message.getId(), message.getType());
+                }
             }
         });
-    }
-
-    /**
-     * 处理传入的命令消息。
-     *
-     * @param command 传入的命令消息。
-     * @return 命令处理结果的 CompletableFuture。
-     */
-    @Override
-    public Object handleCommand(Command command) {
-        // App 级别的命令处理，例如处理 App 本身的配置命令
-        log.info("App: 收到命令: {}", command.getName());
-        appRunloop.postTask(() -> routeMessageToDestination(command, null)); // 命令也通过路由机制处理
-        return CommandResult.success(command.getId(), Map.of("app_response", "Command received by App."));
-    }
-
-    /**
-     * 处理 StartGraphCommand。
-     *
-     * @param command    StartGraphCommand。
-     * @param connection 发送此命令的连接，可能为 null。
-     */
-    private void handleStartGraphCommand(StartGraphCommand command, Connection connection) {
-        String targetGraphId = command.getGraphId(); // 从命令中获取目标 graphId
-
-        // 优先从预定义图中查找 GraphDefinition
-        GraphDefinition graphDefinition = null;
-        if (targetGraphId != null && predefinedGraphsByName.containsKey(targetGraphId)) {
-            graphDefinition = predefinedGraphsByName.get(targetGraphId).getGraphDefinition();
-            log.info("App: 从预定义图中找到 GraphDefinition (graphId: {})。", targetGraphId);
-        } else if (command.getGraphJsonDefinition() != null) {
-            // 如果命令中包含 JSON 定义，则解析它
-            graphDefinition = new GraphDefinition(appUri, command.getGraphJsonDefinition());
-            log.info("App: 从 StartGraphCommand 中解析 GraphDefinition (graphId: {})。", graphDefinition.getGraphId());
-        }
-
-        if (graphDefinition == null) {
-            log.error("App: 无法获取 GraphDefinition，无法启动 Engine。StartGraphCommand ID: {}", command.getId());
-            // 返回错误结果
-            if (connection != null) {
-                CommandResult errorResult = CommandResult.fail(command.getId(), "Failed to get GraphDefinition.");
-                connection.sendOutboundMessage(errorResult);
-            }
-            return;
-        }
-
-        String actualGraphId = graphDefinition.getGraphId(); // 确保使用解析后的 graphId
-
-        Engine engine = engines.get(actualGraphId);
-        if (engine == null) {
-            log.info("App: 创建新的 Engine 实例，Graph ID: {}", actualGraphId);
-            engine = new Engine(this, actualGraphId, graphDefinition, hasOwnRunloopPerEngine, availableExtensions);
-            engines.put(actualGraphId, engine);
-            engine.start(); // 启动 Engine 及其 Runloop
-            log.info("App: Engine {} 已启动。", actualGraphId);
-        } else {
-            log.info("App: Engine {} 已存在，重用现有实例。", actualGraphId);
-        }
-
-        // 迁移 Connection 到 Engine
-        if (connection != null) {
-            if (orphanConnections.remove(connection)) {
-                log.info("App: 孤立连接 {} (Channel ID: {}) 已从孤立列表中移除。", connection.getRemoteAddress(),
-                        connection.getChannel().id().asShortText());
-            }
-            log.info("App: 正在将连接 {} 迁移到 Engine {}。", connection.getRemoteAddress(), actualGraphId);
-            connection.migrate(engine.getEngineRunloop(), new Location().setAppUri(appUri).setGraphId(actualGraphId)
-                    .setNodeId(MessageConstants.NODE_ID_CLIENT_CONNECTION)); // 迁移到 Engine 的 Runloop
-            // 在连接迁移成功后，Engine 会处理连接的后续消息
-            log.info("App: 连接 {} 已成功迁移到 Engine {}.", connection.getRemoteAddress(), actualGraphId);
-
-            // 返回成功的 CommandResult 给发起方
-            CommandResult successResult = CommandResult.success(command.getId(),
-                    Map.of("graph_id", actualGraphId, "message", "Engine started and connection migrated."));
-            connection.sendOutboundMessage(successResult);
-            log.info("App: 发送 StartGraphCommand 成功结果给连接 {}。", connection.getRemoteAddress());
-        } else {
-            // 如果没有连接 (例如是内部自动启动的图)
-            log.info("App: StartGraphCommand {} 处理完成，Engine {} 已启动。", command.getId(), actualGraphId);
-        }
     }
 
     /**
@@ -346,22 +299,16 @@ public class App implements MessageReceiver, CommandReceiver, Runnable {
                         Engine targetEngine = engines.get(destLoc.getGraphId());
                         if (targetEngine != null) {
                             log.debug("App: 路由消息 {} 到 Engine {}。", message.getId(), destLoc.getGraphId());
-                            targetEngine.handleInboundMessage(message);
+                            targetEngine.handleInboundMessage(message); // Engine 的 processMessage 已经处理了命令分发
                         } else {
                             log.warn("App: 目标 Engine {} 不存在，消息 {} 无法路由。", destLoc.getGraphId(), message.getId());
                         }
-                    } else {
-                        // 目标是 App 本身，但没有指定 Engine，或者 App 本身需要处理
-                        log.debug("App: 消息 {} 目标 App 本身。", message.getId());
-                        // TODO: App 自身处理消息的逻辑 (如果需要)
                     }
                 } else {
                     // 目标是外部 App/Remote
                     String remoteId = destLoc.getAppUri(); // 使用 App URI 作为 Remote ID
                     Remote targetRemote = remotes.get(remoteId);
                     if (targetRemote == null) {
-                        // TODO: 根据 remoteId (App URI) 创建或获取 Remote 实例
-                        // 这可能需要一个 RemoteFactory，或从 App 配置中读取 Remote 定义
                         log.warn("App: 目标 Remote {} (App URI) 不存在，消息 {} 无法路由。需要实现 Remote 的创建。", remoteId,
                                 message.getId());
                         // 暂时发送回源连接，表示无法路由
@@ -400,22 +347,13 @@ public class App implements MessageReceiver, CommandReceiver, Runnable {
                         targetEngine.handleInboundMessage(message); // 路由到对应的 Engine
                     } else {
                         log.warn("App: 目标 Engine {} 不存在，无法路由消息 {}。", destLoc.getGraphId(), message.getId());
-                        // TODO: 处理路由失败，例如返回错误消息
                     }
-                } else {
-                    // 目标是 App 本身，没有指定 Engine
-                    log.debug("App: 消息 {} 目标是 App 本身。", message.getId());
-                    // 如果 App 需要处理特定消息，可以在这里添加逻辑
                 }
             } else { // 目标是其他 App/远程
                 String remoteAppUri = destLoc.getAppUri();
                 Remote remote = remotes.get(remoteAppUri);
                 if (remote == null) {
-                    // 尝试创建 Remote，如果需要
                     log.warn("App: 目标远程 App URI {} 不存在 Remote 实例，消息 {} 无法路由。", remoteAppUri, message.getId());
-                    // TODO: 创建 Remote 实例并存储
-                } else {
-                    remote.sendOutboundMessage(message); // 通过 Remote 发送
                 }
             }
         }
