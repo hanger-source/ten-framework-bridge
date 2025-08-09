@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -25,6 +26,8 @@ import com.tenframework.core.message.Location;
 import com.tenframework.core.message.MessageType;
 import com.tenframework.core.message.VideoFrameMessage;
 import com.tenframework.core.message.command.Command;
+import com.tenframework.core.util.JsonUtils;
+import com.tenframework.core.util.MessageUtils;
 import lombok.Builder;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
@@ -63,23 +66,17 @@ public abstract class AbstractLLMExtension implements Extension {
     private final AtomicBoolean interrupted = new AtomicBoolean(false);
 
     // 性能监控 (简化或移除，因为 metrics 包不存在)
-    // private final ExtensionMetrics metrics; // TODO: Metrics integration needs to
-    // be re-evaluated.
     private final ObjectMapper objectMapper = new ObjectMapper(); // 用于 JSON 解析
 
     public AbstractLLMExtension() {
         this.processingQueue = new LinkedBlockingQueue<>();
         this.processingExecutor = Executors.newVirtualThreadPerTaskExecutor();
-        // this.metrics = new ExtensionMetrics("AbstractLLMExtension"); // TODO: Metrics
-        // integration needs to be re-evaluated.
     }
 
     @Override
     public void onConfigure(AsyncExtensionEnv env) {
         this.extensionName = env.getExtensionName();
         this.context = env;
-        // this.metrics.setExtensionContext(env); // TODO: Metrics integration needs to
-        // be re-evaluated.
         log.info("LLM扩展配置阶段: extensionName={}", extensionName);
         onLLMConfigure(env);
     }
@@ -139,16 +136,10 @@ public abstract class AbstractLLMExtension implements Extension {
         long startTime = System.currentTimeMillis();
         try {
             handleLLMCommand(command, env);
-            // metrics.recordCommand(); // TODO: Metrics integration needs to be
-            // re-evaluated.
             long duration = System.currentTimeMillis() - startTime;
-            // metrics.recordConfigure(duration); // TODO: Metrics integration needs to be
-            // re-evaluated.
         } catch (Exception e) {
             log.error("LLM扩展命令处理异常: extensionName={}, commandName={}",
                     extensionName, command.getName(), e);
-            // metrics.recordCommandError(e.getMessage()); // TODO: Metrics integration
-            // needs to be re-evaluated.
             sendErrorResult(command, env, "LLM命令处理异常: " + e.getMessage());
         }
     }
@@ -169,19 +160,11 @@ public abstract class AbstractLLMExtension implements Extension {
             if (!queued) {
                 log.warn("LLM处理队列已满，丢弃数据: extensionName={}, dataId={}",
                         extensionName, data.getId());
-                // metrics.recordDataError("处理队列已满"); // TODO: Metrics integration needs to be
-                // re-evaluated.
-            } else {
-                // metrics.recordData(); // TODO: Metrics integration needs to be re-evaluated.
             }
             long duration = System.currentTimeMillis() - startTime;
-            // metrics.recordConfigure(duration); // TODO: Metrics integration needs to be
-            // re-evaluated.
         } catch (Exception e) {
             log.error("LLM扩展数据处理异常: extensionName={}, dataId={}",
                     extensionName, data.getId(), e);
-            // metrics.recordDataError(e.getMessage()); // TODO: Metrics integration needs
-            // to be re-evaluated.
         }
     }
 
@@ -193,9 +176,6 @@ public abstract class AbstractLLMExtension implements Extension {
             return;
         }
 
-        // LLM通常不直接处理音频帧，但可以记录
-        // metrics.recordAudioFrame(); // TODO: Metrics integration needs to be
-        // re-evaluated.
         log.debug("LLM扩展收到音频帧: extensionName={}, frameId={}",
                 extensionName, audioFrame.getId());
     }
@@ -208,11 +188,14 @@ public abstract class AbstractLLMExtension implements Extension {
             return;
         }
 
-        // LLM通常不直接处理视频帧，但可以记录
-        // metrics.recordVideoFrame(); // TODO: Metrics integration needs to be
-        // re-evaluated.
         log.debug("LLM扩展收到视频帧: extensionName={}, frameId={}",
                 extensionName, videoFrame.getId());
+    }
+
+    @Override
+    public void onCommandResult(CommandResult commandResult, AsyncExtensionEnv env) {
+        log.warn("LLM扩展收到未处理的 CommandResult: {}. OriginalCommandId: {}", extensionName,
+                commandResult.getId(), commandResult.getOriginalCommandId());
     }
 
     /**
@@ -269,14 +252,10 @@ public abstract class AbstractLLMExtension implements Extension {
                 }
 
                 long startTime = System.currentTimeMillis();
-                onDataChatCompletion(item.data, context); // 修正为 item.data
+                onDataChatCompletion(item.data, context);
                 long duration = System.currentTimeMillis() - startTime;
-                // metrics.recordConfigure(duration); // TODO: Metrics integration needs to be
-                // re-evaluated.
             } catch (Exception e) {
                 log.error("LLM数据处理异常: extensionName={}", extensionName, e);
-                // metrics.recordDataError(e.getMessage()); // TODO: Metrics integration needs
-                // to be re-evaluated.
             }
         }
     }
@@ -351,8 +330,6 @@ public abstract class AbstractLLMExtension implements Extension {
                     onCallChatCompletion(args, context);
                 } catch (Exception e) {
                     log.error("LLM聊天完成调用异常: extensionName={}", extensionName, e);
-                    // metrics.recordCommandError(e.getMessage()); // TODO: Metrics integration
-                    // needs to be re-evaluated.
                 }
             }, context.getVirtualThreadExecutor());
 
@@ -391,10 +368,9 @@ public abstract class AbstractLLMExtension implements Extension {
      */
     protected void sendTextOutput(AsyncExtensionEnv context, String text, boolean endOfSegment) {
         try {
-            // DataMessage 没有静态 text() 方法，直接构造
             DataMessage outputData = new DataMessage(
                     java.util.UUID.randomUUID().toString(), // id
-                    MessageType.DATA_MESSAGE, // type
+                    MessageType.DATA, // type
                     new Location().setAppUri(context.getAppUri()).setGraphId(context.getGraphId())
                             .setNodeId(extensionName), // srcLoc
                     Collections.emptyList(), // destLocs
@@ -405,9 +381,7 @@ public abstract class AbstractLLMExtension implements Extension {
             outputData.getProperties().put("end_of_segment", endOfSegment);
             outputData.getProperties().put("extension_name", extensionName);
 
-            context.sendData(outputData);
-            // metrics.recordResult(); // TODO: Metrics integration needs to be
-            // re-evaluated.
+            context.sendMessage(outputData);
             log.debug("LLM文本输出发送成功: extensionName={}, text={}, endOfSegment={}",
                     extensionName, text, endOfSegment);
         } catch (Exception e) {
@@ -489,14 +463,6 @@ public abstract class AbstractLLMExtension implements Extension {
     }
 
     /**
-     * 获取性能指标 (如果 metrics 未集成，此方法应被移除或返回空)
-     */
-    // public ExtensionMetrics getMetrics() { // TODO: Metrics integration needs to
-    // be re-evaluated.
-    // return metrics;
-    // }
-
-    /**
      * 获取会话状态
      */
     public Map<String, Object> getSessionState() {
@@ -526,5 +492,20 @@ public abstract class AbstractLLMExtension implements Extension {
         private String description;
         private Map<String, Object> parameters; // 工具参数的JSON Schema
         private List<String> required; // 必填参数列表
+    }
+
+    @Override
+    public String getExtensionName() {
+        return extensionName;
+    }
+
+    @Override
+    public String getAppUri() {
+        return context != null ? context.getAppUri() : null;
+    }
+
+    @Override
+    public String getGraphId() {
+        return context != null ? context.getGraphId() : null;
     }
 }

@@ -1,17 +1,14 @@
 package com.tenframework.core.connection;
 
-import com.tenframework.core.engine.Engine;
-import com.tenframework.core.message.Message;
-import com.tenframework.core.message.Location;
+import java.net.SocketAddress;
+import java.util.concurrent.CompletableFuture;
+
+import com.tenframework.core.app.MessageReceiver;
 import com.tenframework.core.message.ConnectionMigrationState;
-import com.tenframework.core.protocol.Protocol;
+import com.tenframework.core.message.Location;
+import com.tenframework.core.message.Message;
 import com.tenframework.core.runloop.Runloop;
 import io.netty.channel.Channel;
-import lombok.extern.slf4j.Slf4j;
-
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import java.net.SocketAddress; // 导入 SocketAddress
 
 /**
  * Connection 接口定义了与外部客户端连接的核心行为。
@@ -52,8 +49,9 @@ public interface Connection {
 
     void cleanup();
 
+    void setMessageReceiver(MessageReceiver messageReceiver); // 新增：设置消息接收器
+
     // 移除 onProtocolMigrated() 和 onProtocolCleaned()，因为协议处理现在封装在 Netty 层。
     // void onProtocolMigrated();
-
     // void onProtocolCleaned();
 }

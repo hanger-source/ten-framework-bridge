@@ -53,7 +53,7 @@ public class DataMessage extends Message {
      */
     public DataMessage(String id, Location srcLoc, MessageType type, List<Location> destLocs,
             Map<String, Object> properties, long timestamp, byte[] data) {
-        super(id, srcLoc, type, destLocs, properties, timestamp);
+        super(id, type, srcLoc, destLocs, null, properties, timestamp); // 传入 null 作为 name
         this.data = data;
     }
 
@@ -67,7 +67,7 @@ public class DataMessage extends Message {
      * @param data     实际数据内容。
      */
     public DataMessage(String id, MessageType type, Location srcLoc, List<Location> destLocs, byte[] data) {
-        super(id, srcLoc, type, destLocs, Collections.emptyMap(), System.currentTimeMillis()); // properties为空，timestamp当前时间
+        super(id, type, srcLoc, destLocs, null, Collections.emptyMap(), System.currentTimeMillis()); // 传入 null 作为 name
         this.data = data;
     }
 

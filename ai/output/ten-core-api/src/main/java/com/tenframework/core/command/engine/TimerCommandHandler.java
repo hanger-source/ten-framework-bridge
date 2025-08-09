@@ -27,11 +27,10 @@ public class TimerCommandHandler implements EngineCommandHandler {
 
     @Override
     public Object handleTimerCommand(Engine engine, TimerCommand command) {
-        log.info("Engine {}: 收到 TimerCommand: Command ID={}, Interval={}, Data={}",
-                engine.getEngineId(), command.getId(), command.getIntervalMs(), command.getProperties());
-        // TODO: 根据实际业务需求处理 TimerCommand，例如触发某个业务逻辑
-        // 假设这里只是简单返回成功
-        return CommandResult.success(command.getId(), "Timer command processed successfully.");
+        log.debug("TimerCommand received for timerId: {}, timeoutUs: {}, times: {}",
+                command.getTimerId(), command.getTimeoutUs(), command.getTimes());
+        // TODO: Implement timer logic
+        return "Timer " + command.getTimerId() + " handled.";
     }
 
     @Override

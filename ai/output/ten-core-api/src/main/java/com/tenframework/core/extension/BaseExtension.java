@@ -246,7 +246,7 @@ public abstract class BaseExtension implements Extension {
      */
     protected void sendDataMessage(DataMessage data) {
         if (context != null) {
-            context.sendData(data);
+            context.sendMessage(data); // 修正为 sendMessage
             // metrics.recordResult(); // TODO: Metrics integration needs to be
             // re-evaluated.
         }
@@ -459,5 +459,13 @@ public abstract class BaseExtension implements Extension {
     @Override
     public String getAppUri() {
         return appUri;
+    }
+
+    /**
+     * 获取 Extension 名称。
+     */
+    @Override
+    public String getExtensionName() {
+        return extensionName;
     }
 }

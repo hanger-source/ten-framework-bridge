@@ -62,12 +62,13 @@ public class TimeoutCommand extends Message {
     /**
      * 用于内部创建的简化构造函数。
      *
+     * @param id       消息ID。
      * @param srcLoc   源位置。
      * @param destLocs 目的位置。
      * @param timerId  定时器ID。
      */
-    public TimeoutCommand(Location srcLoc, List<Location> destLocs, Long timerId) {
-        super(MessageUtils.generateUniqueId(), MessageType.CMD_TIMEOUT, srcLoc, destLocs);
+    public TimeoutCommand(String id, Location srcLoc, List<Location> destLocs, Long timerId) {
+        super(id, MessageType.CMD_TIMEOUT, srcLoc, destLocs);
         this.timerId = timerId;
     }
 

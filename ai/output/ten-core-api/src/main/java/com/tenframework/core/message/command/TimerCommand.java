@@ -82,14 +82,16 @@ public class TimerCommand extends Message {
     /**
      * 用于内部创建的简化构造函数。
      *
+     * @param id        消息ID。
      * @param srcLoc    源位置。
      * @param destLocs  目的位置。
      * @param timerId   定时器ID。
      * @param timeoutUs 超时时间（微秒）。
      * @param times     重复次数。
      */
-    public TimerCommand(Location srcLoc, List<Location> destLocs, Long timerId, Long timeoutUs, Integer times) {
-        super(MessageType.CMD_TIMER, srcLoc, destLocs);
+    public TimerCommand(String id, Location srcLoc, List<Location> destLocs, Long timerId, Long timeoutUs,
+            Integer times) {
+        super(id, MessageType.CMD_TIMER, srcLoc, destLocs);
         this.timerId = timerId;
         this.timeoutUs = timeoutUs;
         this.times = times;

@@ -84,7 +84,7 @@ public class VideoFrameMessage extends Message {
     public VideoFrameMessage(String id, Location srcLoc, MessageType type, List<Location> destLocs,
             Map<String, Object> properties, long timestamp,
             int pixelFormat, long frameTimestamp, int width, int height, boolean isEof, byte[] data) {
-        super(id, srcLoc, type, destLocs, properties, timestamp);
+        super(id, type, srcLoc, destLocs, null, properties, timestamp); // 传入 null 作为 name
         this.pixelFormat = pixelFormat;
         this.frameTimestamp = frameTimestamp;
         this.width = width;
@@ -98,7 +98,10 @@ public class VideoFrameMessage extends Message {
      */
     public VideoFrameMessage(String id, Location srcLoc, List<Location> destLocs,
             int pixelFormat, long frameTimestamp, int width, int height, boolean isEof, byte[] data) {
-        super(id, srcLoc, MessageType.VIDEO_FRAME, destLocs, Collections.emptyMap(), System.currentTimeMillis());
+        super(id, MessageType.VIDEO_FRAME, srcLoc, destLocs, null, Collections.emptyMap(), System.currentTimeMillis()); // 传入
+                                                                                                                        // null
+                                                                                                                        // 作为
+                                                                                                                        // name
         this.pixelFormat = pixelFormat;
         this.frameTimestamp = frameTimestamp;
         this.width = width;
@@ -192,8 +195,9 @@ public class VideoFrameMessage extends Message {
      */
     public static VideoFrameMessage black(String id, Location srcLoc, long timestamp, int width, int height,
             int pixelFormat) {
-        VideoFrameMessage frame = new VideoFrameMessage(id, srcLoc, Collections.emptyList(),
-                pixelFormat, timestamp, width, height, false, null); // destLocs为空，data为null
+        VideoFrameMessage frame = new VideoFrameMessage(id, MessageType.VIDEO_FRAME, srcLoc, Collections.emptyList(),
+                null, Map.of(), timestamp, // 传入 null 作为 name
+                pixelFormat, timestamp, width, height, false, null); // data为null
 
         // 创建黑色帧数据（全0）
         int size = frame.getUncompressedSize();
@@ -212,14 +216,13 @@ public class VideoFrameMessage extends Message {
      * @return EOF视频帧实例
      */
     public static VideoFrameMessage eof(String id, Location srcLoc, long timestamp) {
-        return new VideoFrameMessage(id, srcLoc, Collections.emptyList(),
+        return new VideoFrameMessage(id, MessageType.VIDEO_FRAME, srcLoc, Collections.emptyList(),
+                null, Map.of(), timestamp, // 传入 null 作为 name
                 0, timestamp, 0, 0, true, new byte[0]);
     }
 
-    @Override
-    public boolean checkIntegrity() {
-        return super.checkIntegrity() &&
-                getId() != null && !getId().isEmpty() &&
+    public boolean checkIntegrity() { // 移除 @Override
+        return getId() != null && !getId().isEmpty() &&
                 width >= 0 && height >= 0; // 宽度和高度必须非负
     }
 

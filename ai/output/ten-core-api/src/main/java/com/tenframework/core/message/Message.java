@@ -44,8 +44,8 @@ import java.util.Map;
 @Getter
 @Setter
 @Accessors(chain = true) // 启用链式设置器
-@ToString(exclude = { "data" }) // 排除 data 字段，因为它可能很大
-public abstract class Message {
+@ToString // 排除 data 字段，因为它可能很大
+public abstract class Message implements Cloneable { // 实现 Cloneable
 
         @JsonProperty("id") // 消息的唯一标识符
         private String id;
@@ -107,5 +107,11 @@ public abstract class Message {
 
         public Message(String id, MessageType type, Location srcLoc, List<Location> destLocs) {
                 this(id, type, srcLoc, destLocs, null, null, System.currentTimeMillis());
+        }
+
+        // 重写 clone 方法，支持浅拷贝
+        @Override
+        public Message clone() throws CloneNotSupportedException {
+                return (Message) super.clone();
         }
 }

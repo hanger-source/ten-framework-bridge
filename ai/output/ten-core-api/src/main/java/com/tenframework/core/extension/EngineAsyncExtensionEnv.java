@@ -1,21 +1,17 @@
 package com.tenframework.core.extension;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.tenframework.core.engine.CommandSubmitter;
 import com.tenframework.core.engine.MessageSubmitter;
-import com.tenframework.core.message.AudioFrameMessage;
 import com.tenframework.core.message.CommandResult;
-import com.tenframework.core.message.DataMessage;
 import com.tenframework.core.message.Location;
 import com.tenframework.core.message.Message;
-import com.tenframework.core.message.VideoFrameMessage;
 import com.tenframework.core.message.command.Command;
 import com.tenframework.core.util.JsonUtils;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.Collections;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -25,139 +21,89 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 /**
- * `EngineAsyncExtensionEnv` 是 `AsyncExtensionEnv` 接口的具体实现，提供了 Extension 与
- * Engine 交互的运行时环境。
- * 它负责将 Extension 的请求（如发送消息、命令）委托给 Engine，并管理 Extension 的属性和虚拟线程执行器。
+ * `EngineAsyncExtensionEnv` 是 `AsyncExtensionEnv` 的具体实现，
+ * 负责处理 Extension 与 Engine 之间的异步交互，包括消息发送、命令提交和属性操作。
+ * 它将底层的消息和命令提交委托给 Engine 的 MessageSubmitter 和 CommandSubmitter。
  */
 @Slf4j
 public class EngineAsyncExtensionEnv implements AsyncExtensionEnv {
 
     private final String extensionName;
-    private final String graphId;
+    private final String extensionType;
     private final String appUri;
-    private final MessageSubmitter messageSubmitter; // 委托给 Engine 发送消息
-    private final CommandSubmitter commandSubmitter; // 委托给 Engine 提交命令
-    private final Map<String, Object> properties; // 存储 Extension 的属性
-    private final ExecutorService virtualThreadExecutor; // 用于 Extension 内部的虚拟线程任务
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final String graphId;
+    private final MessageSubmitter messageSubmitter;
+    private final CommandSubmitter commandSubmitter;
+    private final Map<String, Object> properties; // 扩展的私有属性
+    private final ExecutorService virtualThreadExecutor;
+    private final ObjectMapper objectMapper = new ObjectMapper(); // 引入 ObjectMapper
 
-    public EngineAsyncExtensionEnv(String extensionName, String graphId, String appUri,
-            MessageSubmitter messageSubmitter, CommandSubmitter commandSubmitter, Map<String, Object> properties) {
+    public EngineAsyncExtensionEnv(String extensionName, String extensionType, String appUri, String graphId,
+            MessageSubmitter messageSubmitter, CommandSubmitter commandSubmitter,
+            Map<String, Object> initialProperties) {
         this.extensionName = extensionName;
-        this.graphId = graphId;
+        this.extensionType = extensionType;
         this.appUri = appUri;
+        this.graphId = graphId;
         this.messageSubmitter = messageSubmitter;
         this.commandSubmitter = commandSubmitter;
-        this.properties = new ConcurrentHashMap<>(properties);
-        // 使用虚拟线程 ExecutorService
+        this.properties = initialProperties != null ? new ConcurrentHashMap<>(initialProperties)
+                : new ConcurrentHashMap<>();
         this.virtualThreadExecutor = Executors.newVirtualThreadPerTaskExecutor();
     }
 
     @Override
     public void sendResult(CommandResult result) {
-        // 确保结果消息有正确的源和目的地
         if (result.getSrcLoc() == null) {
             result.setSrcLoc(new Location().setAppUri(appUri).setGraphId(graphId).setNodeId(extensionName));
         }
-        if (result.getDestLocs() == null || result.getDestLocs().isEmpty()) {
-            // 如果没有指定目的地，默认回传给原始命令的发送方或 App
-            // 这里简化处理，可以考虑根据原始命令的返回 Location 或通过 CommandSubmitter 回传
-            log.warn("Extension {}: sendResult 未指定 destLocs, 结果可能不会被路由。", extensionName);
+        log.debug("EngineAsyncExtensionEnv: Extension {} 发送命令结果: {}", extensionName, result.getId());
+        commandSubmitter.submitCommandResult(result);
+    }
+
+    // sendData, sendVideoFrame, sendAudioFrame 现在是 AsyncExtensionEnv 的 default 方法
+
+    @Override
+    public boolean sendMessage(Message message) {
+        if (message.getSrcLoc() == null) {
+            message.setSrcLoc(new Location().setAppUri(appUri).setGraphId(graphId).setNodeId(extensionName));
         }
-        if (commandSubmitter != null) {
-            commandSubmitter.submitCommandResult(result);
-        } else {
-            log.warn("Extension {}: CommandSubmitter 为空，无法发送命令结果: {}", extensionName, result.getId());
-        }
+        log.debug("EngineAsyncExtensionEnv: Extension {} 发送消息: {}", extensionName, message.getId());
+        return messageSubmitter.submitMessage(message);
     }
 
     @Override
     public CompletableFuture<Object> sendCommand(Command command) {
-        // 确保命令消息有正确的源
         if (command.getSrcLoc() == null) {
             command.setSrcLoc(new Location().setAppUri(appUri).setGraphId(graphId).setNodeId(extensionName));
         }
-        if (commandSubmitter != null) {
-            return commandSubmitter.submitCommand(command);
-        } else {
-            log.error("Extension {}: CommandSubmitter 为空，无法发送命令: {}", extensionName, command.getId());
-            return CompletableFuture.completedFuture(new RuntimeException("CommandSubmitter not available."));
-        }
+        log.debug("EngineAsyncExtensionEnv: Extension {} 发送命令: {}", extensionName, command.getId());
+        return commandSubmitter.submitCommand(command);
     }
 
     @Override
-    public void sendData(DataMessage data) {
-        // 确保数据消息有正确的源
-        if (data.getSrcLoc() == null) {
-            data.setSrcLoc(new Location().setAppUri(appUri).setGraphId(graphId).setNodeId(extensionName));
-        }
-        if (messageSubmitter != null) {
-            messageSubmitter.submitMessage(data);
-        } else {
-            log.warn("Extension {}: MessageSubmitter 为空，无法发送数据消息: {}", extensionName, data.getId());
-        }
+    public Optional<Object> getProperty(String path) {
+        return JsonUtils.getValueByPath(properties, path);
     }
 
     @Override
-    public void sendVideoFrame(VideoFrameMessage videoFrame) {
-        // 确保视频帧消息有正确的源
-        if (videoFrame.getSrcLoc() == null) {
-            videoFrame.setSrcLoc(new Location().setAppUri(appUri).setGraphId(graphId).setNodeId(extensionName));
-        }
-        if (messageSubmitter != null) {
-            messageSubmitter.submitMessage(videoFrame);
-        } else {
-            log.warn("Extension {}: MessageSubmitter 为空，无法发送视频帧消息: {}", extensionName, videoFrame.getId());
-        }
+    public void setProperty(String path, Object value) {
+        JsonUtils.setValueByPath(properties, path, value);
     }
 
     @Override
-    public void sendAudioFrame(AudioFrameMessage audioFrame) {
-        // 确保音频帧消息有正确的源
-        if (audioFrame.getSrcLoc() == null) {
-            audioFrame.setSrcLoc(new Location().setAppUri(appUri).setGraphId(graphId).setNodeId(extensionName));
-        }
-        if (messageSubmitter != null) {
-            messageSubmitter.submitMessage(audioFrame);
-        } else {
-            log.warn("Extension {}: MessageSubmitter 为空，无法发送音频帧消息: {}", extensionName, audioFrame.getId());
-        }
-    }
-
-    // region Property Operations
-
-    @Override
-    public boolean isPropertyExist(String path) {
-        return JsonUtils.getValueByPath(properties, path).isPresent();
+    public boolean hasProperty(String path) {
+        return JsonUtils.hasValueByPath(properties, path);
     }
 
     @Override
-    public Optional<String> getPropertyToJson(String path) {
-        return JsonUtils.getValueByPath(properties, path).map(val -> {
-            try {
-                return objectMapper.writeValueAsString(val);
-            } catch (JsonProcessingException e) {
-                log.error("Error converting property to JSON at path {}: {}", path, e.getMessage());
-                return null;
-            }
-        });
-    }
-
-    @Override
-    public void setPropertyFromJson(String path, String jsonStr) {
-        try {
-            JsonNode node = objectMapper.readTree(jsonStr);
-            JsonUtils.setValueByPath(properties, path, node);
-        } catch (JsonProcessingException e) {
-            log.error("Error parsing JSON for property at path {}: {}", path, e.getMessage());
-        }
+    public void deleteProperty(String path) {
+        JsonUtils.deleteValueByPath(properties, path);
     }
 
     @Override
     public Optional<Integer> getPropertyInt(String path) {
-        return JsonUtils.getValueByPath(properties, path)
-                .filter(Number.class::isInstance)
-                .map(Number.class::intValue);
+        return JsonUtils.getValueByPath(properties, path).map(Number.class::cast).map(Number::intValue);
     }
 
     @Override
@@ -166,10 +112,18 @@ public class EngineAsyncExtensionEnv implements AsyncExtensionEnv {
     }
 
     @Override
+    public Optional<Long> getPropertyLong(String path) {
+        return JsonUtils.getValueByPath(properties, path).map(Number.class::cast).map(Number::longValue);
+    }
+
+    @Override
+    public void setPropertyLong(String path, long value) {
+        JsonUtils.setValueByPath(properties, path, value);
+    }
+
+    @Override
     public Optional<String> getPropertyString(String path) {
-        return JsonUtils.getValueByPath(properties, path)
-                .filter(String.class::isInstance)
-                .map(String.class::valueOf);
+        return JsonUtils.getValueByPath(properties, path).map(String.class::cast);
     }
 
     @Override
@@ -179,9 +133,7 @@ public class EngineAsyncExtensionEnv implements AsyncExtensionEnv {
 
     @Override
     public Optional<Boolean> getPropertyBool(String path) {
-        return JsonUtils.getValueByPath(properties, path)
-                .filter(Boolean.class::isInstance)
-                .map(Boolean.class::booleanValue);
+        return JsonUtils.getValueByPath(properties, path).map(Boolean.class::cast);
     }
 
     @Override
@@ -190,30 +142,24 @@ public class EngineAsyncExtensionEnv implements AsyncExtensionEnv {
     }
 
     @Override
+    public Optional<Double> getPropertyDouble(String path) {
+        return JsonUtils.getValueByPath(properties, path).map(Number.class::cast).map(Number::doubleValue);
+    }
+
+    @Override
+    public void setPropertyDouble(String path, double value) {
+        JsonUtils.setValueByPath(properties, path, value);
+    }
+
+    @Override
     public Optional<Float> getPropertyFloat(String path) {
-        return JsonUtils.getValueByPath(properties, path)
-                .filter(Number.class::isInstance)
-                .map(Number.class::floatValue);
+        return JsonUtils.getValueByPath(properties, path).map(Number.class::cast).map(Number::floatValue);
     }
 
     @Override
     public void setPropertyFloat(String path, float value) {
         JsonUtils.setValueByPath(properties, path, value);
     }
-
-    @Override
-    public void initPropertyFromJson(String jsonStr) {
-        try {
-            Map<String, Object> newProperties = objectMapper.readValue(jsonStr,
-                    new TypeReference<Map<String, Object>>() {
-                    });
-            this.properties.putAll(newProperties);
-        } catch (JsonProcessingException e) {
-            log.error("Error initializing properties from JSON: {}", e.getMessage());
-        }
-    }
-
-    // endregion Property Operations
 
     @Override
     public ExecutorService getVirtualThreadExecutor() {
@@ -243,6 +189,7 @@ public class EngineAsyncExtensionEnv implements AsyncExtensionEnv {
 
     @Override
     public void close() {
+        // 关闭虚拟线程执行器
         if (virtualThreadExecutor != null) {
             virtualThreadExecutor.shutdown();
             try {
@@ -253,6 +200,21 @@ public class EngineAsyncExtensionEnv implements AsyncExtensionEnv {
                 virtualThreadExecutor.shutdownNow();
                 Thread.currentThread().interrupt();
             }
+        }
+    }
+
+    @Override
+    public void initPropertyFromJson(String jsonStr) {
+        // 从 JSON 字符串初始化属性
+        try {
+            Map<String, Object> newProperties = objectMapper.readValue(jsonStr,
+                    new TypeReference<Map<String, Object>>() {
+                    });
+            this.properties.clear(); // 清空原有属性
+            this.properties.putAll(newProperties); // 导入新属性
+            log.debug("EngineAsyncExtensionEnv: 从 JSON 初始化属性成功: {}", jsonStr);
+        } catch (Exception e) {
+            log.error("EngineAsyncExtensionEnv: 从 JSON 初始化属性失败: {}", e.getMessage(), e);
         }
     }
 }

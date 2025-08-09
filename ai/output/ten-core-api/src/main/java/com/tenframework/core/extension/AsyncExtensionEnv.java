@@ -27,22 +27,39 @@ public interface AsyncExtensionEnv {
      * 发送一个数据消息。
      *
      * @param data 要发送的数据消息。
+     * @return 如果消息成功提交则返回 true，否则返回 false。
      */
-    void sendData(DataMessage data);
+    default boolean sendData(DataMessage data) {
+        return sendMessage(data);
+    }
 
     /**
      * 发送一个视频帧消息。
      *
      * @param videoFrame 要发送的视频帧。
+     * @return 如果消息成功提交则返回 true，否则返回 false。
      */
-    void sendVideoFrame(VideoFrameMessage videoFrame);
+    default boolean sendVideoFrame(VideoFrameMessage videoFrame) {
+        return sendMessage(videoFrame);
+    }
 
     /**
      * 发送一个音频帧消息。
      *
      * @param audioFrame 要发送的音频帧。
+     * @return 如果消息成功提交则返回 true，否则返回 false。
      */
-    void sendAudioFrame(AudioFrameMessage audioFrame);
+    default boolean sendAudioFrame(AudioFrameMessage audioFrame) {
+        return sendMessage(audioFrame);
+    }
+
+    /**
+     * 发送一个通用消息。
+     *
+     * @param message 要发送的消息。
+     * @return 如果消息成功提交则返回 true，否则返回 false。
+     */
+    boolean sendMessage(Message message);
 
     /**
      * 发送一个命令。
@@ -53,28 +70,35 @@ public interface AsyncExtensionEnv {
     CompletableFuture<Object> sendCommand(Command command);
 
     /**
+     * 获取指定路径的属性值。
+     *
+     * @param path 属性路径。
+     * @return 属性值的 Optional，如果不存在则为 Optional.empty()。
+     */
+    Optional<Object> getProperty(String path);
+
+    /**
+     * 设置指定路径的属性值。
+     *
+     * @param path  属性路径。
+     * @param value 要设置的值。
+     */
+    void setProperty(String path, Object value);
+
+    /**
      * 检查指定路径的属性是否存在。
      *
      * @param path 属性路径。
      * @return 如果属性存在则返回 true，否则返回 false。
      */
-    boolean isPropertyExist(String path);
+    boolean hasProperty(String path);
 
     /**
-     * 获取指定路径的属性值并转换为 JSON 字符串。
+     * 删除指定路径的属性。
      *
      * @param path 属性路径。
-     * @return 属性值的 Optional JSON 字符串，如果不存在则为 Optional.empty()。
      */
-    Optional<String> getPropertyToJson(String path);
-
-    /**
-     * 从 JSON 字符串设置指定路径的属性值。
-     *
-     * @param path    属性路径。
-     * @param jsonStr 要设置的 JSON 字符串。
-     */
-    void setPropertyFromJson(String path, String jsonStr);
+    void deleteProperty(String path);
 
     /**
      * 获取指定路径的整数属性值。
@@ -91,6 +115,22 @@ public interface AsyncExtensionEnv {
      * @param value 要设置的整数值。
      */
     void setPropertyInt(String path, int value);
+
+    /**
+     * 获取指定路径的长整数属性值。
+     *
+     * @param path 属性路径。
+     * @return 长整数值的 Optional，如果不存在或类型不匹配则为 Optional.empty()。
+     */
+    Optional<Long> getPropertyLong(String path);
+
+    /**
+     * 设置指定路径的长整数属性值。
+     *
+     * @param path  属性路径。
+     * @param value 要设置的长整数值。
+     */
+    void setPropertyLong(String path, long value);
 
     /**
      * 获取指定路径的字符串属性值。
@@ -123,6 +163,22 @@ public interface AsyncExtensionEnv {
      * @param value 要设置的布尔值。
      */
     void setPropertyBool(String path, boolean value);
+
+    /**
+     * 获取指定路径的双精度浮点数属性值。
+     *
+     * @param path 属性路径。
+     * @return 双精度浮点数值的 Optional，如果不存在或类型不匹配则为 Optional.empty()。
+     */
+    Optional<Double> getPropertyDouble(String path);
+
+    /**
+     * 设置指定路径的双精度浮点数属性值。
+     *
+     * @param path  属性路径。
+     * @param value 要设置的双精度浮点数值。
+     */
+    void setPropertyDouble(String path, double value);
 
     /**
      * 获取指定路径的浮点数属性值。

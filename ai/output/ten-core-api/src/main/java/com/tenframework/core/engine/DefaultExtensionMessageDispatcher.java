@@ -40,14 +40,10 @@ public class DefaultExtensionMessageDispatcher implements ExtensionMessageDispat
         log.debug("DefaultExtensionMessageDispatcher: 正在派发消息: ID={}, Type={}, SrcLoc={}, DestLocs={}",
                 message.getId(), message.getType(), message.getSrcLoc(), message.getDestLocs());
 
-        List<Location> targetLocations = pathTable.resolveDestinations(message);
+        // 直接使用消息的目的地，PathTable不再负责路由解析
+        List<Location> targetLocations = message.getDestLocs();
 
-        // 如果消息本身有目的地，则添加到路由结果中
-        if (message.getDestLocs() != null) {
-            targetLocations.addAll(message.getDestLocs());
-        }
-
-        if (targetLocations.isEmpty()) {
+        if (targetLocations == null || targetLocations.isEmpty()) {
             log.warn("DefaultExtensionMessageDispatcher: 消息 {} 没有明确的 Extension 目的地，无法派发。", message.getId());
             // 对于命令，如果没有目的地，可能需要返回错误结果。
             // 但这部分逻辑现在应该在 Engine.processMessage 中处理，这里只作为最后的警告。
@@ -56,7 +52,7 @@ public class DefaultExtensionMessageDispatcher implements ExtensionMessageDispat
 
         for (Location targetLocation : targetLocations) {
             // 确保目的地是当前 Engine 内部的 Extension
-            if (!targetLocation.getGraphId().equals(extensionContext.getEngine().getGraphId())) {
+            if (!targetLocation.getGraphId().equals(extensionContext.getEngine().getGraphDefinition().getGraphId())) {
                 log.warn("DefaultExtensionMessageDispatcher: 消息 {} 的目的地 {} 不属于当前 Engine {}，跳过内部派发。",
                         message.getId(), targetLocation, engineId);
                 continue;
@@ -70,7 +66,7 @@ public class DefaultExtensionMessageDispatcher implements ExtensionMessageDispat
                 // 更安全的做法是设计为不可变消息或明确每次都克隆。
                 try {
                     finalMessageToSend = (Message) message.clone(); // 假设Message实现了Cloneable
-                    finalMessageToSend.setDestinationLocations(Collections.singletonList(targetLocation)); // 设置单目的地
+                    finalMessageToSend.setDestLocs(Collections.singletonList(targetLocation)); // 设置单目的地
                 } catch (CloneNotSupportedException e) {
                     log.error("DefaultExtensionMessageDispatcher: 克隆消息 {} 失败，无法发送到多个目的地: {}", message.getId(),
                             e.getMessage());

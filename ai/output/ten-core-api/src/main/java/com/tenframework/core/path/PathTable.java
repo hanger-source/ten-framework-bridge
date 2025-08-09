@@ -167,7 +167,7 @@ public class PathTable {
             throws CloneNotSupportedException {
         if (!commandResult.isSuccess() && !pathOut.isHasReceivedFinalCommandResult()) {
             log.debug("PathTable: 收到错误结果，立即返回: commandId={}, error={}",
-                    commandResult.getCommandId(), commandResult.getError());
+                    commandResult.getId(), commandResult.getErrorMessage());
             completeCommandResult(pathOut, commandResult);
             return;
         }
@@ -175,11 +175,11 @@ public class PathTable {
         if (commandResult.isSuccess()) {
             pathOut.setCachedCommandResult(commandResult);
             log.debug("PathTable: 缓存成功结果: commandId={}",
-                    commandResult.getCommandId());
+                    commandResult.getId());
         }
 
         if (commandResult.isFinal()) {
-            log.debug("PathTable: FIRST_ERROR_OR_LAST_OK最终结果. CommandId: {}", commandResult.getCommandId());
+            log.debug("PathTable: FIRST_ERROR_OR_LAST_OK最终结果. CommandId: {}", commandResult.getId());
             CommandResult finalResult = pathOut.getCachedCommandResult() != null ? pathOut.getCachedCommandResult()
                     : commandResult;
             completeCommandResult(pathOut, finalResult);
@@ -193,10 +193,10 @@ public class PathTable {
     private void handleEachOkAndErrorPolicy(PathOut pathOut, CommandResult commandResult)
             throws CloneNotSupportedException {
         log.debug("PathTable: 流式返回结果: commandId={}, isSuccess={}, isFinal={}",
-                commandResult.getCommandId(), commandResult.isSuccess(), commandResult.isFinal());
+                commandResult.getId(), commandResult.isSuccess(), commandResult.isFinal());
 
         if (commandResult.isFinal()) {
-            log.debug("PathTable: EACH_OK_AND_ERROR最终结果. CommandId: {}", commandResult.getCommandId());
+            log.debug("PathTable: EACH_OK_AND_ERROR最终结果. CommandId: {}", commandResult.getId());
             completeCommandResult(pathOut, commandResult);
         }
     }
@@ -216,21 +216,21 @@ public class PathTable {
                         "Command execution failed: " + commandResult.getErrorMessage()));
             }
             log.debug("PathTable: 命令结果Future已完成: commandId={}",
-                    commandResult.getCommandId());
+                    commandResult.getId());
         }
 
         if (pathOut.getParentCommandId() != null && !pathOut.getParentCommandId().isEmpty()) { // 检查是否为 null 或空字符串
             CommandResult backtrackResult = commandResult.clone();
 
             String parentCmdId = pathOut.getParentCommandId();
-            backtrackResult.setCommandId(parentCmdId);
+            backtrackResult.setId(parentCmdId); // 修正为 setId
 
             backtrackResult.setDestLocs(List.of(pathOut.getSourceLocation()));
             backtrackResult.setSrcLoc(pathOut.getDestinationLocation());
 
             messageSubmitter.submitMessage(backtrackResult);
             log.debug("PathTable: 命令结果已回溯: originalCommandId={}, parentCommandId={}",
-                    commandResult.getCommandId(), pathOut.getParentCommandId());
+                    commandResult.getId(), pathOut.getParentCommandId());
         }
 
         removeOutPath(pathOut.getCommandId()); // 确保移除的是正确类型的 ID

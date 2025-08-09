@@ -113,7 +113,7 @@ public class AudioFrameMessage extends Message {
             Map<String, Object> properties, long timestamp,
             long frameTimestamp, int sampleRate, int bytesPerSample, int samplesPerChannel, int numberOfChannel,
             long channelLayout, int dataFormat, byte[] buf, int lineSize, boolean isEof) {
-        super(id, srcLoc, type, destLocs, properties, timestamp);
+        super(id, type, srcLoc, destLocs, null, properties, timestamp); // 传入 null 作为 name
         this.frameTimestamp = frameTimestamp;
         this.sampleRate = sampleRate;
         this.bytesPerSample = bytesPerSample;
@@ -132,7 +132,10 @@ public class AudioFrameMessage extends Message {
     public AudioFrameMessage(String id, Location srcLoc, List<Location> destLocs, long frameTimestamp, int sampleRate,
             int bytesPerSample, int samplesPerChannel, int numberOfChannel,
             long channelLayout, int dataFormat, byte[] buf, int lineSize, boolean isEof) {
-        super(id, srcLoc, MessageType.AUDIO_FRAME, destLocs, Collections.emptyMap(), System.currentTimeMillis());
+        super(id, MessageType.AUDIO_FRAME, srcLoc, destLocs, null, Collections.emptyMap(), System.currentTimeMillis()); // 传入
+                                                                                                                        // null
+                                                                                                                        // 作为
+                                                                                                                        // name
         this.frameTimestamp = frameTimestamp;
         this.sampleRate = sampleRate;
         this.bytesPerSample = bytesPerSample;
@@ -233,9 +236,11 @@ public class AudioFrameMessage extends Message {
         byte[] silenceData = new byte[totalSamples * bytesPerSample];
         // 默认为0，表示静音
 
-        return new AudioFrameMessage(id, srcLoc, Collections.emptyList(), timestamp, sampleRate, bytesPerSample,
-                samplesPerChannel, channels,
-                0L, 0, silenceData, 0, false); // channelLayout, dataFormat, lineSize 默认值
+        return new AudioFrameMessage(id, MessageType.AUDIO_FRAME, srcLoc, Collections.emptyList(), null, Map.of(),
+                timestamp, // 传入 null 作为 name
+                0L, 0, // channelLayout, dataFormat 默认值
+                silenceData, 0, false, // buf, lineSize, isEof 默认值
+                0, sampleRate, bytesPerSample, samplesPerChannel, channels);
     }
 
     /**
@@ -247,15 +252,16 @@ public class AudioFrameMessage extends Message {
      * @return EOF音频帧实例
      */
     public static AudioFrameMessage eof(String id, Location srcLoc, long timestamp) {
-        return new AudioFrameMessage(id, srcLoc, Collections.emptyList(), timestamp, 0, 0, 0, 0,
-                0L, 0, new byte[0], 0, true);
+        return new AudioFrameMessage(id, MessageType.AUDIO_FRAME, srcLoc, Collections.emptyList(), null, Map.of(),
+                timestamp, // 传入 null 作为 name
+                0L, 0, // channelLayout, dataFormat 默认值
+                new byte[0], 0, true, // buf, lineSize, isEof 默认值
+                0, 0, 0, 0, 0); // 额外的参数，由于构造函数变长，需要补充
     }
 
-    @Override
-    public boolean checkIntegrity() {
+    public boolean checkIntegrity() { // 移除 @Override
         // 假设Message基类有一个checkIntegrity方法，或者在这里实现完整逻辑
-        return super.checkIntegrity() &&
-                getId() != null && !getId().isEmpty() &&
+        return getId() != null && !getId().isEmpty() &&
                 validateAudioParameters();
     }
 

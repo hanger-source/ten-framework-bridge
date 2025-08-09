@@ -14,7 +14,7 @@ import java.util.Map;
 @Data
 @NoArgsConstructor
 @Accessors(chain = true)
-public class CommandResult extends Message {
+public class CommandResult extends Message implements Cloneable { // 实现 Cloneable
 
     @JsonProperty("original_cmd_id")
     private String originalCommandId;
@@ -40,7 +40,7 @@ public class CommandResult extends Message {
             Map<String, Object> properties, long timestamp,
             String originalCommandId, int originalCmdType, String originalCmdName, int statusCode,
             boolean isFinal, boolean isCompleted) {
-        super(id, srcLoc, type, destLocs, properties, timestamp);
+        super(id, type, srcLoc, destLocs, null, properties, timestamp); // 传入 null 作为 name
         this.originalCommandId = originalCommandId;
         this.originalCmdType = originalCmdType;
         this.originalCmdName = originalCmdName;
@@ -52,7 +52,7 @@ public class CommandResult extends Message {
     // 用于内部创建的简化构造函数，匹配新的 Message 基类构造
     public CommandResult(Location srcLoc, List<Location> destLocs, String originalCommandId, int statusCode,
             String detail) {
-        super(MessageType.CMD_RESULT, srcLoc, destLocs);
+        super(MessageUtils.generateUniqueId(), MessageType.CMD_RESULT, srcLoc, destLocs); // 自动生成 id
         this.originalCommandId = originalCommandId;
         this.originalCmdType = MessageType.CMD_RESULT.ordinal(); // 简化，实际可能需要原始命令的 type
         this.originalCmdName = originalCommandId; // 原始命令的 ID 作为名称
@@ -62,8 +62,39 @@ public class CommandResult extends Message {
 
         // detail 放入 properties map
         if (detail != null) {
-            getProperties().put("detail", detail); // 使用基类的 properties Map
+            getProperties().put("detail", detail);
         }
+    }
+
+    // 新增：判断命令是否成功
+    public boolean isSuccess() {
+        return this.statusCode == 0;
+    }
+
+    // 新增：获取错误信息 (如果存在)
+    public String getErrorMessage() {
+        if (getProperties() != null && getProperties().containsKey("error_message")) {
+            return (String) getProperties().get("error_message");
+        }
+        return null;
+    }
+
+    // 新增：获取 payload (从 properties 中获取)
+    public Object getPayload() {
+        if (getProperties() != null && getProperties().containsKey("payload")) {
+            return getProperties().get("payload");
+        }
+        return null;
+    }
+
+    // 重写 clone 方法以支持深拷贝或浅拷贝（取决于需求），这里提供浅拷贝示例
+    @Override
+    public CommandResult clone() throws CloneNotSupportedException {
+        CommandResult cloned = (CommandResult) super.clone();
+        // 对于引用类型字段，如果需要深拷贝，则在此处进行
+        // 例如：cloned.setSrcLoc(this.getSrcLoc().clone());
+        // 如果 properties 需要深拷贝，也在此处处理
+        return cloned;
     }
 
     // Getters for specific properties
@@ -100,10 +131,14 @@ public class CommandResult extends Message {
     }
 
     public static CommandResult success(String originalCommandId, String detail) {
-        return new CommandResult(null, Collections.emptyList(), originalCommandId, 0, detail); // 简化，srcLoc和destLocs为null/empty
+        CommandResult result = new CommandResult(null, Collections.emptyList(), originalCommandId, 0, detail);
+        result.getProperties().put("payload", detail); // 将成功信息放入 payload
+        return result;
     }
 
-    public static CommandResult fail(String originalCommandId, String detail) {
-        return new CommandResult(null, Collections.emptyList(), originalCommandId, -1, detail); // 简化，srcLoc和destLocs为null/empty
+    public static CommandResult fail(String originalCommandId, String errorMessage) {
+        CommandResult result = new CommandResult(null, Collections.emptyList(), originalCommandId, -1, errorMessage);
+        result.getProperties().put("error_message", errorMessage); // 将错误信息放入 error_message
+        return result;
     }
 }

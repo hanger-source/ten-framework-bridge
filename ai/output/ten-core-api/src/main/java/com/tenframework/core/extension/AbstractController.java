@@ -1,13 +1,11 @@
 package com.tenframework.core.extension;
 
-import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 import com.tenframework.core.message.AudioFrameMessage;
 import com.tenframework.core.message.CommandResult;
 import com.tenframework.core.message.DataMessage;
-import com.tenframework.core.message.Location;
 import com.tenframework.core.message.VideoFrameMessage;
 import com.tenframework.core.message.command.Command;
 import lombok.extern.slf4j.Slf4j;
@@ -28,9 +26,11 @@ public abstract class AbstractController implements Extension {
     protected String extensionName;
     protected boolean isRunning = false;
     protected Map<String, Object> configuration;
+    protected AsyncExtensionEnv env; // 新增：保存 AsyncExtensionEnv 引用
 
     @Override
     public void onConfigure(AsyncExtensionEnv env) {
+        this.env = env; // 保存 env 引用
         extensionName = env.getExtensionName();
         // 配置属性将在子类中通过getProperty方法获取
         log.info("控制器配置阶段: extensionName={}", extensionName);
@@ -191,6 +191,6 @@ public abstract class AbstractController implements Extension {
 
     @Override
     public String getAppUri() {
-        return asyncExtensionEnv != null ? asyncExtensionEnv.getAppUri() : "unknown"; // 从 env 获取 appUri
+        return env != null ? env.getAppUri() : "unknown"; // 从 env 获取 appUri
     }
 }

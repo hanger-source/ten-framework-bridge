@@ -5,10 +5,12 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 
 import com.tenframework.core.message.AudioFrameMessage;
-import com.tenframework.core.message.command.Command;
 import com.tenframework.core.message.CommandResult;
 import com.tenframework.core.message.DataMessage;
+import com.tenframework.core.message.MessageType;
+import com.tenframework.core.message.MessageUtils;
 import com.tenframework.core.message.VideoFrameMessage;
+import com.tenframework.core.message.command.Command;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -25,26 +27,38 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class EchoExtension implements Extension {
 
-    private String extensionName;
-    private String appUri; // 新增字段来存储appUri
+    // 移除重复的字段定义
+    // private String extensionName;
+    // private String appUri; // 新增字段来存储appUri
     private boolean isRunning = false;
     private long messageCount = 0;
+    // 新增：保留 AsyncExtensionEnv 引用，方便其他方法使用
+    private AsyncExtensionEnv context;
 
     // 构造函数
-    public EchoExtension(String extensionName, String appUri) {
-        this.extensionName = extensionName;
-        this.appUri = appUri; // 初始化appUri
+    public EchoExtension() {
+        // 构造函数不再需要 extensionName 和 appUri 参数，因为它们会从 env 中获取
+    }
+
+    @Override
+    public String getExtensionName() {
+        // 从 env 中获取 extensionName，确保一致性
+        return context != null ? context.getExtensionName() : null;
     }
 
     @Override
     public String getAppUri() {
-        return this.appUri;
+        // 从 env 中获取 appUri，确保一致性
+        return context != null ? context.getAppUri() : null;
     }
 
     @Override
     public void onConfigure(AsyncExtensionEnv env) {
-        this.extensionName = env.getExtensionName();
-        log.info("EchoExtension配置阶段: extensionName={}", extensionName);
+        context = env; // 保存 env 引用
+        // 从 env 中获取 extensionName，确保一致性
+        // this.extensionName = env.getExtensionName(); // 已通过 getter 获取
+        // this.appUri = env.getAppUri(); // 已通过 getter 获取
+        log.info("EchoExtension配置阶段: extensionName={}", getExtensionName());
 
         // 获取配置属性示例
         env.getPropertyString("echo.prefix") // 替换为getPropertyString
@@ -53,7 +67,7 @@ public class EchoExtension implements Extension {
 
     @Override
     public void onInit(AsyncExtensionEnv env) {
-        log.info("EchoExtension初始化阶段: extensionName={}", extensionName);
+        log.info("EchoExtension初始化阶段: extensionName={}", getExtensionName());
 
         // 模拟一些初始化工作
         try {
@@ -65,19 +79,19 @@ public class EchoExtension implements Extension {
 
     @Override
     public void onStart(AsyncExtensionEnv env) {
-        log.info("EchoExtension启动阶段: extensionName={}", extensionName);
-        this.isRunning = true;
+        log.info("EchoExtension启动阶段: extensionName={}", getExtensionName());
+        isRunning = true;
     }
 
     @Override
     public void onStop(AsyncExtensionEnv env) {
-        log.info("EchoExtension停止阶段: extensionName={}", extensionName);
-        this.isRunning = false;
+        log.info("EchoExtension停止阶段: extensionName={}", getExtensionName());
+        isRunning = false;
     }
 
     @Override
     public void onDeinit(AsyncExtensionEnv env) {
-        log.info("EchoExtension清理阶段: extensionName={}", extensionName);
+        log.info("EchoExtension清理阶段: extensionName={}", getExtensionName());
         log.info("EchoExtension统计信息: 处理消息总数={}", messageCount);
     }
 
@@ -85,13 +99,13 @@ public class EchoExtension implements Extension {
     public void onCommand(Command command, AsyncExtensionEnv env) {
         if (!isRunning) {
             log.warn("EchoExtension未运行，忽略命令: extensionName={}, commandName={}",
-                    extensionName, command.getName());
+                    getExtensionName(), command.getName());
             return;
         }
 
         messageCount++;
         log.info("EchoExtension收到命令: extensionName={}, commandName={}, commandId={}",
-                extensionName, command.getName(), command.getCommandId());
+                getExtensionName(), command.getName(), command.getId()); // 修正为 getId()
 
         // 使用虚拟线程处理命令（模拟异步操作）
         ExecutorService executor = env.getVirtualThreadExecutor();
@@ -101,25 +115,25 @@ public class EchoExtension implements Extension {
                 Thread.sleep(50);
 
                 // 创建回显结果
-                CommandResult result = CommandResult.success(command.getCommandId(), Map.of(
+                CommandResult result = CommandResult.success(command.getId(), Map.of(
                         "original_command", command.getName(),
                         "echo_content", "Echo: " + command.getName(),
-                        "processed_by", extensionName,
+                        "processed_by", getExtensionName(),
                         "message_count", messageCount));
                 result.setName("echo_result");
 
                 // 发送结果
                 env.sendResult(result); // 移除返回值检查
                 log.debug("EchoExtension命令处理完成: extensionName={}, commandName={}",
-                        extensionName, command.getName());
+                        getExtensionName(), command.getName());
 
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 log.error("EchoExtension命令处理被中断: extensionName={}, commandName={}",
-                        extensionName, command.getName());
+                        getExtensionName(), command.getName());
             } catch (Exception e) {
                 log.error("EchoExtension命令处理异常: extensionName={}, commandName={}",
-                        extensionName, command.getName(), e);
+                        getExtensionName(), command.getName(), e);
             }
         }, executor);
     }
@@ -128,13 +142,13 @@ public class EchoExtension implements Extension {
     public void onData(DataMessage data, AsyncExtensionEnv env) {
         if (!isRunning) {
             log.warn("EchoExtension未运行，忽略数据: extensionName={}, dataName={}",
-                    extensionName, data.getName());
+                    getExtensionName(), data.getName());
             return;
         }
 
         messageCount++;
         log.info("EchoExtension收到数据: extensionName={}, dataName={}, dataSize={}",
-                extensionName, data.getName(), data.getDataBytes().length);
+                getExtensionName(), data.getName(), data.getDataBytes().length);
 
         // 使用虚拟线程处理数据
         ExecutorService executor = env.getVirtualThreadExecutor();
@@ -144,25 +158,26 @@ public class EchoExtension implements Extension {
                 Thread.sleep(30);
 
                 // 创建回显数据
-                DataMessage echoData = DataMessage.binary("echo_data", data.getDataBytes());
+                DataMessage echoData = new DataMessage(MessageUtils.generateUniqueId(), data.getSrcLoc(),
+                        MessageType.DATA, data.getDestLocs(), data.getDataBytes()); // 修正为直接构造 DataMessage
                 echoData.setProperties(Map.of(
                         "original_data_name", data.getName(),
-                        "processed_by", extensionName,
+                        "processed_by", getExtensionName(),
                         "message_count", messageCount));
 
                 // 设置目标位置（如果有的话）
-                if (!data.getDestinationLocations().isEmpty()) {
-                    echoData.setDestinationLocations(data.getDestinationLocations());
+                if (data.getDestLocs() != null && !data.getDestLocs().isEmpty()) { // 修正为 getDestLocs()
+                    echoData.setDestLocs(data.getDestLocs()); // 修正为 setDestLocs()
                 }
 
                 // 发送回显数据
-                env.sendData(echoData); // 将sendMessage替换为sendData，并移除返回值检查
+                env.sendMessage(echoData); // 修正为 sendMessage
                 log.debug("EchoExtension数据处理完成: extensionName={}, dataName={}",
-                        extensionName, data.getName());
+                        getExtensionName(), data.getName());
 
             } catch (Exception e) {
                 log.error("EchoExtension数据处理异常: extensionName={}, dataName={}",
-                        extensionName, data.getName(), e);
+                        getExtensionName(), data.getName(), e);
             }
         }, executor);
     }
@@ -171,14 +186,14 @@ public class EchoExtension implements Extension {
     public void onAudioFrame(AudioFrameMessage audioFrame, AsyncExtensionEnv env) {
         if (!isRunning) {
             log.warn("EchoExtension未运行，忽略音频帧: extensionName={}, frameName={}",
-                    extensionName, audioFrame.getName());
+                    getExtensionName(), audioFrame.getName());
             return;
         }
 
         messageCount++;
         log.debug("EchoExtension收到音频帧: extensionName={}, frameName={}, frameSize={}, sampleRate={}, channels={}",
-                extensionName, audioFrame.getName(), audioFrame.getDataBytes().length,
-                audioFrame.getSampleRate(), audioFrame.getChannels());
+                getExtensionName(), audioFrame.getName(), audioFrame.getDataBytes().length,
+                audioFrame.getSampleRate(), audioFrame.getNumberOfChannel()); // 修正为 getNumberOfChannel()
 
         // 音频帧通常不需要回显，只记录信息
         // 这里可以添加音频处理逻辑，如VAD检测等
@@ -188,13 +203,13 @@ public class EchoExtension implements Extension {
     public void onVideoFrame(VideoFrameMessage videoFrame, AsyncExtensionEnv env) {
         if (!isRunning) {
             log.warn("EchoExtension未运行，忽略视频帧: extensionName={}, frameName={}",
-                    extensionName, videoFrame.getName());
+                    getExtensionName(), videoFrame.getName());
             return;
         }
 
         messageCount++;
         log.debug("EchoExtension收到视频帧: extensionName={}, frameName={}, frameSize={}, width={}, height={}",
-                extensionName, videoFrame.getName(), videoFrame.getDataBytes().length,
+                getExtensionName(), videoFrame.getName(), videoFrame.getDataBytes().length,
                 videoFrame.getWidth(), videoFrame.getHeight());
 
         // 视频帧通常不需要回显，只记录信息

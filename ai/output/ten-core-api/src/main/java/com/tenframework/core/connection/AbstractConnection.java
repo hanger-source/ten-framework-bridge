@@ -187,6 +187,7 @@ public abstract class AbstractConnection implements Connection {
      */
 
     // 新增：设置消息接收器
+    @Override
     public void setMessageReceiver(MessageReceiver messageReceiver) {
         this.messageReceiver = messageReceiver;
     }
