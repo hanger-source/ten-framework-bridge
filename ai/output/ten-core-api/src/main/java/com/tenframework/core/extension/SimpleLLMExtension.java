@@ -1,316 +1,93 @@
 package com.tenframework.core.extension;
 
-import com.tenframework.core.message.Command;
+import com.tenframework.core.message.CommandMessage;
 import com.tenframework.core.message.CommandResult;
-import com.tenframework.core.message.Data;
-import com.tenframework.core.message.AudioFrame;
-import com.tenframework.core.message.VideoFrame;
+import com.tenframework.core.message.DataMessage;
+import com.tenframework.core.message.AudioFrameMessage;
+import com.tenframework.core.message.VideoFrameMessage;
 import lombok.extern.slf4j.Slf4j;
 
-import java.util.List;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import com.tenframework.core.message.Location; // 导入Location类
-import com.tenframework.core.extension.AsyncExtensionEnv;
+import java.util.concurrent.CompletableFuture;
 
 /**
- * 简单的LLM扩展示例
- * 基于实际LLM扩展代码的模式，展示LLM扩展的实现
- *
- * 开发者只需要：
- * 1. 继承BaseExtension
- * 2. 实现LLM核心逻辑
- * 3. 处理工具调用
- * 4. 实现流式输出
+ * 简单的LLM扩展示例，用于演示如何处理不同类型的消息。
  */
 @Slf4j
-public class SimpleLLMExtension extends BaseExtension {
+public class SimpleLLMExtension extends AbstractAIServiceHub {
 
-    private String apiKey = "";
-    private String model = "gpt-3.5-turbo";
-    private int maxHistory = 20;
-    private boolean isInitialized = false;
-
-    // 会话历史管理
-    private final Map<String, List<Map<String, Object>>> sessionHistory = new ConcurrentHashMap<>();
-
-    // 工具管理
-    private final Map<String, ToolMetadata> availableTools = new ConcurrentHashMap<>();
-
-    // 辅助方法：获取当前Extension的Location
-    private Location getCurrentLocation() {
-        return new Location(context.getAppUri(), context.getGraphId(), context.getExtensionName());
+    @Override
+    public void onInit(AsyncExtensionEnv env) {
+        log.info("SimpleLLMExtension: {} onInit called.", getExtensionName());
+        // 可以在这里加载LLM模型或进行其他初始化
     }
 
     @Override
-    protected void handleCommand(Command command, AsyncExtensionEnv context) {
-        String commandName = command.getName();
-
-        switch (commandName) {
-            case "tool_register":
-                handleToolRegister(command, context);
-                break;
-            case "chat_completion_call":
-                handleChatCompletionCall(command, context);
-                break;
-            case "flush":
-                handleFlush(command, context);
-                break;
-            default:
-                log.warn("未知LLM命令: {}", commandName);
-        }
+    public void onStart(AsyncExtensionEnv env) {
+        log.info("SimpleLLMExtension: {} onStart called.", getExtensionName());
+        // 可以在这里启动LLM服务
     }
 
     @Override
-    protected void handleData(Data data, AsyncExtensionEnv context) {
-        // LLM扩展处理数据消息（如用户输入）
-        String dataName = data.getName();
-        String dataContent = new String(data.getDataBytes());
-        log.info("LLM收到数据: {} = {}", dataName, dataContent);
-
-        // 异步处理数据
-        submitTask(() -> {
-            try {
-                processUserInput(dataContent, context);
-            } catch (Exception e) {
-                log.error("处理用户输入失败", e);
-            }
-        });
+    public void onStop(AsyncExtensionEnv env) {
+        log.info("SimpleLLMExtension: {} onStop called.", getExtensionName());
+        // 可以在这里停止LLM服务
     }
 
     @Override
-    protected void handleAudioFrame(AudioFrame audioFrame, AsyncExtensionEnv context) {
-        // LLM扩展通常不直接处理音频帧
-        log.debug("LLM收到音频帧: {} ({} bytes)", audioFrame.getName(), audioFrame.getDataSize());
+    public void onDeinit(AsyncExtensionEnv env) {
+        log.info("SimpleLLMExtension: {} onDeinit called.", getExtensionName());
+        // 可以在这里释放LLM模型资源
     }
 
     @Override
-    protected void handleVideoFrame(VideoFrame videoFrame, AsyncExtensionEnv context) {
-        // LLM扩展通常不直接处理视频帧
+    protected void handleAIServiceCommand(CommandMessage command, AsyncExtensionEnv context) {
+        log.debug("LLM收到命令: {}", command.getName());
+        // 模拟处理命令并发送结果
+        // context.sendResult(new CommandResult(command.getCommandId(), "LLM Processed: " + command.getName()));
+        sendCommandResult(command.getId(), Map.of("llm_response", "Hello from LLM!"), null);
+    }
+
+    @Override
+    protected void handleAIServiceData(DataMessage data, AsyncExtensionEnv context) {
+        log.debug("LLM收到数据: {}", new String(data.getData()));
+        // 模拟处理数据并可能触发其他命令或发送数据
+        // context.sendMessage(new Data("llm_processed_data", ("Processed: " + new String(data.getData())).getBytes()));
+    }
+
+    @Override
+    protected void handleAIServiceAudioFrame(AudioFrameMessage audioFrame, AsyncExtensionEnv context) {
+        log.debug("LLM收到音频帧: {} ({}Hz, {}ch)", audioFrame.getName(),
+                audioFrame.getSampleRate(), audioFrame.getChannels());
+        // 模拟处理音频帧
+    }
+
+    @Override
+    protected void handleAIServiceVideoFrame(VideoFrameMessage videoFrame, AsyncExtensionEnv context) {
         log.debug("LLM收到视频帧: {} ({}x{})", videoFrame.getName(),
                 videoFrame.getWidth(), videoFrame.getHeight());
+        // 模拟处理视频帧
     }
 
-    // 可选：自定义配置
     @Override
-    protected void onExtensionConfigure(AsyncExtensionEnv context) {
-        // 从配置中读取LLM参数
-        apiKey = getConfig("api_key", String.class, "");
-        model = getConfig("model", String.class, "gpt-3.5-turbo");
-        maxHistory = getConfig("max_history", Integer.class, 20);
-        log.info("LLM扩展配置完成: model={}, maxHistory={}", model, maxHistory);
+    protected void handleAIServiceCommandResult(CommandResult commandResult, AsyncExtensionEnv context) {
+        log.debug("LLM收到命令结果: {}", commandResult.getId());
+        // 处理上游命令的结果
     }
 
-    // 可选：自定义初始化
     @Override
-    protected void onExtensionInit(AsyncExtensionEnv context) {
-        // 初始化LLM扩展
-        isInitialized = true;
-        log.info("LLM扩展初始化完成");
+    public String getExtensionName() {
+        return "SimpleLLMExtension";
     }
 
-    // 可选：自定义启动
-    @Override
-    protected void onExtensionStart(AsyncExtensionEnv context) {
-        // 启动LLM扩展
-        log.info("LLM扩展启动完成");
-    }
-
-    // 可选：自定义停止
-    @Override
-    protected void onExtensionStop(AsyncExtensionEnv context) {
-        // 停止LLM扩展
-        log.info("LLM扩展停止完成");
-    }
-
-    // 可选：自定义清理
-    @Override
-    protected void onExtensionDeinit(AsyncExtensionEnv context) {
-        // 清理LLM扩展
-        isInitialized = false;
-        sessionHistory.clear();
-        availableTools.clear();
-        log.info("LLM扩展清理完成");
-    }
-
-    // 可选：自定义健康检查
-    @Override
-    protected boolean performHealthCheck() {
-        // 检查LLM扩展是否正常
-        return isInitialized && !apiKey.isEmpty();
-    }
-
-    /**
-     * 处理工具注册
-     */
-    private void handleToolRegister(Command command, AsyncExtensionEnv context) {
-        try {
-            // 解析工具元数据
-            ToolMetadata toolMetadata = parseToolMetadata(command);
-            availableTools.put(toolMetadata.getName(), toolMetadata);
-
-            // 发送工具注册结果
-            CommandResult result = CommandResult.success(command.getCommandId(),
-                    Map.of("tool_name", toolMetadata.getName(), "status", "registered"));
-            result.setSourceLocation(getCurrentLocation()); // 设置sourceLocation
-            context.sendResult(result); // 移除 .join()
-
-            log.info("工具注册成功: {}", toolMetadata.getName());
-        } catch (Exception e) {
-            log.error("工具注册失败", e);
-            CommandResult errorResult = CommandResult.error(command.getCommandId(), "工具注册失败: " + e.getMessage());
-            errorResult.setSourceLocation(getCurrentLocation()); // 设置sourceLocation
-            context.sendResult(errorResult); // 移除 .join()
-        }
-    }
-
-    /**
-     * 处理聊天完成调用
-     */
-    private void handleChatCompletionCall(Command command, AsyncExtensionEnv context) {
-        try {
-            String sessionId = command.getArg("session_id", String.class).orElse("default");
-            String userInput = command.getArg("user_input", String.class).orElse("");
-            long commandId = command.getCommandId(); // 获取原始命令ID
-
-            // 异步处理聊天完成
-            submitTask(() -> {
-                try {
-                    processChatCompletion(sessionId, userInput, commandId, context); // 传递commandId
-                } catch (Exception e) {
-                    log.error("聊天完成处理失败", e);
-                    CommandResult errorResult = CommandResult.error(commandId, // 使用传入的commandId
-                            "聊天完成处理失败: " + e.getMessage());
-                    errorResult.setSourceLocation(getCurrentLocation()); // 设置sourceLocation
-                    context.sendResult(errorResult); // 移除 .join()
-                }
-            });
-
-        } catch (Exception e) {
-            log.error("聊天完成调用失败", e);
-            CommandResult errorResult = CommandResult.error(command.getCommandId(), "聊天完成调用失败: " + e.getMessage());
-            errorResult.setSourceLocation(getCurrentLocation()); // 设置sourceLocation
-            context.sendResult(errorResult); // 移除 .join()
-        }
-    }
-
-    /**
-     * 处理刷新命令
-     */
-    private void handleFlush(Command command, AsyncExtensionEnv context) {
-        try {
-            String sessionId = command.getArg("session_id", String.class).orElse("default");
-
-            // 清理会话历史
-            sessionHistory.remove(sessionId);
-
-            // 发送刷新结果
-            CommandResult result = CommandResult.success(command.getCommandId(),
-                    Map.of("session_id", sessionId, "status", "flushed"));
-            result.setSourceLocation(getCurrentLocation()); // 设置sourceLocation
-            context.sendResult(result); // 移除 .join()
-
-            log.info("会话刷新成功: {}", sessionId);
-        } catch (Exception e) {
-            log.error("会话刷新失败", e);
-            CommandResult errorResult = CommandResult.error(command.getCommandId(), "会话刷新失败: " + e.getMessage());
-            errorResult.setSourceLocation(getCurrentLocation()); // 设置sourceLocation
-            context.sendResult(errorResult); // 移除 .join()
-        }
-    }
-
-    /**
-     * 处理用户输入
-     */
-    private void processUserInput(String userInput, AsyncExtensionEnv context) {
-        // 模拟LLM处理用户输入
-        String response = generateResponse(userInput);
-
-        // 发送流式文本输出
-        sendTextOutput(response, false);
-        sendTextOutput("\n", true); // 结束标记
-    }
-
-    /**
-     * 处理聊天完成
-     */
-    private void processChatCompletion(String sessionId, String userInput, long commandId, AsyncExtensionEnv context) {
-        // 更新会话历史
-        updateSessionHistory(sessionId, "user", userInput);
-
-        // 生成响应
-        String response = generateResponse(userInput);
-
-        // 更新会话历史
-        updateSessionHistory(sessionId, "assistant", response);
-
-        // 发送流式文本输出
-        sendTextOutput(response, false);
-        sendTextOutput("\n", true); // 结束标记
-
-        // 发送完成结果
-        CommandResult finalResult = CommandResult.success(commandId, // 使用传入的commandId
-                Map.of("session_id", sessionId, "response", response));
-        finalResult.setSourceLocation(getCurrentLocation()); // 设置sourceLocation
-        context.sendResult(finalResult); // 移除 .join()
-    }
-
-    /**
-     * 生成响应（模拟LLM）
-     */
-    private String generateResponse(String userInput) {
-        // 简单的响应生成逻辑
-        if (userInput.toLowerCase().contains("hello") || userInput.toLowerCase().contains("你好")) {
-            return "你好！我是简单的LLM扩展，很高兴为您服务。";
-        } else if (userInput.toLowerCase().contains("weather") || userInput.toLowerCase().contains("天气")) {
-            return "我可以帮您查询天气信息。请使用天气工具。";
-        } else {
-            return "我理解您说：" + userInput + "。这是一个模拟的LLM响应。";
-        }
-    }
-
-    /**
-     * 发送文本输出
-     */
-    private void sendTextOutput(String text, boolean isFinal) {
-        Data textData = Data.text("text_output", text);
-        textData.setProperties(Map.of(
-                "text", text,
-                "end_of_segment", isFinal));
-        textData.setSourceLocation(getCurrentLocation()); // 设置sourceLocation
-        sendMessage(textData); // 移除 .join()
-    }
-
-    /**
-     * 更新会话历史
-     */
-    private void updateSessionHistory(String sessionId, String role, String content) {
-        sessionHistory.computeIfAbsent(sessionId, k -> new java.util.ArrayList<>()) // 使用ArrayList确保可变
-                .add(Map.of("role", role, "content", content));
-
-        // 限制历史记录长度
-        List<Map<String, Object>> history = sessionHistory.get(sessionId);
-        if (history.size() > maxHistory) {
-            history = history.subList(history.size() - maxHistory, history.size());
-            sessionHistory.put(sessionId, history);
-        }
-    }
-
-    /**
-     * 解析工具元数据
-     */
-    private ToolMetadata parseToolMetadata(Command command) {
-        // 简化的工具元数据解析
-        String toolName = command.getArg("name", String.class).orElse("unknown_tool");
-        String description = command.getArg("description", String.class).orElse("Unknown tool");
-
-        return ToolMetadata.builder()
-                .name(toolName)
-                .description(description)
-                .version("1.0.0")
-                .type("function")
-                .parameters(List.of())
-                .properties(Map.of())
-                .build();
+    // 示例：LLM可以发送一个命令到其他Extension
+    public CompletableFuture<Object> sendLLMCommand(String targetExtension, String commandName, Map<String, Object> args) {
+        CommandMessage cmd = new CommandMessage(String.valueOf(generateCommandId()),
+                asyncExtensionEnv.getCurrentLocation(),
+                commandName, args);
+        cmd.setDestinationLocations(Collections.singletonList(asyncExtensionEnv.createLocation(targetExtension)));
+        return submitCommand(cmd);
     }
 }

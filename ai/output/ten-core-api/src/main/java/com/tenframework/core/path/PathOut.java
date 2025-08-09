@@ -27,9 +27,9 @@ public class PathOut extends AbstractPath {
     private transient CompletableFuture<Object> resultFuture;
 
     /**
-     * 与此PathOut关联的Netty Channel的唯一ID，用于将结果回传给特定客户端
+     * 命令结果应该回传到的目标位置 (可能是 Connection 的 remoteLocation 或 Remote 的 Location)
      */
-    private String channelId;
+    private Location returnLocation;
 
     /**
      * 是否已收到最终的命令结果
@@ -51,7 +51,7 @@ public class PathOut extends AbstractPath {
 
     public PathOut(long commandId, long parentCommandId, String commandName, Location sourceLocation,
             Location destinationLocation, CompletableFuture<Object> resultFuture,
-            ResultReturnPolicy returnPolicy, String channelId) {
+            ResultReturnPolicy returnPolicy, Location returnLocation) { // 修改构造函数签名
         super();
         this.commandId = commandId;
         this.parentCommandId = parentCommandId;
@@ -62,6 +62,6 @@ public class PathOut extends AbstractPath {
         this.resultFuture = resultFuture;
         this.returnPolicy = returnPolicy != null ? returnPolicy : ResultReturnPolicy.FIRST_ERROR_OR_LAST_OK;
         this.hasReceivedFinalCommandResult = false;
-        this.channelId = channelId;
+        this.returnLocation = returnLocation; // 设置新的 returnLocation
     }
 }

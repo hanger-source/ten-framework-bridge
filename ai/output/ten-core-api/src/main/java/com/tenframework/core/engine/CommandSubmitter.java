@@ -1,26 +1,29 @@
 package com.tenframework.core.engine;
 
+import com.tenframework.core.message.CommandResult;
+import com.tenframework.core.message.command.Command;
+
 import java.util.concurrent.CompletableFuture;
 
-import com.tenframework.core.message.Command;
-
 /**
- * CommandSubmitter接口定义了提交命令并异步获取其结果的契约。
- * Engine将实现此接口，以便外部模块（如AsyncExtensionEnv）可以通过此抽象来提交命令。
+ * `CommandSubmitter` 接口定义了将命令提交到 `Engine` 的能力。
+ * 实现了此接口的类（例如 `Engine` 自身或 `ExtensionEnv`）能够发送命令，并接收其异步结果。
+ * 这种模式使得命令的发送方无需关心命令的具体处理细节，只需提交命令并等待结果。
  */
 public interface CommandSubmitter {
     /**
-     * 提交一个命令到Engine，并返回一个CompletableFuture，用于异步获取命令执行结果。
+     * 提交一个命令。
      *
-     * @param command 要提交的命令对象。
-     * @return CompletableFuture<Object>，代表命令执行的最终结果。
+     * @param command 要提交的命令。
+     * @return 返回一个 `CompletableFuture`，当命令处理完成时，该 Future 将被完成，包含命令执行的结果。
+     *         如果命令处理失败，Future 将以异常方式完成。
      */
     CompletableFuture<Object> submitCommand(Command command);
 
     /**
-     * Cleanup.
+     * 提交一个命令结果。
      *
-     * @param graphId the graph id
+     * @param commandResult 要提交的命令结果。
      */
-    void cleanup(String graphId);
+    void submitCommandResult(CommandResult commandResult);
 }

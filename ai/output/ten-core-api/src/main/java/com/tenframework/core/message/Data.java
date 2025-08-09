@@ -1,19 +1,23 @@
 package com.tenframework.core.message;
 
-import java.util.List;
-import java.util.Map;
-
 import com.fasterxml.jackson.annotation.JsonCreator;
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.tenframework.server.message.ByteBufSerializer;
+import com.tenframework.server.message.ByteBufDeserializer;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-import lombok.Builder;
+
 import lombok.EqualsAndHashCode;
+import lombok.Builder;
 import lombok.extern.slf4j.Slf4j;
-// import java.util.Arrays; // 移除导入，不再需要
+
+import java.util.Optional;
+import java.util.List;
+import java.util.Map;
+import com.tenframework.core.Location;
 
 /**
  * 数据消息类
@@ -45,8 +49,8 @@ public final class Data extends AbstractMessage {
      */
     protected Data() {
         super();
-        data = Unpooled.EMPTY_BUFFER; // 初始化为空ByteBuf
-        isEof = false;
+        this.data = Unpooled.EMPTY_BUFFER; // 初始化为空ByteBuf
+        this.isEof = false;
     }
 
     /**
@@ -56,7 +60,7 @@ public final class Data extends AbstractMessage {
     @JsonCreator
     public Data(
             @JsonProperty("name") String name,
-        @JsonProperty("data") ByteBuf data,
+            @JsonProperty("data") ByteBuf data, // 参数类型改为ByteBuf
             @JsonProperty("is_eof") Boolean isEof,
             @JsonProperty("content_type") String contentType,
             @JsonProperty("encoding") String encoding,
@@ -71,7 +75,7 @@ public final class Data extends AbstractMessage {
         if (timestamp != null) {
             setTimestamp(timestamp);
         }
-        this.data = data != null ? data.retain() : Unpooled.EMPTY_BUFFER;
+        this.data = data != null ? data.retain() : Unpooled.EMPTY_BUFFER; // 赋值ByteBuf，并调用retain()
         this.isEof = isEof != null ? isEof : false;
         this.contentType = contentType;
         this.encoding = encoding;
@@ -83,10 +87,83 @@ public final class Data extends AbstractMessage {
     private Data(com.tenframework.core.message.Data other) {
         super(other);
         // 深拷贝ByteBuf，确保引用计数正确
-        data = other.data != null ? other.data.retainedDuplicate() : Unpooled.EMPTY_BUFFER;
-        isEof = other.isEof;
-        contentType = other.contentType;
-        encoding = other.encoding;
+        this.data = other.data != null ? other.data.retainedDuplicate() : Unpooled.EMPTY_BUFFER;
+        this.isEof = other.isEof;
+        this.contentType = other.contentType;
+        this.encoding = other.encoding;
+    }
+
+    @Override
+    public MessageType getType() {
+        return MessageType.DATA;
+    }
+
+    /**
+     * 获取数据大小（字节数）
+     */
+    @JsonIgnore
+    public int getDataSize() {
+        return data != null ? data.readableBytes() : 0; // 使用ByteBuf的readableBytes()
+    }
+
+    /**
+     * 获取数据的字节数组拷贝 - 使用现代Java特性
+     */
+    public byte[] getDataBytes() {
+        if (data == null || data.readableBytes() == 0) {
+            return new byte[0];
+        }
+        byte[] bytes = new byte[data.readableBytes()];
+        data.getBytes(data.readerIndex(), bytes); // 从ByteBuf读取字节到数组
+        return bytes;
+    }
+
+    /**
+     * 设置数据（字节数组）- 使用现代Java特性
+     */
+    public void setDataBytes(byte[] bytes) {
+        if (this.data != null) {
+            this.data.release(); // 释放旧的ByteBuf
+        }
+        this.data = bytes != null ? Unpooled.copiedBuffer(bytes) : Unpooled.EMPTY_BUFFER; // 从字节数组创建ByteBuf
+    }
+
+    /**
+     * 获取数据的ByteBuf
+     * 注意：返回的ByteBuf需要使用者负责release
+     *
+     * @return 数据的ByteBuf
+     */
+    public ByteBuf getDataBuffer() {
+        return data != null ? data.retain() : Unpooled.EMPTY_BUFFER;
+    }
+
+    /**
+     * 设置数据（ByteBuf）
+     * 注意：传入的ByteBuf所有权转移给此对象，此对象会负责release
+     *
+     * @param buffer 数据的ByteBuf
+     */
+    public void setDataBuffer(ByteBuf buffer) {
+        if (this.data != null) {
+            this.data.release(); // 释放旧的ByteBuf
+        }
+        this.data = buffer != null ? buffer.retain() : Unpooled.EMPTY_BUFFER; // 赋值新的ByteBuf，并调用retain()
+    }
+
+    /**
+     * 检查是否有数据
+     */
+    public boolean hasData() {
+        return data != null && data.readableBytes() > 0; // 检查ByteBuf的可读字节数
+    }
+
+    /**
+     * 检查是否为空数据
+     */
+    @JsonIgnore
+    public boolean isEmpty() {
+        return !hasData();
     }
 
     /**
@@ -135,8 +212,8 @@ public final class Data extends AbstractMessage {
      */
     public static com.tenframework.core.message.Data binary(String name, ByteBuf buffer) {
         DataBuilder builder = Data.builder()
-            .name(name)
-            .contentType("application/octet-stream");
+                .name(name)
+                .contentType("application/octet-stream");
         if (buffer != null) {
             builder.data(buffer.retain()); // 接受ByteBuf并调用retain()
         }
@@ -154,82 +231,9 @@ public final class Data extends AbstractMessage {
     }
 
     @Override
-    public MessageType getType() {
-        return MessageType.DATA;
-    }
-
-    /**
-     * 获取数据大小（字节数）
-     */
-    @JsonIgnore
-    public int getDataSize() {
-        return data != null ? data.readableBytes() : 0; // 使用ByteBuf的readableBytes()
-    }
-
-    /**
-     * 获取数据的字节数组拷贝 - 使用现代Java特性
-     */
-    public byte[] getDataBytes() {
-        if (data == null || data.readableBytes() == 0) {
-            return new byte[0];
-        }
-        byte[] bytes = new byte[data.readableBytes()];
-        data.getBytes(data.readerIndex(), bytes); // 从ByteBuf读取字节到数组
-        return bytes;
-    }
-
-    /**
-     * 设置数据（字节数组）- 使用现代Java特性
-     */
-    public void setDataBytes(byte[] bytes) {
-        if (data != null) {
-            data.release(); // 释放旧的ByteBuf
-        }
-        data = bytes != null ? Unpooled.copiedBuffer(bytes) : Unpooled.EMPTY_BUFFER; // 从字节数组创建ByteBuf
-    }
-
-    /**
-     * 获取数据的ByteBuf
-     * 注意：返回的ByteBuf需要使用者负责release
-     *
-     * @return 数据的ByteBuf
-     */
-    public ByteBuf getDataBuffer() {
-        return data != null ? data.retain() : Unpooled.EMPTY_BUFFER;
-    }
-
-    /**
-     * 设置数据（ByteBuf）
-     * 注意：传入的ByteBuf所有权转移给此对象，此对象会负责release
-     *
-     * @param buffer 数据的ByteBuf
-     */
-    public void setDataBuffer(ByteBuf buffer) {
-        if (data != null) {
-            data.release(); // 释放旧的ByteBuf
-        }
-        data = buffer != null ? buffer.retain() : Unpooled.EMPTY_BUFFER; // 赋值新的ByteBuf，并调用retain()
-    }
-
-    /**
-     * 检查是否有数据
-     */
-    public boolean hasData() {
-        return data != null && data.readableBytes() > 0; // 检查ByteBuf的可读字节数
-    }
-
-    /**
-     * 检查是否为空数据
-     */
-    @JsonIgnore
-    public boolean isEmpty() {
-        return !hasData();
-    }
-
-    @Override
     public boolean checkIntegrity() {
         return super.checkIntegrity() &&
-            MessageUtils.validateStringField(getName(), "数据消息名称"); // 移除对data的检查
+                MessageUtils.validateStringField(getName(), "数据消息名称"); // 移除对data的检查
     }
 
     @Override
@@ -254,15 +258,16 @@ public final class Data extends AbstractMessage {
      * 在不再需要此Data对象时，应调用此方法以避免内存泄漏。
      */
     public void release() {
-        if (data != null) {
-            data.release();
-            data = null; // 释放后置为null，避免重复释放
+        if (this.data != null) {
+            this.data.release();
+            this.data = null; // 释放后置为null，避免重复释放
         }
     }
 
     /**
      * 实现AutoCloseable接口，使其可以在try-with-resources语句中使用。
      */
+    @Override
     public void close() {
         release();
     }

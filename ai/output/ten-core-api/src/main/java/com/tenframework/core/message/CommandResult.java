@@ -1,250 +1,98 @@
 package com.tenframework.core.message;
 
-import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.tenframework.core.message.serializer.CommandResultMessageDeserializer;
+import com.tenframework.core.message.serializer.CommandResultMessageSerializer;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
-import lombok.extern.slf4j.Slf4j;
+import lombok.NoArgsConstructor;
+import lombok.experimental.Accessors;
 
-import java.util.*;
-import java.util.function.Predicate;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
 
-/**
- * 命令结果消息类
- * 代表命令执行结果的回溯
- * 对应C语言中的ten_cmd_result_t结构
- */
-@Data
 @EqualsAndHashCode(callSuper = true)
-@Slf4j
-public final class CommandResult extends AbstractMessage {
+@Data
+@NoArgsConstructor
+@Accessors(chain = true)
+@JsonSerialize(using = CommandResultMessageSerializer.class)
+@JsonDeserialize(using = CommandResultMessageDeserializer.class)
+public class CommandResult extends Message {
 
-    @JsonProperty("cmd_id")
-    private long commandId;
+    @JsonProperty("original_cmd_type")
+    private int originalCmdType;
 
-    @JsonProperty("result")
-    private Map<String, Object> result = new HashMap<>();
+    @JsonProperty("original_cmd_name")
+    private String originalCmdName;
+
+    @JsonProperty("status_code")
+    private int statusCode;
 
     @JsonProperty("is_final")
-    private boolean isFinal = true; // 默认为最终结果
+    private boolean isFinal;
 
-    @JsonProperty("error")
-    private String error;
+    @JsonProperty("is_completed")
+    private boolean isCompleted;
 
-    @JsonProperty("error_code")
-    private Integer errorCode;
-
-    /**
-     * 默认构造函数
-     */
-    public CommandResult() {
-        super();
+    // 兼容 Lombok @NoArgsConstructor 的全参构造函数（为了Jackson）
+    // 实际内部创建时使用自定义构造函数
+    public CommandResult(String id, Location srcLoc, MessageType type, List<Location> destLocs,
+            Map<String, Object> properties, long timestamp,
+            int originalCmdType, String originalCmdName, int statusCode,
+            boolean isFinal, boolean isCompleted) {
+        super(id, srcLoc, type, destLocs, properties, timestamp);
+        this.originalCmdType = originalCmdType;
+        this.originalCmdName = originalCmdName;
+        this.statusCode = statusCode;
+        this.isFinal = isFinal;
+        this.isCompleted = isCompleted;
     }
 
-    /**
-     * 创建成功结果的构造函数
-     */
-    public CommandResult(long commandId) {
-        this();
-        this.commandId = commandId;
-    }
+    // 用于内部创建的简化构造函数，匹配新的 Message 基类构造
+    public CommandResult(Location srcLoc, List<Location> destLocs, String originalCommandId, int statusCode,
+            String detail) {
+        super(MessageType.CMD_RESULT, srcLoc, destLocs); // type, srcLoc, destLocs
+        this.originalCmdType = MessageType.CMD_RESULT.ordinal(); // 简化，实际可能需要原始命令的 type
+        this.originalCmdName = originalCommandId; // 原始命令的 ID 作为名称
+        this.statusCode = statusCode;
+        this.isFinal = true; // 假设结果是最终的
+        this.isCompleted = true; // 假设结果是完成的
 
-    /**
-     * 创建成功结果的构造函数，带结果数据
-     */
-    public CommandResult(long commandId, Map<String, Object> result) {
-        this(commandId);
-        if (result != null) {
-            this.result.putAll(result);
+        // detail 放入 properties map
+        if (detail != null) {
+            getProperties().put("detail", detail); // 使用基类的 properties Map
         }
     }
 
-    /**
-     * 创建错误结果的构造函数
-     */
-    public CommandResult(long commandId, String error, Integer errorCode) {
-        this(commandId);
-        this.error = error;
-        this.errorCode = errorCode;
+    // Getters for specific properties
+    public int getOriginalCmdType() {
+        return originalCmdType;
     }
 
-    /**
-     * JSON反序列化构造函数
-     */
-    @JsonCreator
-    public CommandResult(
-            @JsonProperty("cmd_id") long commandId,
-            @JsonProperty("result") Map<String, Object> result,
-            @JsonProperty("is_final") Boolean isFinal,
-            @JsonProperty("error") String error,
-            @JsonProperty("error_code") Integer errorCode) {
-        super();
-        this.commandId = commandId;
-        this.result = result != null ? new HashMap<>(result) : new HashMap<>();
-        this.isFinal = isFinal != null ? isFinal : true;
-        this.error = error;
-        this.errorCode = errorCode;
+    public String getOriginalCmdName() {
+        return originalCmdName;
     }
 
-    /**
-     * 拷贝构造函数
-     */
-    private CommandResult(CommandResult other) {
-        super(other);
-        this.commandId = other.commandId;
-        this.result = MessageUtils.deepCopyMap(other.result);
-        this.isFinal = other.isFinal;
-        this.error = other.error;
-        this.errorCode = other.errorCode;
+    public int getStatusCode() {
+        return statusCode;
     }
 
-    @Override
-    public MessageType getType() {
-        return MessageType.COMMAND_RESULT;
+    public boolean isFinal() {
+        return isFinal;
     }
 
-    // 重写result相关方法以提供防御性拷贝
-    public Map<String, Object> getResult() {
-        return new HashMap<>(result);
+    public boolean isCompleted() {
+        return isCompleted;
     }
 
-    public void setResult(Map<String, Object> result) {
-        this.result.clear();
-        if (result != null) {
-            this.result.putAll(result);
+    // 辅助方法：获取 detail (从 properties map 中获取)
+    public String getDetail() {
+        if (getProperties() != null && getProperties().containsKey("detail")) {
+            return (String) getProperties().get("detail");
         }
-    }
-
-    /**
-     * 获取指定结果值
-     */
-    public Object getResultValue(String key) {
-        return result.get(key);
-    }
-
-    /**
-     * 获取指定结果值，带类型转换 - 使用Optional和现代Java特性
-     */
-    public <T> Optional<T> getResultValue(String key, Class<T> type) {
-        return Optional.ofNullable(result.get(key))
-                .filter(type::isInstance)
-                .map(type::cast)
-                .or(() -> {
-                    if (result.containsKey(key)) {
-                        log.warn("无法将结果 {} 转换为类型 {}", key, type.getSimpleName());
-                    }
-                    return Optional.empty();
-                });
-    }
-
-    /**
-     * 获取指定结果值，带类型转换和默认值
-     */
-    public <T> T getResultValue(String key, Class<T> type, T defaultValue) {
-        return getResultValue(key, type).orElse(defaultValue);
-    }
-
-    /**
-     * 设置结果值
-     */
-    public void setResultValue(String key, Object value) {
-        if (key != null) {
-            if (value != null) {
-                result.put(key, value);
-            } else {
-                result.remove(key);
-            }
-        }
-    }
-
-    /**
-     * 检查结果是否存在
-     */
-    public boolean hasResultValue(String key) {
-        return result.containsKey(key);
-    }
-
-    /**
-     * 移除结果值
-     */
-    public Object removeResultValue(String key) {
-        return result.remove(key);
-    }
-
-    /**
-     * 检查是否为成功结果 - 使用现代Java特性
-     */
-    @JsonIgnore
-    public boolean isSuccess() {
-        return Optional.ofNullable(error)
-                .map(String::trim)
-                .filter(Predicate.not(String::isEmpty))
-                .isEmpty();
-    }
-
-    /**
-     * 检查是否为错误结果
-     */
-    public boolean isError() {
-        return !isSuccess();
-    }
-
-    /**
-     * 创建成功结果的静态工厂方法
-     */
-    public static CommandResult success(long commandId) {
-        return new CommandResult(commandId);
-    }
-
-    /**
-     * 创建成功结果的静态工厂方法，带结果数据
-     */
-    public static CommandResult success(long commandId, Map<String, Object> result) {
-        return new CommandResult(commandId, result);
-    }
-
-    /**
-     * 创建错误结果的静态工厂方法
-     */
-    public static CommandResult error(long commandId, String error) {
-        return new CommandResult(commandId, error, null);
-    }
-
-    /**
-     * 创建错误结果的静态工厂方法，带错误代码
-     */
-    public static CommandResult error(long commandId, String error, Integer errorCode) {
-        return new CommandResult(commandId, error, errorCode);
-    }
-
-    /**
-     * 创建流式中间结果
-     */
-    public static CommandResult streaming(long commandId, Map<String, Object> result) {
-        CommandResult cmdResult = new CommandResult(commandId, result);
-        cmdResult.setFinal(false);
-        return cmdResult;
-    }
-
-    @Override
-    public boolean checkIntegrity() {
-        return super.checkIntegrity() &&
-                commandId != 0; // 命令结果的命令ID不能为0
-    }
-
-    @Override
-    public CommandResult clone() {
-        return new CommandResult(this);
-    }
-
-    @Override
-    public String toDebugString() {
-        return String.format("CommandResult[cmdId=%d, success=%s, final=%s, results=%d, error=%s]",
-                commandId,
-                isSuccess(),
-                isFinal,
-                result.size(),
-                error);
+        return null;
     }
 }

@@ -1,20 +1,27 @@
 package com.tenframework.core.extension;
 
+import com.tenframework.core.message.AudioFrameMessage;
+import com.tenframework.core.message.CommandMessage;
+import com.tenframework.core.message.CommandResult;
+import com.tenframework.core.message.DataMessage;
+import com.tenframework.core.message.Location;
+import com.tenframework.core.message.Message;
+import com.tenframework.core.message.VideoFrameMessage;
+import com.tenframework.core.error.TenError;
+import com.tenframework.core.metrics.ExtensionMetrics;
+import lombok.Getter;
+import lombok.Setter;
+import lombok.extern.slf4j.Slf4j;
+
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
+import java.util.Optional;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
-
-import com.tenframework.core.message.AudioFrame;
-import com.tenframework.core.message.Command;
-import com.tenframework.core.message.CommandResult;
-import com.tenframework.core.message.Data;
-import com.tenframework.core.message.VideoFrame;
-import lombok.extern.slf4j.Slf4j;
 
 /**
  * 基础Extension抽象类
@@ -147,95 +154,33 @@ public abstract class BaseExtension implements Extension {
     // ==================== 自动消息处理 ====================
 
     @Override
-    public void onCommand(Command command, AsyncExtensionEnv env) {
-        if (!isRunning) {
-            log.warn("Extension未运行，忽略命令: extensionName={}, commandName={}",
-                    extensionName, command.getName());
-            return;
-        }
-
-        // 自动记录和监控
-        messageCounter.incrementAndGet();
-        metrics.recordCommand();
-
-        // 使用重试机制处理命令
-        executeWithRetry(() -> {
-            long startTime = System.nanoTime(); // 记录开始时间
-            try {
-                handleCommand(command, env);
-            } finally {
-                metrics.recordMessageProcessingTime(System.nanoTime() - startTime); // 记录处理时间
-            }
-        });
+    public void onCommand(CommandMessage command, AsyncExtensionEnv env) {
+        log.warn("Extension {} received unhandled CommandMessage: {}", getExtensionName(), command.getType());
+        env.sendResult(command.getId(), TenError.failure(-1, "Unhandled command type: " + command.getType()));
     }
 
-    @Override
-    public void onData(Data data, AsyncExtensionEnv env) {
-        if (!isRunning) {
-            log.warn("Extension未运行，忽略数据: extensionName={}, dataName={}",
-                    extensionName, data.getName());
-            return;
-        }
-
-        // 自动记录和监控
-        messageCounter.incrementAndGet();
-        metrics.recordData();
-
-        // 异步处理数据
-        submitTask(() -> {
-            long startTime = System.nanoTime(); // 记录开始时间
-            try {
-                handleData(data, env);
-            } finally {
-                metrics.recordMessageProcessingTime(System.nanoTime() - startTime); // 记录处理时间
-            }
-        });
+    public void onCommand(StartGraphCommandMessage command, AsyncExtensionEnv env) {
+        onCommand((CommandMessage) command, env);
     }
 
-    @Override
-    public void onAudioFrame(AudioFrame audioFrame, AsyncExtensionEnv env) {
-        if (!isRunning) {
-            log.warn("Extension未运行，忽略音频帧: extensionName={}, frameName={}",
-                    extensionName, audioFrame.getName());
-            return;
-        }
-
-        // 自动记录和监控
-        messageCounter.incrementAndGet();
-        metrics.recordAudioFrame();
-
-        // 异步处理音频帧
-        submitTask(() -> {
-            long startTime = System.nanoTime(); // 记录开始时间
-            try {
-                handleAudioFrame(audioFrame, env);
-            } finally {
-                metrics.recordMessageProcessingTime(System.nanoTime() - startTime); // 记录处理时间
-            }
-        });
+    public void onCommand(StopGraphCommandMessage command, AsyncExtensionEnv env) {
+        onCommand((CommandMessage) command, env);
     }
 
-    @Override
-    public void onVideoFrame(VideoFrame videoFrame, AsyncExtensionEnv env) {
-        if (!isRunning) {
-            log.warn("Extension未运行，忽略视频帧: extensionName={}, frameName={}",
-                    extensionName, videoFrame.getName());
-            return;
-        }
+    public void onCommand(AddExtensionToGraphCommandMessage command, AsyncExtensionEnv env) {
+        onCommand((CommandMessage) command, env);
+    }
 
-        // 自动记录和监控
-        messageCounter.incrementAndGet();
-        metrics.recordVideoFrame();
+    public void onCommand(RemoveExtensionFromGraphCommandMessage command, AsyncExtensionEnv env) {
+        onCommand((CommandMessage) command, env);
+    }
 
-        // 异步处理视频帧
-        submitTask(() -> {
-            long startTime = System.nanoTime(); // 记录开始时间
-            try {
-                handleVideoFrame(videoFrame, env);
-            } finally {
-                metrics.recordMessageProcessingTime(System.nanoTime() - startTime); // 记录处理时间
-            }
-        });
+    public void onCommand(TimerCommandMessage command, AsyncExtensionEnv env) {
+        onCommand((CommandMessage) command, env);
+    }
+
+    public void onCommand(TimeoutCommandMessage command, AsyncExtensionEnv env) {
+        onCommand((CommandMessage) command, env);
     }
 
     // ==================== 内置能力 ====================
@@ -290,7 +235,7 @@ public abstract class BaseExtension implements Extension {
     /**
      * 发送消息的便捷方法
      */
-    protected void sendMessage(Data data) {
+    protected void sendMessage(DataMessage data) {
         if (context != null) {
             context.sendData(data); // 更改为sendData
             metrics.recordResult(); // 仍然记录成功发送
@@ -401,26 +346,6 @@ public abstract class BaseExtension implements Extension {
     }
 
     // ==================== 子类需要实现的简单方法 ====================
-
-    /**
-     * 处理命令 - 子类只需实现这个简单方法
-     */
-    protected abstract void handleCommand(Command command, AsyncExtensionEnv context);
-
-    /**
-     * 处理数据 - 子类只需实现这个简单方法
-     */
-    protected abstract void handleData(Data data, AsyncExtensionEnv context);
-
-    /**
-     * 处理音频帧 - 子类只需实现这个简单方法
-     */
-    protected abstract void handleAudioFrame(AudioFrame audioFrame, AsyncExtensionEnv context);
-
-    /**
-     * 处理视频帧 - 子类只需实现这个简单方法
-     */
-    protected abstract void handleVideoFrame(VideoFrame videoFrame, AsyncExtensionEnv context);
 
     // ==================== 可选的生命周期方法 ====================
 

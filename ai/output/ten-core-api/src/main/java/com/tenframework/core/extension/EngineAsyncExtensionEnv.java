@@ -1,34 +1,33 @@
 package com.tenframework.core.extension;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.tenframework.core.engine.CommandSubmitter;
+import com.tenframework.core.engine.MessageSubmitter;
+import com.tenframework.core.message.AudioFrameMessage;
+import com.tenframework.core.message.CommandResult;
+import com.tenframework.core.message.DataMessage;
+import com.tenframework.core.message.Location;
+import com.tenframework.core.message.Message;
+import com.tenframework.core.message.VideoFrameMessage;
+import com.tenframework.core.message.command.Command;
+import com.tenframework.core.util.JsonUtils;
+import lombok.extern.slf4j.Slf4j;
+
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.CompletableFuture;
-
-// import com.tenframework.core.engine.Engine; // 移除Engine导入
-import com.tenframework.core.message.Location;
-import com.tenframework.core.engine.MessageSubmitter; // 添加MessageSubmitter导入
-import com.tenframework.core.engine.CommandSubmitter; // 添加CommandSubmitter导入
-import com.tenframework.core.message.Command;
-import com.tenframework.core.message.CommandResult;
-import com.tenframework.core.message.Data;
-import com.tenframework.core.message.VideoFrame;
-import com.tenframework.core.message.AudioFrame;
-import com.tenframework.core.message.Message;
-import com.tenframework.core.util.JsonUtils;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-
-import lombok.extern.slf4j.Slf4j;
+import java.util.concurrent.TimeUnit;
 
 /**
- * EngineAsyncExtensionEnv类
- * AsyncExtensionEnv接口的具体实现，作为Extension与Engine交互的桥梁
- * 提供Extension所需的核心功能，并封装了与Engine的通信细节及虚拟线程执行器
+ * `EngineAsyncExtensionEnv` 是 `AsyncExtensionEnv` 接口的具体实现，提供了 Extension 与
+ * Engine 交互的运行时环境。
+ * 它负责将 Extension 的请求（如发送消息、命令）委托给 Engine，并管理 Extension 的属性和虚拟线程执行器。
  */
 @Slf4j
 public class EngineAsyncExtensionEnv implements AsyncExtensionEnv {
@@ -36,295 +35,185 @@ public class EngineAsyncExtensionEnv implements AsyncExtensionEnv {
     private final String extensionName;
     private final String graphId;
     private final String appUri;
-    private final MessageSubmitter messageSubmitter; // 添加MessageSubmitter字段
-    private final CommandSubmitter commandSubmitter; // 添加CommandSubmitter字段
-    private final Map<String, Object> properties;
-    private final ExecutorService virtualThreadExecutor;
+    private final MessageSubmitter messageSubmitter; // 委托给 Engine 发送消息
+    private final CommandSubmitter commandSubmitter; // 委托给 Engine 提交命令
+    private final Map<String, Object> properties; // 存储 Extension 的属性
+    private final ExecutorService virtualThreadExecutor; // 用于 Extension 内部的虚拟线程任务
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public EngineAsyncExtensionEnv(String extensionName, String graphId, String appUri,
-            MessageSubmitter messageSubmitter, CommandSubmitter commandSubmitter, Map<String, Object> properties) { // 修改构造函数参数
+            MessageSubmitter messageSubmitter, CommandSubmitter commandSubmitter, Map<String, Object> properties) {
         this.extensionName = extensionName;
         this.graphId = graphId;
         this.appUri = appUri;
-        this.messageSubmitter = messageSubmitter; // 赋值MessageSubmitter实例
-        this.commandSubmitter = commandSubmitter; // 赋值CommandSubmitter实例
-        this.properties = properties != null ? new ConcurrentHashMap<>(properties) : new ConcurrentHashMap<>();
+        this.messageSubmitter = messageSubmitter;
+        this.commandSubmitter = commandSubmitter;
+        this.properties = new ConcurrentHashMap<>(properties);
+        // 使用虚拟线程 ExecutorService
         this.virtualThreadExecutor = Executors.newVirtualThreadPerTaskExecutor();
-        log.debug("EngineAsyncExtensionEnv创建成功: extensionName={}, graphId={}", extensionName, graphId);
     }
 
     @Override
     public void sendResult(CommandResult result) {
-        if (result == null) {
-            log.warn("尝试发送空命令结果: extensionName={}, graphId={}", extensionName, graphId);
-            return;
+        // 确保结果消息有正确的源和目的地
+        if (result.getSrcLoc() == null) {
+            result.setSrcLoc(new Location().setAppUri(appUri).setGraphId(graphId).setNodeId(extensionName));
         }
-
-        // 验证命令结果完整性
-        if (!result.checkIntegrity()) {
-            log.warn("命令结果完整性检查失败: extensionName={}, graphId={}, commandId={}",
-                    extensionName, graphId, result.getCommandId());
-            return;
+        if (result.getDestLocs() == null || result.getDestLocs().isEmpty()) {
+            // 如果没有指定目的地，默认回传给原始命令的发送方或 App
+            // 这里简化处理，可以考虑根据原始命令的返回 Location 或通过 CommandSubmitter 回传
+            log.warn("Extension {}: sendResult 未指定 destLocs, 结果可能不会被路由。", extensionName);
         }
-
-        // 验证命令ID不为空
-        if (result.getCommandId() == 0) { // 检查long类型是否为0
-            log.warn("命令结果缺少有效的commandId: extensionName={}, graphId={}",
-                    extensionName, graphId);
-            return;
+        if (commandSubmitter != null) {
+            commandSubmitter.submitCommandResult(result);
+        } else {
+            log.warn("Extension {}: CommandSubmitter 为空，无法发送命令结果: {}", extensionName, result.getId());
         }
-
-        // 设置命令结果的源位置（如果未设置）
-        if (result.getSourceLocation() == null) {
-            Location sourceLocation = new Location(this.appUri, this.graphId, extensionName);
-            result.setSourceLocation(sourceLocation);
-        }
-
-        // 命令结果本质上也是一种消息，回溯到Engine的inboundMessageQueue处理
-        virtualThreadExecutor.execute(() -> {
-            messageSubmitter.submitMessage(result); // 调用messageSubmitter的submitMessage
-            log.debug("Extension命令结果发送成功: extensionName={}, graphId={}, commandId={}, isFinal={}",
-                    extensionName, graphId, result.getCommandId(), result.isFinal());
-        });
     }
 
     @Override
     public CompletableFuture<Object> sendCommand(Command command) {
-        if (command == null) {
-            log.warn("尝试发送空命令: extensionName={}, graphId={}", extensionName, graphId);
-            return CompletableFuture.completedFuture(null);
+        // 确保命令消息有正确的源
+        if (command.getSrcLoc() == null) {
+            command.setSrcLoc(new Location().setAppUri(appUri).setGraphId(graphId).setNodeId(extensionName));
         }
-        // 如果CommandId未设置，则由Engine内部的internalSendCommand方法负责生成
-        if (command.getSourceLocation() == null) {
-            Location sourceLocation = new Location(this.appUri, this.graphId, extensionName);
-            command.setSourceLocation(sourceLocation);
+        if (commandSubmitter != null) {
+            return commandSubmitter.submitCommand(command);
+        } else {
+            log.error("Extension {}: CommandSubmitter 为空，无法发送命令: {}", extensionName, command.getId());
+            return CompletableFuture.completedFuture(new RuntimeException("CommandSubmitter not available."));
         }
-        // 调用CommandSubmitter的submitCommand方法
-        return commandSubmitter.submitCommand(command);
     }
 
     @Override
-    public void sendData(Data data) {
-        if (data == null) {
-            log.warn("尝试发送空数据消息: extensionName={}, graphId={}", extensionName, graphId);
-            return;
+    public void sendData(DataMessage data) {
+        // 确保数据消息有正确的源
+        if (data.getSrcLoc() == null) {
+            data.setSrcLoc(new Location().setAppUri(appUri).setGraphId(graphId).setNodeId(extensionName));
         }
-        if (!data.checkIntegrity()) {
-            log.warn("数据消息完整性检查失败: extensionName={}, graphId={}, messageName={}",
-                    extensionName, graphId, data.getName());
-            return;
-        }
-        if (data.getSourceLocation() == null) {
-            Location sourceLocation = new Location(this.appUri, this.graphId, extensionName);
-            data.setSourceLocation(sourceLocation);
-        }
-        virtualThreadExecutor.execute(() -> {
+        if (messageSubmitter != null) {
             messageSubmitter.submitMessage(data);
-            log.debug("Extension数据消息发送成功: extensionName={}, graphId={}, messageName={}",
-                    extensionName, graphId, data.getName());
-        });
+        } else {
+            log.warn("Extension {}: MessageSubmitter 为空，无法发送数据消息: {}", extensionName, data.getId());
+        }
     }
 
     @Override
-    public void sendVideoFrame(VideoFrame videoFrame) {
-        if (videoFrame == null) {
-            log.warn("尝试发送空视频帧消息: extensionName={}, graphId={}", extensionName, graphId);
-            return;
+    public void sendVideoFrame(VideoFrameMessage videoFrame) {
+        // 确保视频帧消息有正确的源
+        if (videoFrame.getSrcLoc() == null) {
+            videoFrame.setSrcLoc(new Location().setAppUri(appUri).setGraphId(graphId).setNodeId(extensionName));
         }
-        if (!videoFrame.checkIntegrity()) {
-            log.warn("视频帧消息完整性检查失败: extensionName={}, graphId={}, messageName={}",
-                    extensionName, graphId, videoFrame.getName());
-            return;
-        }
-        if (videoFrame.getSourceLocation() == null) {
-            Location sourceLocation = new Location(this.appUri, this.graphId, extensionName);
-            videoFrame.setSourceLocation(sourceLocation);
-        }
-        virtualThreadExecutor.execute(() -> {
+        if (messageSubmitter != null) {
             messageSubmitter.submitMessage(videoFrame);
-            log.debug("Extension视频帧消息发送成功: extensionName={}, graphId={}, messageName={}",
-                    extensionName, graphId, videoFrame.getName());
-        });
+        } else {
+            log.warn("Extension {}: MessageSubmitter 为空，无法发送视频帧消息: {}", extensionName, videoFrame.getId());
+        }
     }
 
     @Override
-    public void sendAudioFrame(AudioFrame audioFrame) {
-        if (audioFrame == null) {
-            log.warn("尝试发送空音频帧消息: extensionName={}, graphId={}", extensionName, graphId);
-            return;
+    public void sendAudioFrame(AudioFrameMessage audioFrame) {
+        // 确保音频帧消息有正确的源
+        if (audioFrame.getSrcLoc() == null) {
+            audioFrame.setSrcLoc(new Location().setAppUri(appUri).setGraphId(graphId).setNodeId(extensionName));
         }
-        if (!audioFrame.checkIntegrity()) {
-            log.warn("音频帧消息完整性检查失败: extensionName={}, graphId={}, messageName={}",
-                    extensionName, graphId, audioFrame.getName());
-            return;
-        }
-        if (audioFrame.getSourceLocation() == null) {
-            Location sourceLocation = new Location(this.appUri, this.graphId, extensionName);
-            audioFrame.setSourceLocation(sourceLocation);
-        }
-        virtualThreadExecutor.execute(() -> {
+        if (messageSubmitter != null) {
             messageSubmitter.submitMessage(audioFrame);
-            log.debug("Extension音频帧消息发送成功: extensionName={}, graphId={}, messageName={}",
-                    extensionName, graphId, audioFrame.getName());
-        });
+        } else {
+            log.warn("Extension {}: MessageSubmitter 为空，无法发送音频帧消息: {}", extensionName, audioFrame.getId());
+        }
     }
+
+    // region Property Operations
 
     @Override
     public boolean isPropertyExist(String path) {
-        try {
-            JsonNode rootNode = objectMapper.valueToTree(properties);
-            return !rootNode.at(JsonUtils.convertDotPathToJsonPointer(path)).isMissingNode(); // 修正isMissingNode的判断
-        } catch (IllegalArgumentException e) {
-            log.warn("检查属性存在性时路径无效: path={}, error={}", path, e.getMessage());
-            return false;
-        }
+        return JsonUtils.getValueByPath(properties, path).isPresent();
     }
 
     @Override
     public Optional<String> getPropertyToJson(String path) {
-        try {
-            JsonNode rootNode = objectMapper.valueToTree(properties);
-            JsonNode node = rootNode.at(JsonUtils.convertDotPathToJsonPointer(path));
-            if (node.isMissingNode()) {
-                return Optional.empty();
+        return JsonUtils.getValueByPath(properties, path).map(val -> {
+            try {
+                return objectMapper.writeValueAsString(val);
+            } catch (JsonProcessingException e) {
+                log.error("Error converting property to JSON at path {}: {}", path, e.getMessage());
+                return null;
             }
-            return Optional.of(objectMapper.writeValueAsString(node));
-        } catch (JsonProcessingException e) {
-            log.error("将属性转换为JSON字符串失败: path={}", path, e);
-            return Optional.empty();
-        } catch (IllegalArgumentException e) {
-            log.warn("获取属性到JSON时路径无效: path={}, error={}", path, e.getMessage());
-            return Optional.empty();
-        }
+        });
     }
 
     @Override
     public void setPropertyFromJson(String path, String jsonStr) {
         try {
-            JsonNode newPropNode = objectMapper.readTree(jsonStr);
-            // 简单处理：如果path是顶层键，则直接替换或新增
-            // 如果path是嵌套路径，则尝试更新。这里需要注意ConcurrentHashMap的线程安全和复杂对象更新。
-            // 为了简单起见和编译通过，这里只支持顶层键的直接设置。
-            // 对于嵌套路径，需要更复杂的逻辑来安全地合并或更新，这超出了当前任务的范围。
-            if (path.contains(".")) {
-                log.warn("setPropertyFromJson目前不支持嵌套路径的完全合并，仅在顶层进行操作或部分更新: path={}", path);
-                // 尝试在现有属性中更新，这可能不完全符合预期语义，但为了编译通过
-                // 更健壮的实现需要递归地遍历并更新JsonNode
-                // 暂时简单地覆盖整个属性map，但这可能会丢失其他属性
-                // 或者通过JsonPatch等方式实现更安全的更新
-                // 这段代码是临时的，只是为了编译通过。真实的嵌套属性更新需要更复杂的JsonNode操作。
-                // 一个更合适的方法可能是：
-                // JsonNode currentRoot = objectMapper.valueToTree(properties);
-                // // 使用JsonNode的put方法进行更新（需要手动遍历路径）
-                // // 例如：JsonNode targetNode = currentRoot.at("path/to/nested/element");
-                // // targetNode.replace(newPropNode);
-                // properties.put(path, objectMapper.convertValue(newPropNode, Object.class));
-
-                // 这里为了快速编译，我们采取直接覆盖的方式，这可能导致数据丢失，仅作为占位符
-                properties.put(path, objectMapper.convertValue(newPropNode, Object.class));
-
-            } else {
-                properties.put(path, objectMapper.convertValue(newPropNode, Object.class));
-            }
-
+            JsonNode node = objectMapper.readTree(jsonStr);
+            JsonUtils.setValueByPath(properties, path, node);
         } catch (JsonProcessingException e) {
-            log.error("从JSON字符串设置属性失败: path={}, jsonStr={}", path, jsonStr, e);
+            log.error("Error parsing JSON for property at path {}: {}", path, e.getMessage());
         }
     }
 
     @Override
     public Optional<Integer> getPropertyInt(String path) {
-        try {
-            JsonNode rootNode = objectMapper.valueToTree(properties);
-            JsonNode node = rootNode.at(JsonUtils.convertDotPathToJsonPointer(path));
-            if (node.isMissingNode() || !node.isInt()) {
-                return Optional.empty();
-            }
-            return Optional.of(node.asInt());
-        } catch (IllegalArgumentException e) {
-            log.warn("获取整数属性时路径无效: path={}, error={}", path, e.getMessage());
-            return Optional.empty();
-        }
+        return JsonUtils.getValueByPath(properties, path)
+                .filter(Number.class::isInstance)
+                .map(Number.class::intValue);
     }
 
     @Override
     public void setPropertyInt(String path, int value) {
-        properties.put(path, value); // 简单设置，不处理嵌套路径
+        JsonUtils.setValueByPath(properties, path, value);
     }
 
     @Override
     public Optional<String> getPropertyString(String path) {
-        try {
-            JsonNode rootNode = objectMapper.valueToTree(properties);
-            JsonNode node = rootNode.at(JsonUtils.convertDotPathToJsonPointer(path));
-            if (node.isMissingNode() || !node.isTextual()) {
-                return Optional.empty();
-            }
-            return Optional.of(node.asText());
-        } catch (IllegalArgumentException e) {
-            log.warn("获取字符串属性时路径无效: path={}, error={}", path, e.getMessage());
-            return Optional.empty();
-        }
+        return JsonUtils.getValueByPath(properties, path)
+                .filter(String.class::isInstance)
+                .map(String.class::valueOf);
     }
 
     @Override
     public void setPropertyString(String path, String value) {
-        properties.put(path, value); // 简单设置，不处理嵌套路径
+        JsonUtils.setValueByPath(properties, path, value);
     }
 
     @Override
     public Optional<Boolean> getPropertyBool(String path) {
-        try {
-            JsonNode rootNode = objectMapper.valueToTree(properties);
-            JsonNode node = rootNode.at(JsonUtils.convertDotPathToJsonPointer(path));
-            if (node.isMissingNode() || !node.isBoolean()) {
-                return Optional.empty();
-            }
-            return Optional.of(node.asBoolean());
-        } catch (IllegalArgumentException e) {
-            log.warn("获取布尔属性时路径无效: path={}, error={}", path, e.getMessage());
-            return Optional.empty();
-        }
+        return JsonUtils.getValueByPath(properties, path)
+                .filter(Boolean.class::isInstance)
+                .map(Boolean.class::booleanValue);
     }
 
     @Override
     public void setPropertyBool(String path, boolean value) {
-        properties.put(path, value); // 简单设置，不处理嵌套路径
+        JsonUtils.setValueByPath(properties, path, value);
     }
 
     @Override
     public Optional<Float> getPropertyFloat(String path) {
-        try {
-            JsonNode rootNode = objectMapper.valueToTree(properties);
-            JsonNode node = rootNode.at(JsonUtils.convertDotPathToJsonPointer(path));
-            if (node.isMissingNode() || (!node.isFloat() && !node.isDouble())) {
-                return Optional.empty();
-            }
-            return Optional.of((float) node.asDouble()); // 返回float，但实际可能是double
-        } catch (IllegalArgumentException e) {
-            log.warn("获取浮点数属性时路径无效: path={}, error={}", path, e.getMessage());
-            return Optional.empty();
-        }
+        return JsonUtils.getValueByPath(properties, path)
+                .filter(Number.class::isInstance)
+                .map(Number.class::floatValue);
     }
 
     @Override
     public void setPropertyFloat(String path, float value) {
-        properties.put(path, value); // 简单设置，不处理嵌套路径
+        JsonUtils.setValueByPath(properties, path, value);
     }
 
     @Override
     public void initPropertyFromJson(String jsonStr) {
         try {
-            Map<String, Object> initialProps = objectMapper.readValue(jsonStr,
+            Map<String, Object> newProperties = objectMapper.readValue(jsonStr,
                     new TypeReference<Map<String, Object>>() {
                     });
-            properties.clear(); // 清除现有属性
-            properties.putAll(initialProps); // 添加新属性
+            this.properties.putAll(newProperties);
         } catch (JsonProcessingException e) {
-            log.error("从JSON字符串初始化属性失败: jsonStr={}", jsonStr, e);
+            log.error("Error initializing properties from JSON: {}", e.getMessage());
         }
     }
+
+    // endregion Property Operations
 
     @Override
     public ExecutorService getVirtualThreadExecutor() {
@@ -346,27 +235,24 @@ public class EngineAsyncExtensionEnv implements AsyncExtensionEnv {
         return graphId;
     }
 
-    /**
-     * 获取Extension内部虚拟线程执行器中当前活跃的任务数量。
-     * 这代表了正在执行的非阻塞异步操作的数量。
-     *
-     * @return 活跃的虚拟线程任务数量
-     */
     @Override
     public int getActiveVirtualThreadCount() {
-        // 由于虚拟线程池的性质，直接获取活跃任务数量比较困难。
-        // 一般来说，虚拟线程是轻量级的，并发数量通常不会直接反映在如ThreadPoolExecutor的活跃线程数上。
-        // 此处暂时返回0，因为没有直接可用的API来获取虚拟线程的活跃任务数量。
-        return 0;
+        // TODO: 实际实现需要通过 ExecutorService 的内部机制获取活跃线程数
+        return 0; // 暂时返回0
     }
 
-    /**
-     * 关闭ExtensionEnv时，需要关闭虚拟线程池
-     */
+    @Override
     public void close() {
-        if (!virtualThreadExecutor.isShutdown()) {
-            virtualThreadExecutor.shutdownNow();
-            log.info("EngineAsyncExtensionEnv虚拟线程池已关闭: extensionName={}, graphId={}", extensionName, graphId);
+        if (virtualThreadExecutor != null) {
+            virtualThreadExecutor.shutdown();
+            try {
+                if (!virtualThreadExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
+                    virtualThreadExecutor.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                virtualThreadExecutor.shutdownNow();
+                Thread.currentThread().interrupt();
+            }
         }
     }
 }

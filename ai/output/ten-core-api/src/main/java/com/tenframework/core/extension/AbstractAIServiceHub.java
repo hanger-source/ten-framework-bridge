@@ -1,111 +1,138 @@
 package com.tenframework.core.extension;
 
-import java.util.Map;
-
-import com.tenframework.core.message.AudioFrame;
-import com.tenframework.core.message.Command;
+import com.tenframework.core.engine.CommandSubmitter;
+import com.tenframework.core.message.AudioFrameMessage;
+import com.tenframework.core.message.CommandMessage;
 import com.tenframework.core.message.CommandResult;
-import com.tenframework.core.message.Data;
-import com.tenframework.core.message.VideoFrame;
+import com.tenframework.core.message.DataMessage;
+import com.tenframework.core.message.VideoFrameMessage;
+import com.tenframework.core.util.MessageUtils;
+import lombok.Getter;
+import lombok.Setter;
+import lombok.extern.slf4j.Slf4j;
+
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 
 /**
- * 抽象的AI服务中心Extension，提供了AI服务相关Extension的通用逻辑。
- * 继承自BaseExtension，并实现了Extension接口。
+ * 抽象AI服务枢纽扩展，用于简化AI服务相关的扩展开发。
+ * 提供了统一的接口用于处理命令、数据、音视频帧，并支持异步命令提交和结果回溯。
  */
+@Slf4j
 public abstract class AbstractAIServiceHub extends BaseExtension {
 
+    @Getter
+    @Setter
+    protected CommandSubmitter commandSubmitter;
+
     /**
-     * 构造函数，初始化AI服务中心Extension。
-     *
-     * @param extensionName Extension的名称。
+     * 异步Extension上下文
      */
-    public AbstractAIServiceHub(String extensionName) {
-        super(); // 修改为无参构造函数
-    }
+    @Getter
+    protected AsyncExtensionEnv asyncExtensionEnv;
 
     @Override
     public void onConfigure(AsyncExtensionEnv env) {
         super.onConfigure(env);
-        onAIServiceConfigure(env);
+        this.asyncExtensionEnv = env;
+        this.commandSubmitter = env.getCommandSubmitter();
     }
 
     @Override
-    public void onInit(AsyncExtensionEnv env) {
-        super.onInit(env);
-        onAIServiceInit(env);
-    }
-
-    @Override
-    public void onStart(AsyncExtensionEnv env) {
-        super.onStart(env);
-        onAIServiceStart(env);
-    }
-
-    @Override
-    public void onStop(AsyncExtensionEnv env) {
-        super.onStop(env);
-        onAIServiceStop(env);
-    }
-
-    @Override
-    public void onDeinit(AsyncExtensionEnv env) {
-        super.onDeinit(env);
-        onAIServiceDeinit(env);
-    }
-
-    @Override
-    public void onCommand(Command command, AsyncExtensionEnv env) {
+    public void onCommand(CommandMessage command, AsyncExtensionEnv env) {
         super.onCommand(command, env);
         handleAIServiceCommand(command, env);
     }
 
     @Override
-    public void onData(Data data, AsyncExtensionEnv env) {
+    public void onData(DataMessage data, AsyncExtensionEnv env) {
         super.onData(data, env);
         handleAIServiceData(data, env);
     }
 
     @Override
-    public void onAudioFrame(AudioFrame audioFrame, AsyncExtensionEnv env) {
+    public void onAudioFrame(AudioFrameMessage audioFrame, AsyncExtensionEnv env) {
         super.onAudioFrame(audioFrame, env);
         handleAIServiceAudioFrame(audioFrame, env);
     }
 
     @Override
-    public void onVideoFrame(VideoFrame videoFrame, AsyncExtensionEnv env) {
+    public void onVideoFrame(VideoFrameMessage videoFrame, AsyncExtensionEnv env) {
         super.onVideoFrame(videoFrame, env);
         handleAIServiceVideoFrame(videoFrame, env);
     }
 
-    protected abstract void onAIServiceConfigure(AsyncExtensionEnv context);
-
-    protected abstract void onAIServiceInit(AsyncExtensionEnv context);
-
-    protected abstract void onAIServiceStart(AsyncExtensionEnv context);
-
-    protected abstract void onAIServiceStop(AsyncExtensionEnv context);
-
-    protected abstract void onAIServiceDeinit(AsyncExtensionEnv context);
-
-    protected abstract void handleAIServiceCommand(Command command, AsyncExtensionEnv context);
-
-    protected abstract void handleAIServiceData(Data data, AsyncExtensionEnv context);
-
-    protected abstract void handleAIServiceAudioFrame(AudioFrame audioFrame, AsyncExtensionEnv context);
-
-    protected abstract void handleAIServiceVideoFrame(VideoFrame videoFrame, AsyncExtensionEnv context);
-
-    protected void sendErrorResult(Command command, AsyncExtensionEnv context, String errorMessage) {
-        // 构建错误结果
-        CommandResult errorResult = CommandResult.error(command.getCommandId(), errorMessage);
-        // 发送结果
-        context.sendResult(errorResult);
+    @Override
+    public void onCommandResult(CommandResult commandResult, AsyncExtensionEnv env) {
+        super.onCommandResult(commandResult, env);
+        handleAIServiceCommandResult(commandResult, env);
     }
 
-    protected void sendSuccessResult(Command command, AsyncExtensionEnv context, Map<String, Object> result) {
-        // 构建成功结果
-        CommandResult successResult = CommandResult.success(command.getCommandId(), result);
-        // 发送结果
-        context.sendResult(successResult);
+    /**
+     * AI服务特定的命令处理接口
+     *
+     * @param command 命令消息
+     * @param context Extension上下文
+     */
+    protected abstract void handleAIServiceCommand(CommandMessage command, AsyncExtensionEnv context);
+
+    /**
+     * AI服务特定的数据处理接口
+     *
+     * @param data 数据消息
+     * @param context Extension上下文
+     */
+    protected abstract void handleAIServiceData(DataMessage data, AsyncExtensionEnv context);
+
+    /**
+     * AI服务特定的音频帧处理接口
+     *
+     * @param audioFrame 音频帧消息
+     * @param context Extension上下文
+     */
+    protected abstract void handleAIServiceAudioFrame(AudioFrameMessage audioFrame, AsyncExtensionEnv context);
+
+    /**
+     * AI服务特定的视频帧处理接口
+     *
+     * @param videoFrame 视频帧消息
+     * @param context Extension上下文
+     */
+    protected abstract void handleAIServiceVideoFrame(VideoFrameMessage videoFrame, AsyncExtensionEnv context);
+
+    /**
+     * AI服务特定的命令结果处理接口
+     *
+     * @param commandResult 命令结果消息
+     * @param context Extension上下文
+     */
+    protected abstract void handleAIServiceCommandResult(CommandResult commandResult, AsyncExtensionEnv context);
+
+    protected void sendCommandResult(String commandId, Object result, String errorMessage) {
+        CommandResult commandResult = CommandResult.builder()
+                .id(commandId)
+                .result(result)
+                .error(errorMessage != null ? MessageUtils.createError(errorMessage) : null)
+                .build();
+        asyncExtensionEnv.submitCommandResult(commandResult);
+    }
+
+    /**
+     * 异步发送命令并等待结果。
+     *
+     * @param command 命令对象
+     * @return 包含命令结果的CompletableFuture
+     */
+    protected CompletableFuture<Object> submitCommand(CommandMessage command) {
+        return commandSubmitter.submitCommand(command);
+    }
+
+    protected long generateCommandId() {
+        return UUID.randomUUID().getLeastSignificantBits();
+    }
+
+    @Override
+    public String getAppUri() {
+        return asyncExtensionEnv != null ? asyncExtensionEnv.getAppUri() : "unknown";
     }
 }

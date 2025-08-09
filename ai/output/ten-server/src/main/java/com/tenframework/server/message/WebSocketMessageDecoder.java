@@ -18,10 +18,17 @@ import org.msgpack.value.ValueType;
 import static com.tenframework.core.message.MessageUtils.TEN_MSGPACK_EXT_TYPE_MSG;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.tenframework.core.message.CommandMessage;
-import com.tenframework.core.message.DataMessage;
-import com.tenframework.core.message.EventMessage;
-import com.tenframework.core.message.MessageType;
+// import com.tenframework.core.message.CommandMessage;
+// import com.tenframework.core.message.DataMessage;
+// import com.tenframework.core.message.EventMessage; // 已移除
+// import com.tenframework.core.message.MessageType;
+// import com.tenframework.core.message.CommandResultMessage;
+// import com.tenframework.core.message.StartGraphCommandMessage;
+// import com.tenframework.core.message.StopGraphCommandMessage;
+// import com.tenframework.core.message.TimerCommandMessage;
+// import com.tenframework.core.message.TimeoutCommandMessage;
+// import com.tenframework.core.message.VideoFrameMessage;
+// import com.tenframework.core.message.AudioFrameMessage;
 
 @Slf4j
 public class WebSocketMessageDecoder extends MessageToMessageDecoder<ByteBuf> { // 确保这里是ByteBuf
@@ -48,42 +55,15 @@ public class WebSocketMessageDecoder extends MessageToMessageDecoder<ByteBuf> { 
                 ExtensionTypeHeader extHeader = unpacker.unpackExtensionTypeHeader();
                 if (extHeader.getType() == TEN_MSGPACK_EXT_TYPE_MSG) {
                     byte[] innerBytes = unpacker.readPayload(extHeader.getLength());
-                    JsonNode rootNode = objectMapper.readTree(innerBytes);
-                    String typeName = rootNode.has("type") ? rootNode.get("type").asText() : null;
-
-                    if (typeName != null) {
-                        try {
-                            MessageType messageType = MessageType.valueOf(typeName.toUpperCase());
-                            switch (messageType) {
-                                case CMD:
-                                    decodedMessage = objectMapper.readValue(innerBytes, CommandMessage.class);
-                                    break;
-                                case DATA:
-                                    decodedMessage = objectMapper.readValue(innerBytes, DataMessage.class);
-                                    break;
-                                case EVENT:
-                                    decodedMessage = objectMapper.readValue(innerBytes, EventMessage.class);
-                                    break;
-                                default:
-                                    log.warn("WebSocketMessageDecoder: 收到未知MessageType: {}", typeName);
-                                    decodedMessage = objectMapper.readValue(innerBytes, Message.class); // 尝试作为通用Message处理
-                                    break;
-                            }
-                        } catch (IllegalArgumentException e) {
-                            log.error("WebSocketMessageDecoder: 无效的MessageType字符串: {}, 错误: {}", typeName,
-                                    e.getMessage());
-                            decodedMessage = objectMapper.readValue(innerBytes, Message.class); // 尝试作为通用Message处理
-                        }
-                    } else {
-                        log.warn("WebSocketMessageDecoder: JSON中未找到'type'字段。");
-                        decodedMessage = objectMapper.readValue(innerBytes, Message.class); // 尝试作为通用Message处理
-                    }
+                    // 直接尝试反序列化为Message基类，利用@JsonSubTypes自动处理多态
+                    decodedMessage = objectMapper.readValue(innerBytes, Message.class);
                 } else {
                     log.warn("WebSocketMessageDecoder: 收到未知MsgPack EXT类型: type={}", extHeader.getType());
                     // 对于未知的EXT类型，直接传递字节数组
                     out.add(innerBytes);
                 }
             } else if (format.getValueType() == ValueType.STRING) {
+                // 针对非EXT类型字符串消息，尝试直接解析为通用Message
                 decodedMessage = objectMapper.readValue(unpacker.unpackString(), Message.class);
             }
             if (decodedMessage != null) {
