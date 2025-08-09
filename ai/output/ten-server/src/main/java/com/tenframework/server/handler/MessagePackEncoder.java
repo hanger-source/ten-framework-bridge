@@ -28,8 +28,8 @@ public class MessagePackEncoder extends MessageToByteEncoder<Message> {
 
             // 第二阶段编码: 将内部消息体封装在自定义的 MsgPack EXT 类型中
             try (MessageBufferPacker packer = MessagePack.newDefaultBufferPacker()) {
-                packer.packExtensionTypeHeader(MessageConstants.TEN_MSGPACK_EXT_TYPE_MSG, internalMsgBytes.length)
-                        .writePayload(internalMsgBytes);
+                packer.packExtensionTypeHeader(MessageConstants.TEN_MSGPACK_EXT_TYPE_MSG, internalMsgBytes.length);
+                packer.writePayload(internalMsgBytes);
 
                 // 将最终的 EXT 字节写入 ByteBuf
                 out.writeBytes(packer.toByteArray());

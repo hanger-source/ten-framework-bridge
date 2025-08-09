@@ -23,6 +23,7 @@
         <maven.compiler.target>21</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.release>21</maven.compiler.release>
+        <msgpack.version>0.9.10</msgpack.version>
     </properties>
 
     <dependencies>
@@ -55,7 +56,7 @@
         <!-- Add dependency on ten-core-api -->
         <dependency>
             <groupId>com.tenframework</groupId>
-            <artifactId>ten-core-api</artifactId>
+            <artifactId>ten-core</artifactId>
             <version>1.0.0-SNAPSHOT</version>
         </dependency>
 

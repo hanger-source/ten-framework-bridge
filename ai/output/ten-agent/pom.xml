@@ -18,7 +18,7 @@
     <dependencies>
         <dependency>
             <groupId>com.tenframework</groupId>
-            <artifactId>ten-core-api</artifactId>
+            <artifactId>ten-core</artifactId>
             <version>${project.parent.version}</version> <!-- 使用父模块版本 -->
         </dependency>
 
