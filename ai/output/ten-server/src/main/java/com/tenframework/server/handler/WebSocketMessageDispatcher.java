@@ -9,8 +9,6 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import lombok.extern.slf4j.Slf4j;
 
-import static com.tenframework.core.message.MessageConstants.PROPERTY_CLIENT_CHANNEL_ID;
-
 /**
  * WebSocketMessageDispatcher 负责从 WebSocket Channel 读取 Message，并将其分发到 App。
  * 它处理消息的初步校验和路由，并将 Channel ID 作为消息属性传递。
@@ -31,8 +29,6 @@ public class WebSocketMessageDispatcher extends SimpleChannelInboundHandler<Mess
         if (msg.getProperties() == null) {
             msg.setProperties(new HashMap<>()); // 确保 properties map 不为 null
         }
-        msg.getProperties().put(PROPERTY_CLIENT_CHANNEL_ID, channelId);
-
         NettyConnection connection = ctx.channel().attr(NettyConnection.CONNECTION_ATTRIBUTE_KEY).get();
         if (connection == null) {
             log.error("WebSocketMessageDispatcher: Channel {} 没有关联的 NettyConnection。", channelId);
