@@ -1,8 +1,9 @@
 package com.tenframework.server.handler;
 
+import java.util.HashMap;
+
 import com.tenframework.core.app.App;
 import com.tenframework.core.message.Message;
-import com.tenframework.core.message.MessageType;
 import com.tenframework.server.connection.NettyConnection;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
@@ -26,7 +27,11 @@ public class WebSocketMessageDispatcher extends SimpleChannelInboundHandler<Mess
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, Message msg) {
         String channelId = ctx.channel().id().asShortText();
-        msg.setProperty(PROPERTY_CLIENT_CHANNEL_ID, channelId); // 将 Channel ID 设置为消息属性
+        // 修复：使用 getProperties().put() 来设置属性
+        if (msg.getProperties() == null) {
+            msg.setProperties(new HashMap<>()); // 确保 properties map 不为 null
+        }
+        msg.getProperties().put(PROPERTY_CLIENT_CHANNEL_ID, channelId);
 
         NettyConnection connection = ctx.channel().attr(NettyConnection.CONNECTION_ATTRIBUTE_KEY).get();
         if (connection == null) {
@@ -34,8 +39,8 @@ public class WebSocketMessageDispatcher extends SimpleChannelInboundHandler<Mess
             return;
         }
 
-        // 设置消息的 sourceLocation 为 Connection 的 remoteLocation
-        msg.setSourceLocation(connection.getRemoteLocation());
+        // 修复：setSourceLocation 改为 setSrcLoc
+        msg.setSrcLoc(connection.getRemoteLocation());
 
         // 将消息分发给 App 处理
         app.handleInboundMessage(msg, connection);
@@ -47,19 +52,6 @@ public class WebSocketMessageDispatcher extends SimpleChannelInboundHandler<Mess
         // 这里可以进行一些连接建立后的初始化操作
         super.userEventTriggered(ctx, evt);
     }
-
-    // 移除 channelActive 和 channelInactive，因为这些生命周期事件现在由 NettyConnectionHandler 处理
-    /*
-     * @Override
-     * public void channelActive(ChannelHandlerContext ctx) {
-     * // ...
-     * }
-     *
-     * @Override
-     * public void channelInactive(ChannelHandlerContext ctx) {
-     * // ...
-     * }
-     */
 
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {

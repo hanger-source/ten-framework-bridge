@@ -38,10 +38,12 @@ public class HttpCommandResultOutboundHandler extends MessageToMessageEncoder<Co
             // 将CommandResult转换为Map，便于JSON序列化
             Map<String, Object> responseMap = Map.of(
                     "status", msg.isSuccess() ? "OK" : "ERROR",
-                    "command_id", msg.getCommandId(), // 直接使用getCommandId()，long类型不会是null
-                    "result", msg.getResult() != null ? msg.getResult() : Map.of(),
+                    "command_id", msg.getOriginalCommandId(), // 修复: getCommandId() 改为 getOriginalCommandId()
+                    "result", msg.isSuccess() ? msg.getDetail() : Map.of(), // 修复: getResult() 改为 getDetail(), 并根据
+                                                                            // isSuccess() 判断
                     "is_final", msg.isFinal(),
-                    "message", msg.getError() != null ? msg.getError() : (msg.isSuccess() ? "Success" : "Failure"));
+                    "message", msg.isSuccess() ? "Success" : msg.getDetail()); // 修复: getError() 改为 getDetail(), 并根据
+                                                                               // isSuccess() 判断
 
             String json = objectMapper.writeValueAsString(responseMap);
             HttpResponseStatus httpStatus = msg.isSuccess() ? OK : INTERNAL_SERVER_ERROR;
@@ -52,10 +54,10 @@ public class HttpCommandResultOutboundHandler extends MessageToMessageEncoder<Co
             response.headers().setInt(HttpHeaderNames.CONTENT_LENGTH, response.content().readableBytes());
 
             out.add(response);
-            log.debug("CommandResult编码为HTTP响应: commandId={}, status={}", msg.getCommandId(), httpStatus);
+            log.debug("CommandResult编码为HTTP响应: commandId={}, status={}", msg.getOriginalCommandId(), httpStatus);
 
         } catch (Exception e) {
-            log.error("编码CommandResult为HTTP响应失败: commandId={}", msg.getCommandId(), e);
+            log.error("编码CommandResult为HTTP响应失败: commandId={}", msg.getOriginalCommandId(), e);
             // 抛出异常，让Netty的exceptionCaught处理
             throw e;
         }

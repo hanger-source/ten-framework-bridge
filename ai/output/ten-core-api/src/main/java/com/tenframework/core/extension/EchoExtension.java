@@ -1,6 +1,5 @@
 package com.tenframework.core.extension;
 
-import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 
@@ -9,7 +8,6 @@ import com.tenframework.core.message.AudioFrameMessage;
 import com.tenframework.core.message.CommandResult;
 import com.tenframework.core.message.DataMessage;
 import com.tenframework.core.message.MessageType;
-import com.tenframework.core.message.MessageUtils;
 import com.tenframework.core.message.VideoFrameMessage;
 import com.tenframework.core.message.command.Command;
 import lombok.extern.slf4j.Slf4j;
@@ -168,14 +166,11 @@ public class EchoExtension implements Extension {
                 DataMessage echoData = new DataMessage(com.tenframework.core.util.MessageUtils.generateUniqueId(),
                         MessageType.DATA,
                         data.getSrcLoc(), data.getDestLocs(), data.getDataBytes());
-                echoData.setProperties(new java.util.HashMap<String, Object>() {
+                echoData.setProperties(new java.util.HashMap<>() {
                     {
                         put("original_data_name", data.getName());
                         put("processed_by", getExtensionName());
                         put("message_count", messageCount);
-                        put("msgpack_ext_type", Byte.valueOf(MessageUtils.TEN_MSGPACK_EXT_TYPE_MSG)); // 将
-                                                                                                      // MessageUtils.TEN_MSGPACK_EXT_TYPE_MSG
-                                                                                                      // 作为属性传递
                     }
                 });
 

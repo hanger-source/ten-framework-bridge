@@ -1,13 +1,13 @@
 package com.tenframework.server.handler;
 
+import java.util.UUID;
+
 import com.tenframework.core.app.App;
-import com.tenframework.core.message.Location; // 新增导入
+import com.tenframework.core.message.Location;
 import com.tenframework.server.connection.NettyConnection;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import lombok.extern.slf4j.Slf4j;
-
-import java.util.UUID;
 
 /**
  * NettyConnectionHandler 负责处理 Netty Channel 的生命周期事件。
@@ -30,7 +30,7 @@ public class NettyConnectionHandler extends ChannelInboundHandlerAdapter {
                 connectionId,
                 ctx.channel().remoteAddress(),
                 ctx.channel(),
-                app.getRunloop().orElse(null) // 将 App 的 Runloop 传递给 Connection
+            app.getAppRunloop() // 将 App 的 Runloop 传递给 Connection
         );
         log.info("NettyConnectionHandler: Channel {} 活跃，创建新的 NettyConnection: {}", ctx.channel().id().asShortText(),
                 connectionId);

@@ -25,6 +25,8 @@ import io.netty.handler.codec.http.websocketx.WebSocketServerProtocolHandler;
 import io.netty.handler.logging.LogLevel;
 import io.netty.handler.logging.LoggingHandler;
 import io.netty.handler.stream.ChunkedWriteHandler;
+import com.tenframework.server.handler.MessagePackDecoder;
+import com.tenframework.server.handler.MessagePackEncoder;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -69,31 +71,33 @@ public class TenServer {
 
                 ServerBootstrap b = new ServerBootstrap();
                 b.group(bossGroup, workerGroup)
-                    .channel(NioServerSocketChannel.class)
-                    .handler(new LoggingHandler(LogLevel.INFO)) // 添加日志处理器
-                    .childHandler(new ChannelInitializer<SocketChannel>() {
-                        @Override
-                        protected void initChannel(SocketChannel ch) throws Exception {
-                            ch.pipeline().addLast(
-                                new HttpServerCodec(), // HTTP 编解码器
-                                new HttpObjectAggregator(65536), // HTTP 消息聚合器
-                                new ChunkedWriteHandler(), // 处理大文件传输
-                                // WebSocket 协议处理器，路径为 "/websocket"
-                                // 在握手完成后，HTTP 请求会被替换为 WebSocket 帧
-                                new WebSocketServerProtocolHandler("/websocket"),
-                                new WebSocketFrameAggregator(8192), // 聚合 WebSocket 帧
-                                new MessagePackCodec(TenMessagePackMapperProvider.getMapper()), // MsgPack 编解码器
-                                new NettyConnectionHandler(app), // 负责 Connection 生命周期管理和消息转发给 App
-                                // WebSocketMessageDispatcher 现在只处理核心消息分发
-                                new WebSocketMessageDispatcher(app) // WebSocket 消息调度器，传入 App
-                            );
-                        }
-                    })
-                    .option(ChannelOption.SO_BACKLOG, 128) // TCP/IP 连接队列的最大长度
-                    .childOption(ChannelOption.SO_KEEPALIVE, true); // 启用 TCP Keep-Alive
+                        .channel(NioServerSocketChannel.class)
+                        .handler(new LoggingHandler(LogLevel.INFO)) // 添加日志处理器
+                        .childHandler(new ChannelInitializer<SocketChannel>() {
+                            @Override
+                            protected void initChannel(SocketChannel ch) throws Exception {
+                                ch.pipeline().addLast(
+                                        new HttpServerCodec(), // HTTP 编解码器
+                                        new HttpObjectAggregator(65536), // HTTP 消息聚合器
+                                        new ChunkedWriteHandler(), // 处理大文件传输
+                                        // WebSocket 协议处理器，路径为 "/websocket"
+                                        // 在握手完成后，HTTP 请求会被替换为 WebSocket 帧
+                                        new WebSocketServerProtocolHandler("/websocket"),
+                                        new WebSocketFrameAggregator(8192), // 聚合 WebSocket 帧
+                                        // MsgPack 编解码器
+                                        new MessagePackDecoder(), // MsgPack 解码器
+                                        new MessagePackEncoder(), // MsgPack 编码器
+                                        new NettyConnectionHandler(app), // 负责 Connection 生命周期管理和消息转发给 App
+                                        // WebSocketMessageDispatcher 现在只处理核心消息分发
+                                        new WebSocketMessageDispatcher(app) // WebSocket 消息调度器，传入 App
+                                );
+                            }
+                        })
+                        .option(ChannelOption.SO_BACKLOG, 128) // TCP/IP 连接队列的最大长度
+                        .childOption(ChannelOption.SO_KEEPALIVE, true); // 启用 TCP Keep-Alive
 
                 channelFuture = b.bind(currentPort).sync(); // 同步绑定端口
-                currentPort = ((InetSocketAddress)channelFuture.channel().localAddress()).getPort();
+                currentPort = ((InetSocketAddress) channelFuture.channel().localAddress()).getPort();
                 log.info("TenServer successfully started on port {}", currentPort);
                 serverStartFuture.complete(null);
                 return serverStartFuture;
@@ -101,7 +105,7 @@ public class TenServer {
             } catch (Exception e) {
                 if (e.getCause() instanceof BindException) {
                     log.warn("Port {} already in use on attempt {}/{}. Retrying with new port...",
-                        currentPort, attempt + 1, MAX_RETRY_ATTEMPTS);
+                            currentPort, attempt + 1, MAX_RETRY_ATTEMPTS);
                     currentPort = findAvailablePort(); // 重新查找可用端口
                     try {
                         TimeUnit.MILLISECONDS.sleep(RETRY_DELAY_MILLIS);
@@ -124,20 +128,25 @@ public class TenServer {
 
     public CompletableFuture<Void> shutdown() {
         log.info("TenServer shutting down.");
-        CompletableFuture<Void> shutdownFuture = CompletableFuture.completedFuture(null);
+        final CompletableFuture<Void> shutdownFuture = new CompletableFuture<>();
         if (channelFuture != null) {
-            shutdownFuture = channelFuture.channel().closeFuture().thenRun(() -> {
-                // Channel 关闭后，关闭 EventLoopGroup
-                if (bossGroup != null) {
-                    bossGroup.shutdownGracefully();
+            channelFuture.channel().closeFuture().addListener(f -> {
+                if (f.isSuccess()) {
+                    // Channel 关闭后，关闭 EventLoopGroup
+                    if (bossGroup != null) {
+                        bossGroup.shutdownGracefully();
+                    }
+                    if (workerGroup != null) {
+                        workerGroup.shutdownGracefully();
+                    }
+                    shutdownFuture.complete(null);
+                } else {
+                    log.error("Error during channel close: {}", f.cause().getMessage());
+                    shutdownFuture.completeExceptionally(f.cause());
                 }
-                if (workerGroup != null) {
-                    workerGroup.shutdownGracefully();
-                }
-            }).exceptionally(e -> {
-                log.error("Error during channel close: {}", e.getMessage());
-                throw new CompletionException(e);
             });
+        } else {
+            shutdownFuture.complete(null);
         }
         return shutdownFuture;
     }
