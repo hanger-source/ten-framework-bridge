@@ -5,7 +5,7 @@ import com.tenframework.core.message.CommandResult;
 import com.tenframework.core.message.Message;
 import com.tenframework.core.message.Location;
 import com.tenframework.core.message.command.Command;
-import com.tenframework.core.path.PathManager;
+import com.tenframework.core.path.PathTable;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.Collections;
@@ -16,19 +16,19 @@ import java.util.concurrent.ConcurrentMap;
 /**
  * `DefaultExtensionMessageDispatcher` 是 `ExtensionMessageDispatcher` 接口的默认实现。
  * 它负责将消息从 `Engine` 派发到相应的 `Extension` 实例。
- * 消息的路由决策委托给 `PathManager`。
+ * 消息的路由决策委托给 `PathTable`。
  */
 @Slf4j
 public class DefaultExtensionMessageDispatcher implements ExtensionMessageDispatcher {
 
     private final ExtensionContext extensionContext;
-    private final PathManager pathManager;
+    private final PathTable pathTable;
     private final ConcurrentMap<Long, CompletableFuture<Object>> commandFutures;
 
     public DefaultExtensionMessageDispatcher(ExtensionContext extensionContext,
             ConcurrentMap<Long, CompletableFuture<Object>> commandFutures) {
         this.extensionContext = extensionContext;
-        this.pathManager = extensionContext.getPathManager(); // 从 ExtensionContext 获取 PathManager
+        this.pathTable = extensionContext.getPathTable(); // 从 ExtensionContext 获取 PathTable
         this.commandFutures = commandFutures;
         log.info("DefaultExtensionMessageDispatcher created for Engine: {}",
                 extensionContext.getEngine().getEngineId());
@@ -40,7 +40,7 @@ public class DefaultExtensionMessageDispatcher implements ExtensionMessageDispat
         log.debug("DefaultExtensionMessageDispatcher: 正在派发消息: ID={}, Type={}, SrcLoc={}, DestLocs={}",
                 message.getId(), message.getType(), message.getSrcLoc(), message.getDestLocs());
 
-        List<Location> targetLocations = pathManager.resolveDestinations(message);
+        List<Location> targetLocations = pathTable.resolveDestinations(message);
 
         // 如果消息本身有目的地，则添加到路由结果中
         if (message.getDestLocs() != null) {

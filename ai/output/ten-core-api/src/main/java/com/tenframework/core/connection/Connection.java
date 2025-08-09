@@ -11,6 +11,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.net.SocketAddress; // 导入 SocketAddress
 
 /**
  * Connection 接口定义了与外部客户端连接的核心行为。
@@ -22,6 +23,8 @@ public interface Connection {
 
     // 移除 getEngine(), getProtocol()，因为这些现在由 Connection 的使用者或具体实现管理。
     // Engine getEngine();
+
+    SocketAddress getRemoteAddress(); // 新增：获取远程地址
 
     Location getRemoteLocation();
 

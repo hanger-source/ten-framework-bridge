@@ -14,7 +14,7 @@ import com.tenframework.core.message.command.StartGraphCommand;
 import com.tenframework.core.message.command.StopGraphCommand;
 import com.tenframework.core.message.command.TimerCommand;
 import com.tenframework.core.message.command.TimeoutCommand;
-import com.tenframework.core.path.PathManager;
+import com.tenframework.core.path.PathTable;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
@@ -36,17 +36,17 @@ public class ExtensionContext {
 
     private final Engine engine; // 引用所属的 Engine 实例
     private final App app; // 引用所属的 App 实例
-    private final PathManager pathManager; // 消息路由管理器
+    private final PathTable pathTable; // 消息路由表
     private final AsyncExtensionEnv asyncExtensionEnv; // Extension 异步环境接口
 
     private String extensionName; // 当前 Extension 的名称
     private String graphId; // 当前 Extension 所属的 Graph ID
     private String appUri; // 当前 Extension 所属的 App URI
 
-    public ExtensionContext(Engine engine, App app, PathManager pathManager, AsyncExtensionEnv asyncExtensionEnv) {
+    public ExtensionContext(Engine engine, App app, PathTable pathTable, AsyncExtensionEnv asyncExtensionEnv) {
         this.engine = engine;
         this.app = app;
-        this.pathManager = pathManager;
+        this.pathTable = pathTable;
         this.asyncExtensionEnv = asyncExtensionEnv;
 
         this.extensionName = asyncExtensionEnv.getExtensionName();

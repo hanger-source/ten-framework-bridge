@@ -180,12 +180,11 @@ public class App implements MessageReceiver, Runnable {
                                 .setGraphId(entry.getGraphDefinition().getGraphId());
                         StartGraphCommand startCmd = new StartGraphCommand(
                                 MessageUtils.generateUniqueId(),
-                                MessageType.CMD_START_GRAPH,
                                 srcLoc,
                                 Collections.singletonList(destLoc),
-                                "Auto-start predefined graph",
-                                entry.getGraphDefinition().getJsonContent(), // 使用预定义图的JSON内容
-                                false // 假定自动启动的图不是长运行模式，或者根据实际配置
+                                "Auto-start predefined graph", // message
+                                entry.getGraphDefinition().getJsonContent(), // graphJsonDefinition
+                                false // longRunningMode
                         );
                         // 提交命令到 App Runloop，然后由 App 的 handleInboundMessage 处理
                         appRunloop.postTask(() -> handleInboundMessage(startCmd, null));
@@ -211,7 +210,7 @@ public class App implements MessageReceiver, Runnable {
         orphanConnections.clear();
 
         // 停止 App 的 Runloop
-        appRunloop.stop();
+        appRunloop.shutdown();
         log.info("App: 已停止。");
     }
 
@@ -231,7 +230,7 @@ public class App implements MessageReceiver, Runnable {
     @Override
     public void handleInboundMessage(Message message, Connection connection) {
         log.debug("App: 接收到入站消息: ID={}, Type={}, Src={}", message.getId(), message.getType(),
-                message.getSourceLocation());
+                message.getSrcLoc()); // 修正方法名
         appRunloop.postTask(() -> {
             if (message instanceof Command) {
                 Command command = (Command) message;

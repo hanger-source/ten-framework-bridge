@@ -12,6 +12,7 @@ import lombok.experimental.Accessors;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import com.tenframework.core.message.MessageUtils;
 
 /**
  * 超时命令消息，对齐C/Python中的TEN_MSG_TYPE_CMD_TIMEOUT。
@@ -66,7 +67,7 @@ public class TimeoutCommand extends Message {
      * @param timerId  定时器ID。
      */
     public TimeoutCommand(Location srcLoc, List<Location> destLocs, Long timerId) {
-        super(MessageType.CMD_TIMEOUT, srcLoc, destLocs);
+        super(MessageUtils.generateUniqueId(), MessageType.CMD_TIMEOUT, srcLoc, destLocs);
         this.timerId = timerId;
     }
 

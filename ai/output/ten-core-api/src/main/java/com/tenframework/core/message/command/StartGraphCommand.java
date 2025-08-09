@@ -52,12 +52,21 @@ public class StartGraphCommand extends Message {
     }
 
     // 用于内部创建的构造函数，简化参数
-    public StartGraphCommand(Location srcLoc, List<Location> destLocs, String graphJsonDefinition,
+    public StartGraphCommand(String id, Location srcLoc, List<Location> destLocs, String graphJsonDefinition,
             boolean longRunningMode) {
-        super(MessageType.CMD_START_GRAPH, srcLoc, destLocs);
+        super(id, srcLoc, MessageType.CMD_START_GRAPH, destLocs);
         this.longRunningMode = longRunningMode;
         this.graphJson = graphJsonDefinition;
         // 其他属性可以根据需要设置，或在 Message 的 properties 中进行映射
+    }
+
+    // 用于内部创建的构造函数，包含额外消息
+    public StartGraphCommand(String id, Location srcLoc, List<Location> destLocs, String message,
+            String graphJsonDefinition,
+            boolean longRunningMode) {
+        super(id, srcLoc, MessageType.CMD_START_GRAPH, destLocs, Map.of("message", message)); // 将消息放入 properties
+        this.longRunningMode = longRunningMode;
+        this.graphJson = graphJsonDefinition;
     }
 
     // 辅助方法：获取 graphJsonDefinition (与 C 端字段名对齐)

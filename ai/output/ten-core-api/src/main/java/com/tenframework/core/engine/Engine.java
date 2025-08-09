@@ -23,7 +23,7 @@ import com.tenframework.core.message.Location;
 import com.tenframework.core.message.Message;
 import com.tenframework.core.message.MessageType;
 import com.tenframework.core.message.command.Command;
-import com.tenframework.core.path.PathManager;
+import com.tenframework.core.path.PathTable;
 import com.tenframework.core.remote.DummyRemote;
 import com.tenframework.core.remote.Remote;
 import com.tenframework.core.runloop.Runloop;
@@ -46,7 +46,7 @@ public class Engine implements Agent, MessageSubmitter, CommandSubmitter {
     private final String engineId; // 对应 graph_id
     private final GraphDefinition graphDefinition; // 引擎所加载的 Graph 的定义
     private final Runloop runloop; // 引擎自身的运行循环
-    private final PathManager pathManager; // 消息路由管理器
+    private final PathTable pathTable; // 消息路由表
     private final ExtensionContext extensionContext; // 扩展上下文管理器
     private final ExtensionMessageDispatcher messageDispatcher; // 消息派发器
     private final ConcurrentMap<Long, CompletableFuture<Object>> commandFutures; // 用于跟踪命令结果的 CompletableFuture
@@ -65,7 +65,7 @@ public class Engine implements Agent, MessageSubmitter, CommandSubmitter {
         this.graphDefinition = graphDefinition;
         this.app = app;
         runloop = new Runloop(engineId + "-runloop"); // 每个 Engine 都有自己的 Runloop
-        pathManager = new PathManager(graphDefinition); // PathManager 依赖 GraphDefinition
+        pathTable = new PathTable(graphDefinition); // PathTable 依赖 GraphDefinition
 
         // 创建 EngineAsyncExtensionEnv 实例，将其作为 Extension 与 Engine 交互的接口
         Map<String, Object> initialProperties = new HashMap<>(); // 示例属性
@@ -77,9 +77,8 @@ public class Engine implements Agent, MessageSubmitter, CommandSubmitter {
                 this, // CommandSubmitter
                 initialProperties);
 
-        this.extensionContext = new ExtensionContext(this, app, pathManager, engineAsyncExtensionEnv); // ExtensionContext
-        // 依赖 Engine 和
-        // PathManager
+        extensionContext = new ExtensionContext(this, app, pathTable, engineAsyncExtensionEnv); // ExtensionContext
+        // PathTable
         commandFutures = new ConcurrentHashMap<>();
         messageDispatcher = new DefaultExtensionMessageDispatcher(extensionContext, commandFutures); // 消息派发器依赖
         // ExtensionContext
@@ -126,7 +125,7 @@ public class Engine implements Agent, MessageSubmitter, CommandSubmitter {
         } else if (app != null) { // Fallback if no dedicated loop
             log.info("Engine {}: 使用 App 的 Runloop 进行消息处理注册。", engineId);
             // 将 Engine 的 doWork 方法注册到 App 的 Runloop，让 App 负责调度处理
-            app.getRunloop().ifPresent(appRunloop -> {
+            app.getAppRunloop().ifPresent(appRunloop -> {
                 // 这里如果 App Runloop 也支持 addAgent，则更优
                 // 暂时通过注册 inMsgs 的 drain 方法来处理
                 appRunloop.registerExternalEventSource(inMsgs::drain, () -> {
@@ -147,7 +146,7 @@ public class Engine implements Agent, MessageSubmitter, CommandSubmitter {
             runloop.shutdown();
         } else if (app != null) {
             // 如果使用 App 的 Runloop，则从 App 的 Runloop 中注销
-            app.getRunloop().ifPresent(appRunloop -> {
+            app.getAppRunloop().ifPresent(appRunloop -> {
                 // Agrona 没有直接的 unregister 方法，这里简化处理，实际可能需要更复杂的机制
                 log.warn("Engine {}: 无法从 App 的 Runloop 注销消息源，需要手动管理资源。", engineId);
             });

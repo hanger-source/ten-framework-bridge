@@ -1,37 +1,32 @@
 package com.tenframework.core.path;
 
 import com.tenframework.core.message.Location;
-import lombok.Getter;
+import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
-import lombok.Setter;
-import lombok.experimental.SuperBuilder;
+import lombok.experimental.Accessors;
 
 /**
- * 命令输入路径
- * 表示命令进入Engine的路径
+ * `PathIn` 代表一个命令的入站路径，用于追踪命令的来源和上下文。
+ * 对应C语言中的 `ten_path_in_t` 结构体。
  */
-@Getter
-@Setter
-@SuperBuilder
+@EqualsAndHashCode(callSuper = true)
+@Data
 @NoArgsConstructor
-public class PathIn extends AbstractPath {
+@Accessors(chain = true)
+public class PathIn extends Path {
+
+    // PathIn 仅作为 Path 的一个类型化子类，不包含额外字段
 
     /**
-     * 是否已收到最终的命令结果
+     * 构造函数，用于创建 PathIn 实例。
+     *
+     * @param commandName     命令名称
+     * @param commandId       命令ID
+     * @param parentCommandId 父命令ID
+     * @param sourceLocation  命令源位置
      */
-    private boolean hasReceivedFinalCommandResult;
-
-    // TODO: 可能需要添加其他属性，如结果转换策略等
-
-    public PathIn(long commandId, long parentCommandId, String commandName, Location sourceLocation,
-            Location destinationLocation) {
-        super();
-        this.commandId = commandId;
-        this.parentCommandId = parentCommandId;
-        this.commandName = commandName;
-        this.sourceLocation = sourceLocation;
-        this.destinationLocation = destinationLocation;
-        this.pathType = PathType.IN;
-        this.hasReceivedFinalCommandResult = false;
+    public PathIn(String commandName, String commandId, String parentCommandId, Location sourceLocation) {
+        super(commandName, commandId, parentCommandId, sourceLocation);
     }
 }

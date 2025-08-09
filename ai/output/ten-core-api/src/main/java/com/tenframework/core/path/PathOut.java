@@ -1,67 +1,56 @@
 package com.tenframework.core.path;
 
-import com.tenframework.core.message.Location;
-import com.tenframework.core.message.CommandResult;
-import lombok.Builder;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
-import lombok.experimental.SuperBuilder;
-
-import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import com.tenframework.core.message.CommandResult; // 确保导入 CommandResult
+import com.tenframework.core.message.Location; // 确保导入 Location
+import lombok.Data;
+import lombok.EqualsAndHashCode;
+import lombok.NoArgsConstructor;
+import lombok.experimental.Accessors;
 
 /**
- * 命令输出路径
- * 表示命令从Engine发出到外部的路径
+ * `PathOut` 代表一个命令的出站路径，用于追踪命令的执行并回溯其结果。
+ * 对应C语言中的 `ten_path_out_t` 结构体。
  */
-@Getter
-@Setter
-@SuperBuilder
+@EqualsAndHashCode(callSuper = true)
+@Data
 @NoArgsConstructor
-public class PathOut extends AbstractPath {
+@Accessors(chain = true)
+public class PathOut extends Path { // 继承 Path 基类
+
+    private CompletableFuture<Object> resultFuture; // 用于完成命令结果的 CompletableFuture
+    private ResultReturnPolicy returnPolicy; // 结果返回策略
 
     /**
-     * 用于处理命令结果的回调函数（Java中的CompletableFuture）
+     * 构造函数，用于创建 PathOut 实例。
+     *
+     * @param commandId           命令ID
+     * @param parentCommandId     父命令ID
+     * @param commandName         命令名称
+     * @param sourceLocation      命令源位置
+     * @param destinationLocation 命令目标位置 (Java 侧独有，用于路由)
+     * @param resultFuture        用于完成命令结果的 CompletableFuture
+     * @param returnPolicy        结果返回策略
+     * @param returnLocation      命令结果回传到的目标位置
      */
-    private transient CompletableFuture<Object> resultFuture;
-
-    /**
-     * 命令结果应该回传到的目标位置 (可能是 Connection 的 remoteLocation 或 Remote 的 Location)
-     */
-    private Location returnLocation;
-
-    /**
-     * 是否已收到最终的命令结果
-     */
-    @Builder.Default
-    private boolean hasReceivedFinalCommandResult = false;
-
-    /**
-     * 缓存的命令结果，用于某些结果策略（例如FIRST_ERROR_OR_LAST_OK）
-     */
-    @Builder.Default
-    private CommandResult cachedCommandResult = null;
-
-    /**
-     * 结果返回策略（对应TEN_RESULT_RETURN_POLICY）
-     */
-    @Builder.Default
-    private ResultReturnPolicy returnPolicy = ResultReturnPolicy.FIRST_ERROR_OR_LAST_OK;
-
-    public PathOut(long commandId, long parentCommandId, String commandName, Location sourceLocation,
+    public PathOut(String commandId, String parentCommandId, String commandName, Location sourceLocation,
             Location destinationLocation, CompletableFuture<Object> resultFuture,
-            ResultReturnPolicy returnPolicy, Location returnLocation) { // 修改构造函数签名
-        super();
-        this.commandId = commandId;
-        this.parentCommandId = parentCommandId;
-        this.commandName = commandName;
-        this.sourceLocation = sourceLocation;
-        this.destinationLocation = destinationLocation;
-        this.pathType = PathType.OUT;
+            ResultReturnPolicy returnPolicy, Location returnLocation) {
+        // 调用父类构造函数初始化通用属性
+        super(commandName, commandId, parentCommandId, sourceLocation);
         this.resultFuture = resultFuture;
-        this.returnPolicy = returnPolicy != null ? returnPolicy : ResultReturnPolicy.FIRST_ERROR_OR_LAST_OK;
-        this.hasReceivedFinalCommandResult = false;
-        this.returnLocation = returnLocation; // 设置新的 returnLocation
+        this.returnPolicy = returnPolicy;
+        // destinationLocation 和 returnLocation 将作为 PathOut 独有的字段
+        // 或者根据需要，将 destinationLocation 移到 Path 基类或 Message 中
+        // 这里暂时将 returnLocation 作为 PathOut 的一个独有属性，不将其视为基类的 srcLoc 或 destLocs
+        this.destinationLocation = destinationLocation; // 保留 destinationLocation，因为它在 C PathOut create 中有对应概念
+        this.returnLocation = returnLocation; // 保留 returnLocation，因为它在 createOutPath 中使用
     }
+
+    // 对应 C 端 ten_loc_t dest_loc; 但在 PathOut create 签名中是 destinationLocation
+    // 将其作为 PathOut 独有属性，因为 Path 基类的 src_loc 是原始命令的源。
+    private Location destinationLocation; // 命令的目标位置，在 C 端 create 签名中有对应
+
+    // 对应 C 端 result_handler 的逻辑回传位置
+    private Location returnLocation; // 命令结果回传到的目标位置
 }
