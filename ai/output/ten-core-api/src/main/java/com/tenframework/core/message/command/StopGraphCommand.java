@@ -32,7 +32,7 @@ import java.util.Map;
 @Data
 @NoArgsConstructor
 @Accessors(chain = true)
-public class StopGraphCommand extends Message {
+public class StopGraphCommand extends Command {
 
     /**
      * 图ID。
@@ -46,15 +46,15 @@ public class StopGraphCommand extends Message {
      *
      * @param id         消息ID。
      * @param srcLoc     源位置。
-     * @param type       消息类型 (应为 CMD_STOP_GRAPH)。
      * @param destLocs   目的位置。
      * @param properties 消息属性。
      * @param timestamp  消息时间戳。
      * @param graphId    图ID。
      */
-    public StopGraphCommand(String id, Location srcLoc, MessageType type, List<Location> destLocs,
+    public StopGraphCommand(String id, Location srcLoc, List<Location> destLocs,
             Map<String, Object> properties, long timestamp, String graphId) {
-        super(id, srcLoc, type, destLocs, properties, timestamp);
+        super(id, MessageType.CMD_STOP_GRAPH, srcLoc, destLocs, MessageType.CMD_STOP_GRAPH.name(), properties,
+                timestamp); // 修正为调用 Command 的构造函数
         this.graphId = graphId;
     }
 
@@ -66,7 +66,8 @@ public class StopGraphCommand extends Message {
      * @param graphId  图ID。
      */
     public StopGraphCommand(Location srcLoc, List<Location> destLocs, String graphId) {
-        super(MessageType.CMD_STOP_GRAPH, srcLoc, destLocs);
+        super(MessageUtils.generateUniqueId(), MessageType.CMD_STOP_GRAPH, srcLoc, destLocs,
+                MessageType.CMD_STOP_GRAPH.name()); // 修正为调用 Command 的简化构造函数
         this.graphId = graphId;
     }
 

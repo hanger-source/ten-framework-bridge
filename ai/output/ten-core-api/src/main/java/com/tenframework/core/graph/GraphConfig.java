@@ -1,13 +1,12 @@
 package com.tenframework.core.graph;
 
+import java.util.List;
+
 import com.fasterxml.jackson.annotation.JsonProperty;
+import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import lombok.AllArgsConstructor;
 import lombok.experimental.Accessors;
-
-import java.util.List;
-import java.util.Map;
 
 /**
  * 表示 Ten 框架的整体配置，可以包含预定义的图、日志级别等。
@@ -40,12 +39,3 @@ public class GraphConfig { // 重命名为 TenConfig 更合适，但为了保持
     // 如果 GraphConfig 还需要包含它们，则应该是在更高级别的配置对象中，例如 TenFrameworkConfig
 }
 
-// 假设的 LogConfig 类，用于反序列化 "log" 字段
-@Data
-@NoArgsConstructor
-@AllArgsConstructor
-@Accessors(chain = true)
-class LogConfig {
-    @JsonProperty("level")
-    private int level;
-}

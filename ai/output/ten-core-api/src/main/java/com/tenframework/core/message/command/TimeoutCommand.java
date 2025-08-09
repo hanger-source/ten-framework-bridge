@@ -33,7 +33,7 @@ import com.tenframework.core.message.MessageUtils;
 @Data
 @NoArgsConstructor
 @Accessors(chain = true)
-public class TimeoutCommand extends Message {
+public class TimeoutCommand extends Command {
 
     /**
      * 定时器ID。
@@ -47,15 +47,16 @@ public class TimeoutCommand extends Message {
      *
      * @param id         消息ID。
      * @param srcLoc     源位置。
-     * @param type       消息类型 (应为 CMD_TIMEOUT)。
      * @param destLocs   目的位置。
      * @param properties 消息属性。
      * @param timestamp  消息时间戳。
      * @param timerId    定时器ID。
      */
-    public TimeoutCommand(String id, Location srcLoc, MessageType type, List<Location> destLocs,
+    public TimeoutCommand(String id, Location srcLoc, List<Location> destLocs,
             Map<String, Object> properties, long timestamp, Long timerId) {
-        super(id, srcLoc, type, destLocs, properties, timestamp);
+        super(id, MessageType.CMD_TIMEOUT, srcLoc, destLocs, MessageType.CMD_TIMEOUT.name(), properties, timestamp); // 修正为调用
+                                                                                                                     // Command
+                                                                                                                     // 的构造函数
         this.timerId = timerId;
     }
 
@@ -68,7 +69,7 @@ public class TimeoutCommand extends Message {
      * @param timerId  定时器ID。
      */
     public TimeoutCommand(String id, Location srcLoc, List<Location> destLocs, Long timerId) {
-        super(id, MessageType.CMD_TIMEOUT, srcLoc, destLocs);
+        super(id, MessageType.CMD_TIMEOUT, srcLoc, destLocs, MessageType.CMD_TIMEOUT.name()); // 修正为调用 Command 的简化构造函数
         this.timerId = timerId;
     }
 

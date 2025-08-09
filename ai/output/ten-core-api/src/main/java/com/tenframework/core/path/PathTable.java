@@ -153,7 +153,7 @@ public class PathTable {
             case EACH_OK_AND_ERROR -> handleEachOkAndErrorPolicy(pathOut, commandResult);
             default -> {
                 log.warn("PathTable: 未知的结果返回策略: policy={}, commandId={}",
-                        policy, commandResult.getCommandId());
+                        policy, commandResult.getOriginalCommandId());
                 handleFirstErrorOrLastOkPolicy(pathOut, commandResult);
             }
         }

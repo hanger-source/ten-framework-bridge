@@ -53,6 +53,8 @@ public abstract class BaseExtension implements Extension {
     private String appUri; // 新增字段来存储 appUri
     private volatile boolean isHealthy = true;
 
+    private String graphId; // 新增字段来存储 graphId
+
     public BaseExtension() {
         this(3, 1000); // 默认3次重试，1秒延迟
     }
@@ -82,6 +84,7 @@ public abstract class BaseExtension implements Extension {
         context = env;
         extensionName = env.getExtensionName();
         appUri = env.getAppUri(); // 从 env 中获取 appUri
+        graphId = env.getGraphId(); // 从 env 中获取 graphId
         // this.metrics.setExtensionContext(env); // TODO: Metrics integration needs to
         // be re-evaluated.
 
@@ -467,5 +470,10 @@ public abstract class BaseExtension implements Extension {
     @Override
     public String getExtensionName() {
         return extensionName;
+    }
+
+    @Override
+    public String getGraphId() {
+        return graphId;
     }
 }

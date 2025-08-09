@@ -236,11 +236,10 @@ public class AudioFrameMessage extends Message {
         byte[] silenceData = new byte[totalSamples * bytesPerSample];
         // 默认为0，表示静音
 
-        return new AudioFrameMessage(id, MessageType.AUDIO_FRAME, srcLoc, Collections.emptyList(), null, Map.of(),
-                timestamp, // 传入 null 作为 name
-                0L, 0, // channelLayout, dataFormat 默认值
-                silenceData, 0, false, // buf, lineSize, isEof 默认值
-                0, sampleRate, bytesPerSample, samplesPerChannel, channels);
+        return new AudioFrameMessage(id, MessageType.AUDIO_FRAME, srcLoc, Collections.emptyList(),
+                null, Map.of(), timestamp, // 传入 null 作为 name，Map.of() 作为 properties
+                frameTimestamp, sampleRate, bytesPerSample, samplesPerChannel, numberOfChannel,
+                channelLayout, dataFormat, buf, lineSize, isEof);
     }
 
     /**

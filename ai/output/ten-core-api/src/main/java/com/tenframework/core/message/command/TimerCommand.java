@@ -34,7 +34,7 @@ import java.util.Map;
 @Data
 @NoArgsConstructor
 @Accessors(chain = true)
-public class TimerCommand extends Message {
+public class TimerCommand extends Command {
 
     /**
      * 定时器ID。
@@ -62,7 +62,6 @@ public class TimerCommand extends Message {
      *
      * @param id         消息ID。
      * @param srcLoc     源位置。
-     * @param type       消息类型 (应为 CMD_TIMER)。
      * @param destLocs   目的位置。
      * @param properties 消息属性。
      * @param timestamp  消息时间戳。
@@ -70,10 +69,12 @@ public class TimerCommand extends Message {
      * @param timeoutUs  超时时间（微秒）。
      * @param times      重复次数。
      */
-    public TimerCommand(String id, Location srcLoc, MessageType type, List<Location> destLocs,
+    public TimerCommand(String id, Location srcLoc, List<Location> destLocs,
             Map<String, Object> properties, long timestamp,
             Long timerId, Long timeoutUs, Integer times) {
-        super(id, srcLoc, type, destLocs, properties, timestamp);
+        super(id, MessageType.CMD_TIMER, srcLoc, destLocs, MessageType.CMD_TIMER.name(), properties, timestamp); // 修正为调用
+                                                                                                                 // Command
+                                                                                                                 // 的构造函数
         this.timerId = timerId;
         this.timeoutUs = timeoutUs;
         this.times = times;
@@ -91,7 +92,7 @@ public class TimerCommand extends Message {
      */
     public TimerCommand(String id, Location srcLoc, List<Location> destLocs, Long timerId, Long timeoutUs,
             Integer times) {
-        super(id, MessageType.CMD_TIMER, srcLoc, destLocs);
+        super(id, MessageType.CMD_TIMER, srcLoc, destLocs, MessageType.CMD_TIMER.name()); // 修正为调用 Command 的简化构造函数
         this.timerId = timerId;
         this.timeoutUs = timeoutUs;
         this.times = times;

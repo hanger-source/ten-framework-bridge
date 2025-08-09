@@ -62,8 +62,7 @@ public class StartGraphCommandHandler implements AppCommandHandler {
         Engine engine = app.getEngines().get(actualGraphId);
         if (engine == null) {
             log.info("App: 创建新的 Engine 实例，Graph ID: {}", actualGraphId);
-            engine = new Engine(app, actualGraphId, graphDefinition, app.hasOwnRunloopPerEngine(),
-                    app.getAvailableExtensions());
+            engine = new Engine(actualGraphId, graphDefinition, app.getAppRunloop(), app);
             app.getEngines().put(actualGraphId, engine);
             engine.start(); // 启动 Engine 及其 Runloop
             log.info("App: Engine {} 已启动。", actualGraphId);

@@ -42,7 +42,7 @@ public abstract class Command extends Message {
 
     public Command(String id, Location srcLoc, MessageType type, List<Location> destLocs,
             Map<String, Object> properties, long timestamp, String name) {
-        super(id, type, srcLoc, destLocs, properties, timestamp);
+        super(id, type, srcLoc, destLocs, name, properties, timestamp);
         this.name = name;
     }
 

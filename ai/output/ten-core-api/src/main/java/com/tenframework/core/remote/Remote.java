@@ -33,7 +33,7 @@ public abstract class Remote {
         this.remoteEngineLocation = remoteEngineLocation;
         this.localEngine = localEngine;
         this.active = false; // 初始为不活跃
-        log.info("Remote {}: 创建，目标Engine Location: {}", remoteId, remoteEngineLocation.toDebugString());
+        log.info("Remote {}: 创建，目标Engine Location: {}", remoteId, remoteEngineLocation.toString());
     }
 
     /**
@@ -45,7 +45,7 @@ public abstract class Remote {
     /**
      * 将消息发送到远程 Engine。
      * 这将是一个抽象方法，由具体实现负责消息的序列化和网络传输。
-     * 
+     *
      * @param message 要发送的消息
      */
     public abstract void sendMessage(Message message);

@@ -20,6 +20,9 @@ public class ExtensionInfo {
     @JsonProperty("extension_group_name")
     private String extensionGroupName;
 
+    @JsonProperty("type") // 新增 type 字段
+    private String type;
+
     @JsonProperty("loc")
     private Location loc;
 

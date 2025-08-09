@@ -131,14 +131,12 @@ public class CommandResult extends Message implements Cloneable { // 实现 Clon
     }
 
     public static CommandResult success(String originalCommandId, String detail) {
-        CommandResult result = new CommandResult(null, Collections.emptyList(), originalCommandId, 0, detail);
-        result.getProperties().put("payload", detail); // 将成功信息放入 payload
-        return result;
+        // 使用 MessageUtils.generateUniqueId() 生成 id，并提供默认的 srcLoc 和 destLocs
+        return new CommandResult(new Location(), Collections.emptyList(), originalCommandId, 0, detail);
     }
 
     public static CommandResult fail(String originalCommandId, String errorMessage) {
-        CommandResult result = new CommandResult(null, Collections.emptyList(), originalCommandId, -1, errorMessage);
-        result.getProperties().put("error_message", errorMessage); // 将错误信息放入 error_message
-        return result;
+        // 使用 MessageUtils.generateUniqueId() 生成 id，并提供默认的 srcLoc 和 destLocs
+        return new CommandResult(new Location(), Collections.emptyList(), originalCommandId, -1, errorMessage);
     }
 }

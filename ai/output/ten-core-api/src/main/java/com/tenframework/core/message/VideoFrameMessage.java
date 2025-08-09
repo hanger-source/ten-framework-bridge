@@ -196,7 +196,7 @@ public class VideoFrameMessage extends Message {
     public static VideoFrameMessage black(String id, Location srcLoc, long timestamp, int width, int height,
             int pixelFormat) {
         VideoFrameMessage frame = new VideoFrameMessage(id, MessageType.VIDEO_FRAME, srcLoc, Collections.emptyList(),
-                null, Map.of(), timestamp, // 传入 null 作为 name
+                null, Map.of(), timestamp,
                 pixelFormat, timestamp, width, height, false, null); // data为null
 
         // 创建黑色帧数据（全0）
@@ -217,7 +217,7 @@ public class VideoFrameMessage extends Message {
      */
     public static VideoFrameMessage eof(String id, Location srcLoc, long timestamp) {
         return new VideoFrameMessage(id, MessageType.VIDEO_FRAME, srcLoc, Collections.emptyList(),
-                null, Map.of(), timestamp, // 传入 null 作为 name
+                null, Map.of(), timestamp,
                 0, timestamp, 0, 0, true, new byte[0]);
     }
 

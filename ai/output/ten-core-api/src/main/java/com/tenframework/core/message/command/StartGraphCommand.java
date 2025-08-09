@@ -20,7 +20,7 @@ import com.tenframework.core.graph.ExtensionInfo;
 @Data
 @NoArgsConstructor
 @Accessors(chain = true)
-public class StartGraphCommand extends Message {
+public class StartGraphCommand extends Command {
 
     @JsonProperty("long_running_mode")
     private Boolean longRunningMode;
@@ -39,11 +39,12 @@ public class StartGraphCommand extends Message {
 
     // 兼容 Lombok @NoArgsConstructor 的全参构造函数（为了Jackson）
     // 实际内部创建时使用自定义构造函数
-    public StartGraphCommand(String id, Location srcLoc, MessageType type, List<Location> destLocs,
+    public StartGraphCommand(String id, Location srcLoc, List<Location> destLocs,
             Map<String, Object> properties, long timestamp,
             Boolean longRunningMode, String predefinedGraphName,
             List<ExtensionGroupInfo> extensionGroupsInfo, List<ExtensionInfo> extensionsInfo, String graphJson) {
-        super(id, srcLoc, type, destLocs, properties, timestamp);
+        super(id, MessageType.CMD_START_GRAPH, srcLoc, destLocs, MessageType.CMD_START_GRAPH.name(), properties,
+                timestamp);
         this.longRunningMode = longRunningMode;
         this.predefinedGraphName = predefinedGraphName;
         this.extensionGroupsInfo = extensionGroupsInfo;
@@ -54,7 +55,8 @@ public class StartGraphCommand extends Message {
     // 用于内部创建的构造函数，简化参数
     public StartGraphCommand(String id, Location srcLoc, List<Location> destLocs, String graphJsonDefinition,
             boolean longRunningMode) {
-        super(id, srcLoc, MessageType.CMD_START_GRAPH, destLocs);
+        super(id, MessageType.CMD_START_GRAPH, srcLoc, destLocs, MessageType.CMD_START_GRAPH.name()); // 修正为调用 Command
+                                                                                                      // 的简化构造函数
         this.longRunningMode = longRunningMode;
         this.graphJson = graphJsonDefinition;
         // 其他属性可以根据需要设置，或在 Message 的 properties 中进行映射
@@ -64,7 +66,8 @@ public class StartGraphCommand extends Message {
     public StartGraphCommand(String id, Location srcLoc, List<Location> destLocs, String message,
             String graphJsonDefinition,
             boolean longRunningMode) {
-        super(id, srcLoc, MessageType.CMD_START_GRAPH, destLocs, Map.of("message", message)); // 将消息放入 properties
+        super(id, MessageType.CMD_START_GRAPH, srcLoc, destLocs, MessageType.CMD_START_GRAPH.name(),
+                Map.of("message", message), System.currentTimeMillis()); // 修正为调用 Command 的构造函数
         this.longRunningMode = longRunningMode;
         this.graphJson = graphJsonDefinition;
     }

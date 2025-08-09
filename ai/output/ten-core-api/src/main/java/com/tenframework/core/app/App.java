@@ -298,7 +298,7 @@ public class App implements MessageReceiver, Runnable {
                         Engine targetEngine = engines.get(destLoc.getGraphId());
                         if (targetEngine != null) {
                             log.debug("App: 路由消息 {} 到 Engine {}。", message.getId(), destLoc.getGraphId());
-                            targetEngine.handleInboundMessage(message); // Engine 的 processMessage 已经处理了命令分发
+                            targetEngine.processMessage(message); // Engine 的 processMessage 已经处理了命令分发
                         } else {
                             log.warn("App: 目标 Engine {} 不存在，消息 {} 无法路由。", destLoc.getGraphId(), message.getId());
                         }
@@ -318,7 +318,7 @@ public class App implements MessageReceiver, Runnable {
                         }
                     } else {
                         log.debug("App: 路由消息 {} 到 Remote {}。", message.getId(), remoteId);
-                        targetRemote.sendOutboundMessage(message);
+                        targetRemote.sendMessage(message);
                     }
                 }
             }
@@ -343,7 +343,7 @@ public class App implements MessageReceiver, Runnable {
                 if (destLoc.getGraphId() != null) {
                     Engine targetEngine = engines.get(destLoc.getGraphId());
                     if (targetEngine != null) {
-                        targetEngine.handleInboundMessage(message); // 路由到对应的 Engine
+                        targetEngine.processMessage(message); // 路由到对应的 Engine
                     } else {
                         log.warn("App: 目标 Engine {} 不存在，无法路由消息 {}。", destLoc.getGraphId(), message.getId());
                     }

@@ -33,7 +33,7 @@ import java.util.Map;
 @Data
 @NoArgsConstructor
 @Accessors(chain = true)
-public class CloseAppCommand extends Message {
+public class CloseAppCommand extends Command {
 
     /**
      * 全参构造函数，用于创建关闭应用命令消息。
@@ -44,9 +44,11 @@ public class CloseAppCommand extends Message {
      * @param destLocs   目的位置，对应C端 `ten_msg_t.dest_locs`。
      * @param properties 消息属性，对应C端 `ten_msg_t.properties`。
      */
-    public CloseAppCommand(String id, Location srcLoc, MessageType type, List<Location> destLocs,
+    public CloseAppCommand(String id, Location srcLoc, List<Location> destLocs,
             Map<String, Object> properties, long timestamp) {
-        super(id, srcLoc, type, destLocs, properties, timestamp);
+        super(id, MessageType.CMD_CLOSE_APP, srcLoc, destLocs, MessageType.CMD_CLOSE_APP.name(), properties, timestamp); // 修正为调用
+                                                                                                                         // Command
+                                                                                                                         // 的构造函数
     }
 
     /**
@@ -55,7 +57,8 @@ public class CloseAppCommand extends Message {
      * @param srcLoc 源位置。
      */
     public CloseAppCommand(Location srcLoc) {
-        super(MessageType.CMD_CLOSE_APP, srcLoc, Collections.emptyList());
+        super(MessageUtils.generateUniqueId(), MessageType.CMD_CLOSE_APP, srcLoc, Collections.emptyList(),
+                MessageType.CMD_CLOSE_APP.name()); // 修正为调用 Command 的简化构造函数
     }
 
 }

@@ -17,7 +17,9 @@ import com.tenframework.core.command.engine.TimerCommandHandler;
 import com.tenframework.core.connection.Connection;
 import com.tenframework.core.extension.AsyncExtensionEnv;
 import com.tenframework.core.extension.EngineAsyncExtensionEnv;
+import com.tenframework.core.extension.Extension;
 import com.tenframework.core.extension.ExtensionContext;
+import com.tenframework.core.graph.ExtensionInfo; // 导入 ExtensionInfo
 import com.tenframework.core.graph.GraphDefinition;
 import com.tenframework.core.message.CommandResult;
 import com.tenframework.core.message.Location;
@@ -69,22 +71,16 @@ public class Engine implements Agent, MessageSubmitter, CommandSubmitter {
         runloop = new Runloop(engineId + "-runloop"); // 每个 Engine 都有自己的 Runloop
         pathTable = new PathTable(PathTableAttachedTo.ENGINE, this, this); // PathTable 依赖 GraphDefinition
 
-        // 创建 EngineAsyncExtensionEnv 实例，将其作为 Extension 与 Engine 交互的接口
-        Map<String, Object> initialProperties = new HashMap<>(); // 示例属性
-        AsyncExtensionEnv engineAsyncExtensionEnv = new EngineAsyncExtensionEnv(
-                graphDefinition.getGraphId(), // ExtensionName 暂时使用 graphId，后续可根据具体 Extension 调整
-                "DEFAULT_EXTENSION_TYPE", // extensionType，暂时硬编码一个默认值，或者从 GraphDefinition 中获取
-                app.getAppUri(),
-                graphDefinition.getGraphId(), // graphId
-                this, // MessageSubmitter
-                this, // CommandSubmitter
-                initialProperties);
+        // 移除 EngineAsyncExtensionEnv 的创建，将其职责委托给 ExtensionContext
+        extensionContext = new ExtensionContext(this, app, pathTable, this, this); // 将 Engine 自身作为 MessageSubmitter 和
+                                                                                   // CommandSubmitter 传递
 
-        extensionContext = new ExtensionContext(this, app, pathTable, engineAsyncExtensionEnv);
+        // Engine 自身的 Runloop 初始化
         if (hasOwnLoop) {
-            runloop.addAgent(this);
-        } else {
-            appRunloop.ifPresent(runloop -> runloop.addAgent(this));
+            runloop.registerExternalEventSource(this::doWork, null); // 注册 Engine 自身作为 Runloop 的外部事件源
+        } else if (app.getAppRunloop() != null) { // 如果使用 App 的 Runloop
+            // 将 Engine 的 doWork 方法注册到 App 的 Runloop
+            app.getAppRunloop().registerExternalEventSource(this::doWork, null);
         }
 
         // PathTable
@@ -128,16 +124,32 @@ public class Engine implements Agent, MessageSubmitter, CommandSubmitter {
     public void start() {
         if (hasOwnLoop && runloop != null) {
             log.info("Engine {}: 启动专属 Runloop。", engineId);
-            // 注册 Engine 自身作为 Agent 到 Runloop
-            runloop.addAgent(this); // this 已经实现了 Agent 接口
+            // Runloop 已经通过 registerExternalEventSource 注册了 Engine 自身
             runloop.start(); // 启动 Runloop 线程
-        } else if (app != null && app.getAppRunloop() != null) { // Fallback if no dedicated loop
+        } else if (app.getAppRunloop() != null) { // Fallback if no dedicated loop
             log.info("Engine {}: 使用 App 的 Runloop 进行消息处理注册。", engineId);
-            // 将 Engine 的 doWork 方法注册到 App 的 Runloop，让 App 负责调度处理
-            app.getAppRunloop().registerExternalEventSource(inMsgs::drain, () -> {
-            });
+            // 已经通过 appRunloop.ifPresent 注册了 Engine 的 doWork 方法
         } else {
             log.warn("Engine {}: 无法启动，既没有专属 Runloop，也没有关联 App 的 Runloop。", engineId);
+        }
+
+        // 初始化和配置 Extensions
+        if (graphDefinition.getExtensionsInfo() != null) {
+            for (ExtensionInfo extInfo : graphDefinition.getExtensionsInfo()) {
+                String extensionName = extInfo.getExtensionAddonName(); // 使用 getExtensionAddonName
+                String extensionType = extInfo.getType(); // 假设 ExtensionInfo 包含 type 字段
+                Map<String, Object> initialProperties = extInfo.getProperty(); // 使用 getProperty
+
+                try {
+                    // 为 Extension 创建专属的 AsyncExtensionEnv，并在此过程中实例化和配置 Extension
+                    extensionContext.createExtensionEnv(extensionName, extensionType, initialProperties);
+                    log.info("Engine {}: Extension '{}' (Type: {}) 的 AsyncExtensionEnv 已创建并配置。", engineId,
+                            extensionName, extensionType);
+                } catch (Exception e) {
+                    log.error("Engine {}: 初始化 Extension '{}' (Type: {}) 失败: {}",
+                            engineId, extensionName, extensionType, e.getMessage(), e);
+                }
+            }
         }
     }
 
