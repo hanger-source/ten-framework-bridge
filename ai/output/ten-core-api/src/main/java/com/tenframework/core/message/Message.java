@@ -10,6 +10,7 @@ import com.tenframework.core.message.command.StartGraphCommand;
 import com.tenframework.core.message.command.StopGraphCommand;
 import com.tenframework.core.message.command.TimerCommand;
 import com.tenframework.core.message.command.TimeoutCommand;
+import com.tenframework.core.message.command.RemoveExtensionFromGraphCommand;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.experimental.Accessors;
@@ -111,7 +112,4 @@ public abstract class Message {
         public void setProperties(Map<String, Object> properties) {
                 this.properties = properties;
         }
-
-        // 抽象方法 toPayload() 将不再需要，因为 payload 直接作为 Message 的属性
-        // 如果需要，可以在这里定义一个获取 payload 的方法，例如 getPayloadContent()
 }

@@ -1,27 +1,20 @@
 package com.tenframework.core.extension;
 
-import com.tenframework.core.message.AudioFrameMessage;
-import com.tenframework.core.message.CommandMessage;
-import com.tenframework.core.message.CommandResult;
-import com.tenframework.core.message.DataMessage;
-import com.tenframework.core.message.Location;
-import com.tenframework.core.message.Message;
-import com.tenframework.core.message.VideoFrameMessage;
-import com.tenframework.core.error.TenError;
-import com.tenframework.core.metrics.ExtensionMetrics;
-import lombok.Getter;
-import lombok.Setter;
-import lombok.extern.slf4j.Slf4j;
-
 import java.util.Map;
-import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+
+import com.tenframework.core.message.AudioFrameMessage;
+import com.tenframework.core.message.CommandResult;
+import com.tenframework.core.message.DataMessage;
+import com.tenframework.core.message.VideoFrameMessage;
+import com.tenframework.core.message.command.Command;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * 基础Extension抽象类
@@ -39,28 +32,25 @@ import java.util.concurrent.atomic.AtomicLong;
 @Slf4j
 public abstract class BaseExtension implements Extension {
 
+    // 内置异步处理能力
+    private final ExecutorService asyncVirtualExecutor;
+    private final AtomicInteger activeTaskCount = new AtomicInteger(0);
+    // 内置性能监控
+    // private final ExtensionMetrics metrics; // TODO: Metrics integration needs to
+    // be re-evaluated.
+    private final AtomicLong messageCounter = new AtomicLong(0); // 暂时保留，待集成 metrics 后移除
+    private final AtomicLong errorCounter = new AtomicLong(0); // 暂时保留，待集成 metrics 后移除
+    // 内置重试机制
+    private final int maxRetries;
+    private final long retryDelayMs;
+    // 内置健康检查
+    private final ScheduledExecutorService healthCheckExecutor;
     // 基础状态管理
     protected String extensionName;
     protected boolean isRunning = false;
     protected Map<String, Object> configuration;
     protected AsyncExtensionEnv context;
     private String appUri; // 新增字段来存储 appUri
-
-    // 内置异步处理能力
-    private final ExecutorService asyncVirtualExecutor;
-    private final AtomicInteger activeTaskCount = new AtomicInteger(0);
-
-    // 内置性能监控
-    private final ExtensionMetrics metrics;
-    private final AtomicLong messageCounter = new AtomicLong(0);
-    private final AtomicLong errorCounter = new AtomicLong(0);
-
-    // 内置重试机制
-    private final int maxRetries;
-    private final long retryDelayMs;
-
-    // 内置健康检查
-    private final ScheduledExecutorService healthCheckExecutor;
     private volatile boolean isHealthy = true;
 
     public BaseExtension() {
@@ -72,12 +62,13 @@ public abstract class BaseExtension implements Extension {
         this.retryDelayMs = retryDelayMs;
 
         // 初始化内置组件
-        this.asyncVirtualExecutor = Executors.newVirtualThreadPerTaskExecutor();
+        asyncVirtualExecutor = Executors.newVirtualThreadPerTaskExecutor();
 
         // 修正 ExtensionMetrics 的实例化，不再使用 builder()
-        this.metrics = new ExtensionMetrics(extensionName); // extensionName 在 onConfigure 中设置，这里会是 null，但 Gauge 的获取是懒加载
+        // this.metrics = new ExtensionMetrics(extensionName); // TODO: Metrics
+        // integration needs to be re-evaluated.
 
-        this.healthCheckExecutor = Executors.newSingleThreadScheduledExecutor(r -> {
+        healthCheckExecutor = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread t = new Thread(r, "BaseExtension-HealthCheck");
             t.setDaemon(true);
             return t;
@@ -88,10 +79,11 @@ public abstract class BaseExtension implements Extension {
 
     @Override
     public void onConfigure(AsyncExtensionEnv env) {
-        this.context = env;
-        this.extensionName = env.getExtensionName();
-        this.appUri = env.getAppUri(); // 从 context 中获取 appUri
-        this.metrics.setExtensionContext(env); // 设置ExtensionContext到metrics中
+        context = env;
+        extensionName = env.getExtensionName();
+        appUri = env.getAppUri(); // 从 env 中获取 appUri
+        // this.metrics.setExtensionContext(env); // TODO: Metrics integration needs to
+        // be re-evaluated.
 
         // 启动内置组件
         startBuiltInComponents();
@@ -115,8 +107,8 @@ public abstract class BaseExtension implements Extension {
 
     @Override
     public void onStart(AsyncExtensionEnv env) {
-        this.isRunning = true;
-        this.isHealthy = true;
+        isRunning = true;
+        isHealthy = true;
 
         // 启动健康检查
         startHealthCheck();
@@ -129,7 +121,7 @@ public abstract class BaseExtension implements Extension {
 
     @Override
     public void onStop(AsyncExtensionEnv env) {
-        this.isRunning = false;
+        isRunning = false;
 
         // 停止健康检查
         stopHealthCheck();
@@ -154,33 +146,48 @@ public abstract class BaseExtension implements Extension {
     // ==================== 自动消息处理 ====================
 
     @Override
-    public void onCommand(CommandMessage command, AsyncExtensionEnv env) {
-        log.warn("Extension {} received unhandled CommandMessage: {}", getExtensionName(), command.getType());
-        env.sendResult(command.getId(), TenError.failure(-1, "Unhandled command type: " + command.getType()));
+    public void onCommand(Command command, AsyncExtensionEnv env) {
+        log.warn("Extension {} received unhandled Command: {}. Type: {}", getExtensionName(), command.getName(),
+                command.getType());
+        env.sendResult(CommandResult.fail(command.getId(), "Unhandled command type: " + command.getType()));
     }
 
-    public void onCommand(StartGraphCommandMessage command, AsyncExtensionEnv env) {
-        onCommand((CommandMessage) command, env);
+    // 移除所有具体的 onCommand 方法重载，因为 Extension 接口已经提供了默认分派逻辑。
+    // public void onCommand(StartGraphCommandMessage command, AsyncExtensionEnv
+    // env) { ... }
+    // public void onCommand(StopGraphCommandMessage command, AsyncExtensionEnv env)
+    // { ... }
+    // public void onCommand(AddExtensionToGraphCommandMessage command,
+    // AsyncExtensionEnv env) { ... }
+    // public void onCommand(RemoveExtensionFromGraphCommandMessage command,
+    // AsyncExtensionEnv env) { ... }
+    // public void onCommand(TimerCommandMessage command, AsyncExtensionEnv env) {
+    // ... }
+    // public void onCommand(TimeoutCommandMessage command, AsyncExtensionEnv env) {
+    // ... }
+
+    @Override
+    public void onData(DataMessage data, AsyncExtensionEnv env) {
+        log.warn("Extension {} received unhandled DataMessage: {}. Type: {}", getExtensionName(), data.getId(),
+                data.getType());
     }
 
-    public void onCommand(StopGraphCommandMessage command, AsyncExtensionEnv env) {
-        onCommand((CommandMessage) command, env);
+    @Override
+    public void onAudioFrame(AudioFrameMessage audioFrame, AsyncExtensionEnv env) {
+        log.warn("Extension {} received unhandled AudioFrameMessage: {}. Type: {}", getExtensionName(),
+                audioFrame.getId(), audioFrame.getType());
     }
 
-    public void onCommand(AddExtensionToGraphCommandMessage command, AsyncExtensionEnv env) {
-        onCommand((CommandMessage) command, env);
+    @Override
+    public void onVideoFrame(VideoFrameMessage videoFrame, AsyncExtensionEnv env) {
+        log.warn("Extension {} received unhandled VideoFrameMessage: {}. Type: {}", getExtensionName(),
+                videoFrame.getId(), videoFrame.getType());
     }
 
-    public void onCommand(RemoveExtensionFromGraphCommandMessage command, AsyncExtensionEnv env) {
-        onCommand((CommandMessage) command, env);
-    }
-
-    public void onCommand(TimerCommandMessage command, AsyncExtensionEnv env) {
-        onCommand((CommandMessage) command, env);
-    }
-
-    public void onCommand(TimeoutCommandMessage command, AsyncExtensionEnv env) {
-        onCommand((CommandMessage) command, env);
+    @Override
+    public void onCommandResult(CommandResult commandResult, AsyncExtensionEnv env) {
+        log.warn("Extension {} received unhandled CommandResult: {}. OriginalCommandId: {}", getExtensionName(),
+                commandResult.getId(), commandResult.getOriginalCommandId());
     }
 
     // ==================== 内置能力 ====================
@@ -197,7 +204,8 @@ public abstract class BaseExtension implements Extension {
                         if (e != null) {
                             log.error("异步任务执行异常: extensionName={}", extensionName, e);
                             errorCounter.incrementAndGet();
-                            metrics.recordOtherError(e.getMessage()); // 记录其他错误
+                            // metrics.recordOtherError(e.getMessage()); // TODO: Metrics integration needs
+                            // to be re-evaluated.
                         }
                     });
         }
@@ -217,7 +225,8 @@ public abstract class BaseExtension implements Extension {
                 if (attempts >= maxRetries) {
                     log.error("任务执行失败，已达到最大重试次数: extensionName={}, attempts={}",
                             extensionName, attempts, e);
-                    metrics.recordCommandError(e.getMessage()); // 记录命令错误
+                    // metrics.recordCommandError(e.getMessage()); // TODO: Metrics integration
+                    // needs to be re-evaluated.
                     throw e;
                 }
                 log.warn("任务执行失败，准备重试: extensionName={}, attempt={}/{}",
@@ -235,20 +244,22 @@ public abstract class BaseExtension implements Extension {
     /**
      * 发送消息的便捷方法
      */
-    protected void sendMessage(DataMessage data) {
+    protected void sendDataMessage(DataMessage data) {
         if (context != null) {
-            context.sendData(data); // 更改为sendData
-            metrics.recordResult(); // 仍然记录成功发送
+            context.sendData(data);
+            // metrics.recordResult(); // TODO: Metrics integration needs to be
+            // re-evaluated.
         }
     }
 
     /**
      * 发送结果的便捷方法
      */
-    protected void sendResult(CommandResult result) {
+    protected void sendCommandResult(CommandResult result) {
         if (context != null) {
             context.sendResult(result);
-            metrics.recordResult(); // 仍然记录成功发送
+            // metrics.recordResult(); // TODO: Metrics integration needs to be
+            // re-evaluated.
         }
     }
 
@@ -297,7 +308,7 @@ public abstract class BaseExtension implements Extension {
 
     private void loadConfiguration(AsyncExtensionEnv context) {
         // 自动加载配置 - 简化实现
-        this.configuration = Map.of(); // 简化实现，实际应该从context获取
+        configuration = Map.of(); // 简化实现，实际应该从context获取
         log.debug("配置加载完成: extensionName={}, configSize={}",
                 extensionName, configuration.size());
     }
@@ -323,7 +334,8 @@ public abstract class BaseExtension implements Extension {
             } catch (Exception e) {
                 log.error("健康检查异常: extensionName={}", extensionName, e);
                 isHealthy = false;
-                metrics.recordLifecycleError(e.getMessage()); // 记录生命周期错误
+                // metrics.recordLifecycleError(e.getMessage()); // TODO: Metrics integration
+                // needs to be re-evaluated.
             }
         }, 30, 30, TimeUnit.SECONDS);
     }
@@ -400,7 +412,7 @@ public abstract class BaseExtension implements Extension {
     @Deprecated
     public long getMessageCount() {
         // return metrics.getMessageStats().getTotalMessages().get(); // 已经移除
-        return 0; // 临时返回 0，待后续通过 Dropwizard Metrics 获取
+        return messageCounter.get(); // 临时返回，待后续通过 Dropwizard Metrics 获取
     }
 
     /**
@@ -409,7 +421,7 @@ public abstract class BaseExtension implements Extension {
     @Deprecated
     public long getErrorCount() {
         // return metrics.getErrorStats().getTotalErrors().get(); // 已经移除
-        return 0; // 临时返回 0，待后续通过 Dropwizard Metrics 获取
+        return errorCounter.get(); // 临时返回，待后续通过 Dropwizard Metrics 获取
     }
 
     /**
@@ -422,9 +434,10 @@ public abstract class BaseExtension implements Extension {
     /**
      * 获取性能指标
      */
-    public ExtensionMetrics getMetrics() {
-        return metrics;
-    }
+    // public ExtensionMetrics getMetrics() { // TODO: Metrics integration needs to
+    // be re-evaluated.
+    // return metrics;
+    // }
 
     /**
      * 获取配置

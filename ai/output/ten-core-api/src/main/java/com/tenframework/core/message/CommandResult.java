@@ -1,10 +1,6 @@
 package com.tenframework.core.message;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
-import com.fasterxml.jackson.databind.annotation.JsonSerialize;
-import com.tenframework.core.message.serializer.CommandResultMessageDeserializer;
-import com.tenframework.core.message.serializer.CommandResultMessageSerializer;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
@@ -18,9 +14,10 @@ import java.util.Map;
 @Data
 @NoArgsConstructor
 @Accessors(chain = true)
-@JsonSerialize(using = CommandResultMessageSerializer.class)
-@JsonDeserialize(using = CommandResultMessageDeserializer.class)
 public class CommandResult extends Message {
+
+    @JsonProperty("original_cmd_id")
+    private String originalCommandId;
 
     @JsonProperty("original_cmd_type")
     private int originalCmdType;
@@ -41,9 +38,10 @@ public class CommandResult extends Message {
     // 实际内部创建时使用自定义构造函数
     public CommandResult(String id, Location srcLoc, MessageType type, List<Location> destLocs,
             Map<String, Object> properties, long timestamp,
-            int originalCmdType, String originalCmdName, int statusCode,
+            String originalCommandId, int originalCmdType, String originalCmdName, int statusCode,
             boolean isFinal, boolean isCompleted) {
         super(id, srcLoc, type, destLocs, properties, timestamp);
+        this.originalCommandId = originalCommandId;
         this.originalCmdType = originalCmdType;
         this.originalCmdName = originalCmdName;
         this.statusCode = statusCode;
@@ -54,7 +52,8 @@ public class CommandResult extends Message {
     // 用于内部创建的简化构造函数，匹配新的 Message 基类构造
     public CommandResult(Location srcLoc, List<Location> destLocs, String originalCommandId, int statusCode,
             String detail) {
-        super(MessageType.CMD_RESULT, srcLoc, destLocs); // type, srcLoc, destLocs
+        super(MessageType.CMD_RESULT, srcLoc, destLocs);
+        this.originalCommandId = originalCommandId;
         this.originalCmdType = MessageType.CMD_RESULT.ordinal(); // 简化，实际可能需要原始命令的 type
         this.originalCmdName = originalCommandId; // 原始命令的 ID 作为名称
         this.statusCode = statusCode;
@@ -68,6 +67,10 @@ public class CommandResult extends Message {
     }
 
     // Getters for specific properties
+    public String getOriginalCommandId() {
+        return originalCommandId;
+    }
+
     public int getOriginalCmdType() {
         return originalCmdType;
     }
@@ -94,5 +97,13 @@ public class CommandResult extends Message {
             return (String) getProperties().get("detail");
         }
         return null;
+    }
+
+    public static CommandResult success(String originalCommandId, String detail) {
+        return new CommandResult(null, Collections.emptyList(), originalCommandId, 0, detail); // 简化，srcLoc和destLocs为null/empty
+    }
+
+    public static CommandResult fail(String originalCommandId, String detail) {
+        return new CommandResult(null, Collections.emptyList(), originalCommandId, -1, detail); // 简化，srcLoc和destLocs为null/empty
     }
 }

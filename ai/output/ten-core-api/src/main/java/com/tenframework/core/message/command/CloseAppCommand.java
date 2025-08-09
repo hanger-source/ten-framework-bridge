@@ -51,7 +51,7 @@ public class CloseAppCommand extends Message {
 
     /**
      * 用于内部创建的简化构造函数。
-     * 
+     *
      * @param srcLoc 源位置。
      */
     public CloseAppCommand(Location srcLoc) {

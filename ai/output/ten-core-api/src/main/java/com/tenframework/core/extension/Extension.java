@@ -22,7 +22,7 @@ public interface Extension {
 
     /**
      * Extension 配置回调方法。
-     * 
+     *
      * @param env Extension 的运行时环境。
      */
     default void onConfigure(AsyncExtensionEnv env) {
@@ -30,7 +30,7 @@ public interface Extension {
 
     /**
      * Extension 初始化回调方法。
-     * 
+     *
      * @param env Extension 的运行时环境。
      */
     default void onInit(AsyncExtensionEnv env) {
@@ -38,7 +38,7 @@ public interface Extension {
 
     /**
      * Extension 启动回调方法。
-     * 
+     *
      * @param env Extension 的运行时环境。
      */
     default void onStart(AsyncExtensionEnv env) {
@@ -46,7 +46,7 @@ public interface Extension {
 
     /**
      * Extension 停止回调方法。
-     * 
+     *
      * @param env Extension 的运行时环境。
      */
     default void onStop(AsyncExtensionEnv env) {
@@ -54,7 +54,7 @@ public interface Extension {
 
     /**
      * Extension 去初始化回调方法。
-     * 
+     *
      * @param env Extension 的运行时环境。
      */
     default void onDeinit(AsyncExtensionEnv env) {
@@ -62,7 +62,7 @@ public interface Extension {
 
     /**
      * 处理命令消息。
-     * 
+     *
      * @param command 命令消息。
      * @param env     Extension 的运行时环境。
      */
@@ -99,7 +99,7 @@ public interface Extension {
 
     /**
      * 处理 `StartGraphCommand` 命令。
-     * 
+     *
      * @param command `StartGraphCommand` 消息。
      * @param env     Extension 的运行时环境。
      */
@@ -110,7 +110,7 @@ public interface Extension {
 
     /**
      * 处理 `StopGraphCommand` 命令。
-     * 
+     *
      * @param command `StopGraphCommand` 消息。
      * @param env     Extension 的运行时环境。
      */
@@ -121,7 +121,7 @@ public interface Extension {
 
     /**
      * 处理 `AddExtensionToGraphCommand` 命令。
-     * 
+     *
      * @param command `AddExtensionToGraphCommand` 消息。
      * @param env     Extension 的运行时环境。
      */
@@ -132,7 +132,7 @@ public interface Extension {
 
     /**
      * 处理 `RemoveExtensionFromGraphCommand` 命令。
-     * 
+     *
      * @param command `RemoveExtensionFromGraphCommand` 消息。
      * @param env     Extension 的运行时环境。
      */
@@ -143,7 +143,7 @@ public interface Extension {
 
     /**
      * 处理 `TimerCommand` 命令。
-     * 
+     *
      * @param command `TimerCommand` 消息。
      * @param env     Extension 的运行时环境。
      */
@@ -154,7 +154,7 @@ public interface Extension {
 
     /**
      * 处理 `TimeoutCommand` 命令。
-     * 
+     *
      * @param command `TimeoutCommand` 消息。
      * @param env     Extension 的运行时环境。
      */
@@ -165,7 +165,7 @@ public interface Extension {
 
     /**
      * 处理 `CloseAppCommand` 命令。
-     * 
+     *
      * @param command `CloseAppCommand` 消息。
      * @param env     Extension 的运行时环境。
      */
@@ -176,7 +176,7 @@ public interface Extension {
 
     /**
      * 处理数据消息。
-     * 
+     *
      * @param data 数据消息。
      * @param env  Extension 的运行时环境。
      */
@@ -185,7 +185,7 @@ public interface Extension {
 
     /**
      * 处理音频帧消息。
-     * 
+     *
      * @param audioFrame 音频帧消息。
      * @param env        Extension 的运行时环境。
      */
@@ -194,7 +194,7 @@ public interface Extension {
 
     /**
      * 处理视频帧消息。
-     * 
+     *
      * @param videoFrame 视频帧消息。
      * @param env        Extension 的运行时环境。
      */
@@ -203,7 +203,7 @@ public interface Extension {
 
     /**
      * 处理命令结果消息。
-     * 
+     *
      * @param commandResult 命令结果消息。
      * @param env           Extension 的运行时环境。
      */
@@ -212,7 +212,7 @@ public interface Extension {
 
     /**
      * 获取 Extension 所属的 App URI。
-     * 
+     *
      * @return App URI。
      */
     String getAppUri();

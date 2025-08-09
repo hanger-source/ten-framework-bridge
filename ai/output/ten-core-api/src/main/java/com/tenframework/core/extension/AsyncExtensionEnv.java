@@ -18,35 +18,35 @@ import java.util.concurrent.ExecutorService;
 public interface AsyncExtensionEnv {
     /**
      * 发送一个命令结果消息。
-     * 
+     *
      * @param result 要发送的命令结果。
      */
     void sendResult(CommandResult result);
 
     /**
      * 发送一个数据消息。
-     * 
+     *
      * @param data 要发送的数据消息。
      */
     void sendData(DataMessage data);
 
     /**
      * 发送一个视频帧消息。
-     * 
+     *
      * @param videoFrame 要发送的视频帧。
      */
     void sendVideoFrame(VideoFrameMessage videoFrame);
 
     /**
      * 发送一个音频帧消息。
-     * 
+     *
      * @param audioFrame 要发送的音频帧。
      */
     void sendAudioFrame(AudioFrameMessage audioFrame);
 
     /**
      * 发送一个命令。
-     * 
+     *
      * @param command 要发送的命令。
      * @return 返回一个 `CompletableFuture`，当命令处理完成时，该 Future 将被完成，包含命令执行的结果。
      */
@@ -54,7 +54,7 @@ public interface AsyncExtensionEnv {
 
     /**
      * 检查指定路径的属性是否存在。
-     * 
+     *
      * @param path 属性路径。
      * @return 如果属性存在则返回 true，否则返回 false。
      */
@@ -62,7 +62,7 @@ public interface AsyncExtensionEnv {
 
     /**
      * 获取指定路径的属性值并转换为 JSON 字符串。
-     * 
+     *
      * @param path 属性路径。
      * @return 属性值的 Optional JSON 字符串，如果不存在则为 Optional.empty()。
      */
@@ -70,7 +70,7 @@ public interface AsyncExtensionEnv {
 
     /**
      * 从 JSON 字符串设置指定路径的属性值。
-     * 
+     *
      * @param path    属性路径。
      * @param jsonStr 要设置的 JSON 字符串。
      */
@@ -78,7 +78,7 @@ public interface AsyncExtensionEnv {
 
     /**
      * 获取指定路径的整数属性值。
-     * 
+     *
      * @param path 属性路径。
      * @return 整数值的 Optional，如果不存在或类型不匹配则为 Optional.empty()。
      */
@@ -86,7 +86,7 @@ public interface AsyncExtensionEnv {
 
     /**
      * 设置指定路径的整数属性值。
-     * 
+     *
      * @param path  属性路径。
      * @param value 要设置的整数值。
      */
@@ -94,7 +94,7 @@ public interface AsyncExtensionEnv {
 
     /**
      * 获取指定路径的字符串属性值。
-     * 
+     *
      * @param path 属性路径。
      * @return 字符串值的 Optional，如果不存在或类型不匹配则为 Optional.empty()。
      */
@@ -102,7 +102,7 @@ public interface AsyncExtensionEnv {
 
     /**
      * 设置指定路径的字符串属性值。
-     * 
+     *
      * @param path  属性路径。
      * @param value 要设置的字符串值。
      */
@@ -110,7 +110,7 @@ public interface AsyncExtensionEnv {
 
     /**
      * 获取指定路径的布尔属性值。
-     * 
+     *
      * @param path 属性路径。
      * @return 布尔值的 Optional，如果不存在或类型不匹配则为 Optional.empty()。
      */
@@ -118,7 +118,7 @@ public interface AsyncExtensionEnv {
 
     /**
      * 设置指定路径的布尔属性值。
-     * 
+     *
      * @param path  属性路径。
      * @param value 要设置的布尔值。
      */
@@ -126,7 +126,7 @@ public interface AsyncExtensionEnv {
 
     /**
      * 获取指定路径的浮点数属性值。
-     * 
+     *
      * @param path 属性路径。
      * @return 浮点数值的 Optional，如果不存在或类型不匹配则为 Optional.empty()。
      */
@@ -134,7 +134,7 @@ public interface AsyncExtensionEnv {
 
     /**
      * 设置指定路径的浮点数属性值。
-     * 
+     *
      * @param path  属性路径。
      * @param value 要设置的浮点数值。
      */
@@ -142,42 +142,42 @@ public interface AsyncExtensionEnv {
 
     /**
      * 从 JSON 字符串初始化所有属性。
-     * 
+     *
      * @param jsonStr 包含属性的 JSON 字符串。
      */
     void initPropertyFromJson(String jsonStr);
 
     /**
      * 获取用于执行虚拟线程任务的 ExecutorService。
-     * 
+     *
      * @return ExecutorService 实例。
      */
     ExecutorService getVirtualThreadExecutor();
 
     /**
      * 获取 Extension 的名称。
-     * 
+     *
      * @return Extension 的名称。
      */
     String getExtensionName();
 
     /**
      * 获取所属 App 的 URI。
-     * 
+     *
      * @return App 的 URI。
      */
     String getAppUri();
 
     /**
      * 获取所属 Graph (Engine) 的 ID。
-     * 
+     *
      * @return Graph (Engine) 的 ID。
      */
     String getGraphId();
 
     /**
      * 获取当前活跃的虚拟线程数量。
-     * 
+     *
      * @return 活跃虚拟线程数量。
      */
     int getActiveVirtualThreadCount();

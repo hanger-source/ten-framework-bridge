@@ -60,7 +60,7 @@ public class StopGraphCommand extends Message {
 
     /**
      * 用于内部创建的简化构造函数。
-     * 
+     *
      * @param srcLoc   源位置。
      * @param destLocs 目的位置。
      * @param graphId  图ID。

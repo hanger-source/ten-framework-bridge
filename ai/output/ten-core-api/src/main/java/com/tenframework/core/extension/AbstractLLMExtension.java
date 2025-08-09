@@ -1,6 +1,8 @@
 package com.tenframework.core.extension;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
@@ -15,11 +17,16 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
-import com.tenframework.core.message.AudioFrame;
-import com.tenframework.core.message.Command;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.tenframework.core.message.AudioFrameMessage;
 import com.tenframework.core.message.CommandResult;
-import com.tenframework.core.message.Data;
-import com.tenframework.core.message.VideoFrame;
+import com.tenframework.core.message.DataMessage;
+import com.tenframework.core.message.Location;
+import com.tenframework.core.message.MessageType;
+import com.tenframework.core.message.VideoFrameMessage;
+import com.tenframework.core.message.command.Command;
+import lombok.Builder;
+import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -31,7 +38,7 @@ import lombok.extern.slf4j.Slf4j;
  * 2. 工具编排能力 - 支持动态工具注册和管理
  * 3. 流式处理支持 - 支持流式文本输出和中断机制
  * 4. 会话状态管理 - 维护对话历史和上下文
- * 5. 精确的错误处理和监控
+ * 5. 精确的错误处理和监控 (此处为占位符，需实际集成)
  */
 @Slf4j
 public abstract class AbstractLLMExtension implements Extension {
@@ -39,6 +46,7 @@ public abstract class AbstractLLMExtension implements Extension {
     protected String extensionName;
     protected boolean isRunning = false;
     protected Map<String, Object> configuration;
+    protected AsyncExtensionEnv context;
 
     // 异步处理队列 - 核心组件
     private final BlockingQueue<LLMInputItem> processingQueue;
@@ -54,20 +62,24 @@ public abstract class AbstractLLMExtension implements Extension {
     private final Map<String, Object> sessionState = new ConcurrentHashMap<>();
     private final AtomicBoolean interrupted = new AtomicBoolean(false);
 
-    // 性能监控
-    private final ExtensionMetrics metrics;
+    // 性能监控 (简化或移除，因为 metrics 包不存在)
+    // private final ExtensionMetrics metrics; // TODO: Metrics integration needs to
+    // be re-evaluated.
+    private final ObjectMapper objectMapper = new ObjectMapper(); // 用于 JSON 解析
 
     public AbstractLLMExtension() {
         this.processingQueue = new LinkedBlockingQueue<>();
         this.processingExecutor = Executors.newVirtualThreadPerTaskExecutor();
-        // 修正 ExtensionMetrics 的实例化，不再使用 builder()
-        this.metrics = new ExtensionMetrics("AbstractLLMExtension"); // 临时名称，会在 onConfigure 中更新
+        // this.metrics = new ExtensionMetrics("AbstractLLMExtension"); // TODO: Metrics
+        // integration needs to be re-evaluated.
     }
 
     @Override
     public void onConfigure(AsyncExtensionEnv env) {
         this.extensionName = env.getExtensionName();
-        this.metrics.setExtensionContext(env); // 设置 AsyncExtensionEnv 到 metrics 中
+        this.context = env;
+        // this.metrics.setExtensionContext(env); // TODO: Metrics integration needs to
+        // be re-evaluated.
         log.info("LLM扩展配置阶段: extensionName={}", extensionName);
         onLLMConfigure(env);
     }
@@ -127,22 +139,25 @@ public abstract class AbstractLLMExtension implements Extension {
         long startTime = System.currentTimeMillis();
         try {
             handleLLMCommand(command, env);
-            metrics.recordCommand();
+            // metrics.recordCommand(); // TODO: Metrics integration needs to be
+            // re-evaluated.
             long duration = System.currentTimeMillis() - startTime;
-            metrics.recordConfigure(duration);
+            // metrics.recordConfigure(duration); // TODO: Metrics integration needs to be
+            // re-evaluated.
         } catch (Exception e) {
             log.error("LLM扩展命令处理异常: extensionName={}, commandName={}",
                     extensionName, command.getName(), e);
-            metrics.recordCommandError(e.getMessage());
+            // metrics.recordCommandError(e.getMessage()); // TODO: Metrics integration
+            // needs to be re-evaluated.
             sendErrorResult(command, env, "LLM命令处理异常: " + e.getMessage());
         }
     }
 
     @Override
-    public void onData(Data data, AsyncExtensionEnv env) {
+    public void onData(DataMessage data, AsyncExtensionEnv env) {
         if (!isRunning) {
-            log.warn("LLM扩展未运行，忽略数据: extensionName={}, dataName={}",
-                    extensionName, data.getName());
+            log.warn("LLM扩展未运行，忽略数据: extensionName={}, dataId={}",
+                    extensionName, data.getId());
             return;
         }
 
@@ -152,47 +167,52 @@ public abstract class AbstractLLMExtension implements Extension {
             LLMInputItem inputItem = new LLMInputItem(data, env);
             boolean queued = processingQueue.offer(inputItem);
             if (!queued) {
-                log.warn("LLM处理队列已满，丢弃数据: extensionName={}, dataName={}",
-                        extensionName, data.getName());
-                metrics.recordDataError("处理队列已满");
+                log.warn("LLM处理队列已满，丢弃数据: extensionName={}, dataId={}",
+                        extensionName, data.getId());
+                // metrics.recordDataError("处理队列已满"); // TODO: Metrics integration needs to be
+                // re-evaluated.
             } else {
-                metrics.recordData();
+                // metrics.recordData(); // TODO: Metrics integration needs to be re-evaluated.
             }
             long duration = System.currentTimeMillis() - startTime;
-            metrics.recordConfigure(duration);
+            // metrics.recordConfigure(duration); // TODO: Metrics integration needs to be
+            // re-evaluated.
         } catch (Exception e) {
-            log.error("LLM扩展数据处理异常: extensionName={}, dataName={}",
-                    extensionName, data.getName(), e);
-            metrics.recordDataError(e.getMessage());
+            log.error("LLM扩展数据处理异常: extensionName={}, dataId={}",
+                    extensionName, data.getId(), e);
+            // metrics.recordDataError(e.getMessage()); // TODO: Metrics integration needs
+            // to be re-evaluated.
         }
     }
 
     @Override
-    public void onAudioFrame(AudioFrame audioFrame, AsyncExtensionEnv env) {
+    public void onAudioFrame(AudioFrameMessage audioFrame, AsyncExtensionEnv env) {
         if (!isRunning) {
-            log.warn("LLM扩展未运行，忽略音频帧: extensionName={}, frameName={}",
-                    extensionName, audioFrame.getName());
+            log.warn("LLM扩展未运行，忽略音频帧: extensionName={}, frameId={}",
+                    extensionName, audioFrame.getId());
             return;
         }
 
         // LLM通常不直接处理音频帧，但可以记录
-        metrics.recordAudioFrame();
-        log.debug("LLM扩展收到音频帧: extensionName={}, frameName={}",
-                extensionName, audioFrame.getName());
+        // metrics.recordAudioFrame(); // TODO: Metrics integration needs to be
+        // re-evaluated.
+        log.debug("LLM扩展收到音频帧: extensionName={}, frameId={}",
+                extensionName, audioFrame.getId());
     }
 
     @Override
-    public void onVideoFrame(VideoFrame videoFrame, AsyncExtensionEnv env) {
+    public void onVideoFrame(VideoFrameMessage videoFrame, AsyncExtensionEnv env) {
         if (!isRunning) {
-            log.warn("LLM扩展未运行，忽略视频帧: extensionName={}, frameName={}",
-                    extensionName, videoFrame.getName());
+            log.warn("LLM扩展未运行，忽略视频帧: extensionName={}, frameId={}",
+                    extensionName, videoFrame.getId());
             return;
         }
 
         // LLM通常不直接处理视频帧，但可以记录
-        metrics.recordVideoFrame();
-        log.debug("LLM扩展收到视频帧: extensionName={}, frameName={}",
-                extensionName, videoFrame.getName());
+        // metrics.recordVideoFrame(); // TODO: Metrics integration needs to be
+        // re-evaluated.
+        log.debug("LLM扩展收到视频帧: extensionName={}, frameId={}",
+                extensionName, videoFrame.getId());
     }
 
     /**
@@ -249,12 +269,14 @@ public abstract class AbstractLLMExtension implements Extension {
                 }
 
                 long startTime = System.currentTimeMillis();
-                onDataChatCompletion(item.data, context);
+                onDataChatCompletion(item.data, context); // 修正为 item.data
                 long duration = System.currentTimeMillis() - startTime;
-                metrics.recordConfigure(duration);
+                // metrics.recordConfigure(duration); // TODO: Metrics integration needs to be
+                // re-evaluated.
             } catch (Exception e) {
                 log.error("LLM数据处理异常: extensionName={}", extensionName, e);
-                metrics.recordDataError(e.getMessage());
+                // metrics.recordDataError(e.getMessage()); // TODO: Metrics integration needs
+                // to be re-evaluated.
             }
         }
     }
@@ -286,8 +308,11 @@ public abstract class AbstractLLMExtension implements Extension {
      */
     private void handleToolRegister(Command command, AsyncExtensionEnv context) {
         try {
-            String toolMetadataJson = command.getArg("tool", String.class)
-                    .orElseThrow(() -> new IllegalArgumentException("缺少工具元数据"));
+            // 从 properties 中获取 tool_metadata
+            String toolMetadataJson = (String) command.getProperties().get("tool_metadata");
+            if (toolMetadataJson == null) {
+                throw new IllegalArgumentException("缺少工具元数据");
+            }
 
             ToolMetadata toolMetadata = parseToolMetadata(toolMetadataJson);
 
@@ -298,8 +323,7 @@ public abstract class AbstractLLMExtension implements Extension {
             onToolsUpdate(context, toolMetadata);
 
             // 发送成功结果
-            CommandResult result = CommandResult.success(command.getCommandId(),
-                    Map.of("tool_name", toolMetadata.getName()));
+            CommandResult result = CommandResult.success(command.getId(), "Tool registered successfully.");
             context.sendResult(result);
 
             log.info("工具注册成功: extensionName={}, toolName={}",
@@ -315,8 +339,11 @@ public abstract class AbstractLLMExtension implements Extension {
      */
     private void handleChatCompletionCall(Command command, AsyncExtensionEnv context) {
         try {
-            // 解析聊天完成参数
-            Map<String, Object> args = command.getArgs();
+            // 从 properties 中获取 args
+            Map<String, Object> args = (Map<String, Object>) command.getProperties().get("args");
+            if (args == null) {
+                throw new IllegalArgumentException("缺少聊天完成参数");
+            }
 
             // 使用虚拟线程执行LLM调用
             CompletableFuture.runAsync(() -> {
@@ -324,7 +351,8 @@ public abstract class AbstractLLMExtension implements Extension {
                     onCallChatCompletion(args, context);
                 } catch (Exception e) {
                     log.error("LLM聊天完成调用异常: extensionName={}", extensionName, e);
-                    metrics.recordCommandError(e.getMessage());
+                    // metrics.recordCommandError(e.getMessage()); // TODO: Metrics integration
+                    // needs to be re-evaluated.
                 }
             }, context.getVirtualThreadExecutor());
 
@@ -363,14 +391,23 @@ public abstract class AbstractLLMExtension implements Extension {
      */
     protected void sendTextOutput(AsyncExtensionEnv context, String text, boolean endOfSegment) {
         try {
-            Data outputData = Data.text("llm_output", text);
-            outputData.setProperties(Map.of(
-                    "text", text,
-                    "end_of_segment", endOfSegment,
-                    "extension_name", extensionName));
+            // DataMessage 没有静态 text() 方法，直接构造
+            DataMessage outputData = new DataMessage(
+                    java.util.UUID.randomUUID().toString(), // id
+                    MessageType.DATA_MESSAGE, // type
+                    new Location().setAppUri(context.getAppUri()).setGraphId(context.getGraphId())
+                            .setNodeId(extensionName), // srcLoc
+                    Collections.emptyList(), // destLocs
+                    text.getBytes(StandardCharsets.UTF_8) // data
+            );
+            // 将 text 和 end_of_segment 放入 properties
+            outputData.getProperties().put("text", text);
+            outputData.getProperties().put("end_of_segment", endOfSegment);
+            outputData.getProperties().put("extension_name", extensionName);
 
-            context.sendData(outputData); // 将sendMessage替换为sendData
-            metrics.recordResult();
+            context.sendData(outputData);
+            // metrics.recordResult(); // TODO: Metrics integration needs to be
+            // re-evaluated.
             log.debug("LLM文本输出发送成功: extensionName={}, text={}, endOfSegment={}",
                     extensionName, text, endOfSegment);
         } catch (Exception e) {
@@ -382,7 +419,7 @@ public abstract class AbstractLLMExtension implements Extension {
      * 发送错误结果
      */
     protected void sendErrorResult(Command command, AsyncExtensionEnv context, String errorMessage) {
-        CommandResult errorResult = CommandResult.error(command.getCommandId(), errorMessage);
+        CommandResult errorResult = CommandResult.fail(command.getId(), errorMessage);
         context.sendResult(errorResult);
     }
 
@@ -390,12 +427,12 @@ public abstract class AbstractLLMExtension implements Extension {
      * 解析工具元数据
      */
     protected ToolMetadata parseToolMetadata(String json) {
-        // 这里应该使用Jackson解析JSON
-        // 简化实现，实际应该使用Jackson
-        return ToolMetadata.builder()
-                .name("parsed_tool")
-                .description("Parsed from JSON")
-                .build();
+        try {
+            return objectMapper.readValue(json, ToolMetadata.class);
+        } catch (Exception e) {
+            log.error("解析工具元数据失败: {}", e.getMessage(), e);
+            return ToolMetadata.builder().name("invalid_tool").description("解析失败").build();
+        }
     }
 
     // 抽象方法 - 子类必须实现
@@ -428,7 +465,7 @@ public abstract class AbstractLLMExtension implements Extension {
     /**
      * 处理数据驱动的聊天完成
      */
-    protected abstract void onDataChatCompletion(Data data, AsyncExtensionEnv context);
+    protected abstract void onDataChatCompletion(DataMessage data, AsyncExtensionEnv context);
 
     /**
      * 处理命令驱动的聊天完成
@@ -452,11 +489,12 @@ public abstract class AbstractLLMExtension implements Extension {
     }
 
     /**
-     * 获取性能指标
+     * 获取性能指标 (如果 metrics 未集成，此方法应被移除或返回空)
      */
-    public ExtensionMetrics getMetrics() {
-        return metrics;
-    }
+    // public ExtensionMetrics getMetrics() { // TODO: Metrics integration needs to
+    // be re-evaluated.
+    // return metrics;
+    // }
 
     /**
      * 获取会话状态
@@ -469,12 +507,24 @@ public abstract class AbstractLLMExtension implements Extension {
      * LLM输入项
      */
     private static class LLMInputItem {
-        final Data data;
+        final DataMessage data;
         final AsyncExtensionEnv context;
 
-        LLMInputItem(Data data, AsyncExtensionEnv context) {
+        LLMInputItem(DataMessage data, AsyncExtensionEnv context) {
             this.data = data;
             this.context = context;
         }
+    }
+
+    /**
+     * LLM工具元数据，用于工具调用功能
+     */
+    @Data
+    @Builder
+    public static class ToolMetadata {
+        private String name;
+        private String description;
+        private Map<String, Object> parameters; // 工具参数的JSON Schema
+        private List<String> required; // 必填参数列表
     }
 }

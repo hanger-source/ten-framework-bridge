@@ -1,13 +1,13 @@
 package com.tenframework.core.extension;
 
+import java.util.Map;
+
 import com.tenframework.core.message.AudioFrameMessage;
-import com.tenframework.core.message.CommandMessage;
+import com.tenframework.core.message.command.Command;
 import com.tenframework.core.message.CommandResult;
 import com.tenframework.core.message.DataMessage;
 import com.tenframework.core.message.VideoFrameMessage;
 import lombok.extern.slf4j.Slf4j;
-
-import java.util.Map;
 
 /**
  * 简单的工具扩展示例，用于演示如何处理不同类型的消息。
@@ -40,10 +40,11 @@ public class SimpleToolExtension extends AbstractToolProvider {
     }
 
     @Override
-    protected void handleToolCommand(CommandMessage command, AsyncExtensionEnv context) {
+    protected void handleToolCommand(Command command, AsyncExtensionEnv context) {
         log.debug("工具扩展收到命令: {}", command.getName());
         // 模拟处理命令并发送结果
-        // context.sendResult(new CommandResult(command.getCommandId(), "Tool Processed: " + command.getName()));
+        // env.sendResult(new CommandResult(command.getCommandId(), "Tool Processed: " +
+        // command.getName()));
         sendCommandResult(command.getId(), Map.of("tool_response", "Hello from Tool!"), null);
     }
 

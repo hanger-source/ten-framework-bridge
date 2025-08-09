@@ -2,7 +2,6 @@ package com.tenframework.core.demo;
 
 import com.tenframework.core.app.App;
 import com.tenframework.core.connection.Connection;
-import com.tenframework.core.extension.system.ClientConnectionExtension;
 import com.tenframework.core.message.DataMessage;
 import com.tenframework.core.message.Location;
 import com.tenframework.core.message.MessageType;
@@ -39,23 +38,13 @@ public class DemoApp {
         app.onNewConnection(clientConnection);
 
         // 4. 准备一个简化的 Graph JSON 定义
-        // 包含一个 ClientConnectionExtension，它将处理来自 Connection 的消息
-        // 和一个简单的 EchoExtension (假设它会回传数据，这里简化为只打印)
+        // 包含一个简单的 EchoExtension (假设它会回传数据，这里简化为只打印)
         String graphJson = """
                 {
                   "graph_id": "test_graph_001",
                   "graph_name": "DemoGraph",
                   "extension_groups_info": [],
                   "extensions_info": [
-                    {
-                      "loc": {
-                        "app_uri": "%s",
-                        "graph_id": "test_graph_001",
-                        "node_id": "client_conn_ext"
-                      },
-                      "extension_addon_name": "client_connection",
-                      "extension_name": "client_conn_ext"
-                    },
                     {
                       "loc": {
                         "app_uri": "%s",
@@ -68,20 +57,14 @@ public class DemoApp {
                   ],
                   "connections": [
                     {
-                      "path_id": "conn_to_ext_path",
-                      "source": { "app_uri": "%s", "graph_id": "test_graph_001", "node_id": "client_conn_ext" },
-                      "destination": { "app_uri": "%s", "graph_id": "test_graph_001", "node_id": "echo_ext" },
-                      "message_type": "DATA_MESSAGE"
-                    },
-                    {
-                      "path_id": "ext_to_conn_path",
+                      "path_id": "echo_to_echo_path",
                       "source": { "app_uri": "%s", "graph_id": "test_graph_001", "node_id": "echo_ext" },
-                      "destination": { "app_uri": "%s", "graph_id": "test_graph_001", "node_id": "client_conn_ext" },
+                      "destination": { "app_uri": "%s", "graph_id": "test_graph_001", "node_id": "echo_ext" },
                       "message_type": "DATA_MESSAGE"
                     }
                   ]
                 }
-                """.formatted(appUri, appUri, appUri, appUri, appUri, appUri);
+                """.formatted(appUri, appUri, appUri);
 
         // 5. 模拟客户端发送 StartGraphCommand
         Location destLoc = new Location().setAppUri(appUri).setGraphId("test_graph_001");
@@ -107,7 +90,7 @@ public class DemoApp {
 
         // 6. 模拟客户端发送一个数据消息
         Location dataSrcLoc = new Location().setAppUri(appUri).setGraphId("test_graph_001")
-                .setNodeId("client_conn_ext");
+                .setNodeId("echo_ext");
         Location dataDestLoc = new Location().setAppUri(appUri).setGraphId("test_graph_001").setNodeId("echo_ext");
         DataMessage dataMsg = new DataMessage(
                 UUID.randomUUID().toString(),

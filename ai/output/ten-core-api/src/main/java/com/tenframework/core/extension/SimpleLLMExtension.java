@@ -1,16 +1,16 @@
 package com.tenframework.core.extension;
 
-import com.tenframework.core.message.CommandMessage;
-import com.tenframework.core.message.CommandResult;
-import com.tenframework.core.message.DataMessage;
-import com.tenframework.core.message.AudioFrameMessage;
-import com.tenframework.core.message.VideoFrameMessage;
-import lombok.extern.slf4j.Slf4j;
-
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+
+import com.tenframework.core.message.AudioFrameMessage;
+import com.tenframework.core.message.command.Command;
+import com.tenframework.core.message.CommandResult;
+import com.tenframework.core.message.DataMessage;
+import com.tenframework.core.message.MessageType;
+import com.tenframework.core.message.VideoFrameMessage;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * 简单的LLM扩展示例，用于演示如何处理不同类型的消息。
@@ -43,36 +43,38 @@ public class SimpleLLMExtension extends AbstractAIServiceHub {
     }
 
     @Override
-    protected void handleAIServiceCommand(CommandMessage command, AsyncExtensionEnv context) {
+    protected void handleAIServiceCommand(Command command, AsyncExtensionEnv env) {
         log.debug("LLM收到命令: {}", command.getName());
         // 模拟处理命令并发送结果
-        // context.sendResult(new CommandResult(command.getCommandId(), "LLM Processed: " + command.getName()));
+        // env.sendResult(new CommandResult(command.getCommandId(), "LLM Processed: " +
+        // command.getName()));
         sendCommandResult(command.getId(), Map.of("llm_response", "Hello from LLM!"), null);
     }
 
     @Override
-    protected void handleAIServiceData(DataMessage data, AsyncExtensionEnv context) {
+    protected void handleAIServiceData(DataMessage data, AsyncExtensionEnv env) {
         log.debug("LLM收到数据: {}", new String(data.getData()));
         // 模拟处理数据并可能触发其他命令或发送数据
-        // context.sendMessage(new Data("llm_processed_data", ("Processed: " + new String(data.getData())).getBytes()));
+        // env.sendMessage(new Data("llm_processed_data", ("Processed: " + new
+        // String(data.getData())).getBytes()));
     }
 
     @Override
-    protected void handleAIServiceAudioFrame(AudioFrameMessage audioFrame, AsyncExtensionEnv context) {
+    protected void handleAIServiceAudioFrame(AudioFrameMessage audioFrame, AsyncExtensionEnv env) {
         log.debug("LLM收到音频帧: {} ({}Hz, {}ch)", audioFrame.getName(),
                 audioFrame.getSampleRate(), audioFrame.getChannels());
         // 模拟处理音频帧
     }
 
     @Override
-    protected void handleAIServiceVideoFrame(VideoFrameMessage videoFrame, AsyncExtensionEnv context) {
+    protected void handleAIServiceVideoFrame(VideoFrameMessage videoFrame, AsyncExtensionEnv env) {
         log.debug("LLM收到视频帧: {} ({}x{})", videoFrame.getName(),
                 videoFrame.getWidth(), videoFrame.getHeight());
         // 模拟处理视频帧
     }
 
     @Override
-    protected void handleAIServiceCommandResult(CommandResult commandResult, AsyncExtensionEnv context) {
+    protected void handleAIServiceCommandResult(CommandResult commandResult, AsyncExtensionEnv env) {
         log.debug("LLM收到命令结果: {}", commandResult.getId());
         // 处理上游命令的结果
     }
@@ -83,11 +85,22 @@ public class SimpleLLMExtension extends AbstractAIServiceHub {
     }
 
     // 示例：LLM可以发送一个命令到其他Extension
-    public CompletableFuture<Object> sendLLMCommand(String targetExtension, String commandName, Map<String, Object> args) {
-        CommandMessage cmd = new CommandMessage(String.valueOf(generateCommandId()),
+    public CompletableFuture<Object> sendLLMCommand(String targetExtension, String commandName,
+            Map<String, Object> args) {
+        // 使用通用的 Command 构造函数，这里假设我们发送一个 DATA_MESSAGE 类型的命令作为示例
+        // 实际应用中，这里应该根据具体业务定义 Command 子类
+        Command cmd = new Command(
+                MessageType.DATA_MESSAGE, // 使用一个通用的消息类型
                 asyncExtensionEnv.getCurrentLocation(),
-                commandName, args);
-        cmd.setDestinationLocations(Collections.singletonList(asyncExtensionEnv.createLocation(targetExtension)));
+                Collections.singletonList(asyncExtensionEnv.createLocation(targetExtension)),
+                commandName) {
+            // 匿名内部类，可以添加特定的属性，如果需要
+            // 例如，可以传递 args 到 properties
+            {
+                setProperties(args);
+            }
+        };
+        cmd.setId(String.valueOf(generateCommandId()));
         return submitCommand(cmd);
     }
 }

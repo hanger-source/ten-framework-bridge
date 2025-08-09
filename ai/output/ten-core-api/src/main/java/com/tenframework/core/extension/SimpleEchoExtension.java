@@ -4,13 +4,13 @@ import java.io.IOException;
 import java.util.Map;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.tenframework.core.message.AudioFrame;
-import com.tenframework.core.message.Command;
+import com.tenframework.core.message.AudioFrameMessage;
 import com.tenframework.core.message.CommandResult;
-import com.tenframework.core.message.Data;
+import com.tenframework.core.message.DataMessage;
 import com.tenframework.core.message.Location;
 import com.tenframework.core.message.MessageConstants;
-import com.tenframework.core.message.VideoFrame;
+import com.tenframework.core.message.VideoFrameMessage;
+import com.tenframework.core.message.command.Command;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -37,7 +37,7 @@ public class SimpleEchoExtension extends BaseExtension {
     private long messageCount = 0;
 
     @Override
-    protected void handleCommand(Command command, AsyncExtensionEnv context) {
+    protected void handleCommand(Command command, AsyncExtensionEnv env) {
         // 开发者只需关注业务逻辑
         String commandName = command.getName();
         log.info("收到命令: {}", commandName);
@@ -53,7 +53,7 @@ public class SimpleEchoExtension extends BaseExtension {
     }
 
     @Override
-    protected void handleData(Data data, AsyncExtensionEnv context) {
+    protected void handleData(DataMessage data, AsyncExtensionEnv env) {
         String dataName = data.getName();
         log.info("SimpleEchoExtension收到数据: name={}, sourceLocation={}",
                 dataName, data.getSourceLocation());
@@ -88,17 +88,17 @@ public class SimpleEchoExtension extends BaseExtension {
             originalPayload.put("content", echoContent);
             log.debug("更新后的payload: {}", originalPayload);
 
-            Data echoData = Data.json(MessageConstants.DATA_NAME_ECHO_DATA,
-                objectMapper.writeValueAsString(originalPayload));
+            DataMessage echoData = DataMessage.json(MessageConstants.DATA_NAME_ECHO_DATA,
+                    objectMapper.writeValueAsString(originalPayload));
             echoData.setProperties(Map.of("original_name", dataName, "count", ++messageCount));
 
             // source Location 作为destination Location
-            Location location = new Location(context.getAppUri(), context.getGraphId(),
+            Location location = new Location(env.getAppUri(), env.getGraphId(),
                     data.getSourceLocation().extensionName());
             echoData.addDestinationLocation(location);
 
             // 通过 EngineAsyncExtensionEnv 提交回显数据
-            context.sendData(echoData); // 将sendMessage替换为sendData
+            env.sendData(echoData); // 将sendMessage替换为sendData
             log.info("SimpleEchoExtension发送回显数据: name={}", echoData.getName());
         } catch (IOException e) {
             log.error("处理数据解析/序列化时发生错误: {}", e.getMessage(), e);
@@ -109,7 +109,7 @@ public class SimpleEchoExtension extends BaseExtension {
     }
 
     @Override
-    protected void handleAudioFrame(AudioFrame audioFrame, AsyncExtensionEnv context) {
+    protected void handleAudioFrame(AudioFrameMessage audioFrame, AsyncExtensionEnv env) {
         // 开发者只需关注业务逻辑
         log.debug("收到音频帧: {} ({} bytes)", audioFrame.getName(), audioFrame.getDataSize());
 
@@ -118,7 +118,7 @@ public class SimpleEchoExtension extends BaseExtension {
     }
 
     @Override
-    protected void handleVideoFrame(VideoFrame videoFrame, AsyncExtensionEnv context) {
+    protected void handleVideoFrame(VideoFrameMessage videoFrame, AsyncExtensionEnv env) {
         // 开发者只需关注业务逻辑
         log.debug("收到视频帧: {} ({}x{})", videoFrame.getName(),
                 videoFrame.getWidth(), videoFrame.getHeight());
@@ -129,7 +129,7 @@ public class SimpleEchoExtension extends BaseExtension {
 
     // 可选：自定义配置
     @Override
-    protected void onExtensionConfigure(AsyncExtensionEnv context) {
+    protected void onExtensionConfigure(AsyncExtensionEnv env) {
         // 从配置中读取echo前缀
         echoPrefix = getConfig("echo_prefix", String.class, "Echo: ");
         log.info("Echo前缀配置: {}", echoPrefix);

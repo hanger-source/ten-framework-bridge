@@ -3,8 +3,11 @@ package com.tenframework.core.extension;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
-import com.tenframework.core.message.Command;
+import com.tenframework.core.message.AudioFrameMessage;
 import com.tenframework.core.message.CommandResult;
+import com.tenframework.core.message.DataMessage;
+import com.tenframework.core.message.VideoFrameMessage;
+import com.tenframework.core.message.command.Command;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -26,7 +29,7 @@ public abstract class AbstractController implements Extension {
 
     @Override
     public void onConfigure(AsyncExtensionEnv env) {
-        this.extensionName = env.getExtensionName();
+        extensionName = env.getExtensionName();
         // 配置属性将在子类中通过getProperty方法获取
         log.info("控制器配置阶段: extensionName={}", extensionName);
         onControllerConfigure(env);
@@ -41,14 +44,14 @@ public abstract class AbstractController implements Extension {
     @Override
     public void onStart(AsyncExtensionEnv env) {
         log.info("控制器启动阶段: extensionName={}", extensionName);
-        this.isRunning = true;
+        isRunning = true;
         onControllerStart(env);
     }
 
     @Override
     public void onStop(AsyncExtensionEnv env) {
         log.info("控制器停止阶段: extensionName={}", extensionName);
-        this.isRunning = false;
+        isRunning = false;
         onControllerStop(env);
     }
 
@@ -82,41 +85,41 @@ public abstract class AbstractController implements Extension {
     }
 
     @Override
-    public void onData(com.tenframework.core.message.Data data, AsyncExtensionEnv env) {
+    public void onData(DataMessage data, AsyncExtensionEnv env) {
         if (!isRunning) {
-            log.warn("控制器未运行，忽略数据: extensionName={}, dataName={}",
-                    extensionName, data.getName());
+            log.warn("控制器未运行，忽略数据: extensionName={}, dataId={}",
+                    extensionName, data.getId());
             return;
         }
 
-        log.debug("控制器收到数据: extensionName={}, dataName={}",
-                extensionName, data.getName());
+        log.debug("控制器收到数据: extensionName={}, dataId={}",
+                extensionName, data.getId());
         handleControllerData(data, env);
     }
 
     @Override
-    public void onAudioFrame(com.tenframework.core.message.AudioFrame audioFrame, AsyncExtensionEnv env) {
+    public void onAudioFrame(AudioFrameMessage audioFrame, AsyncExtensionEnv env) {
         if (!isRunning) {
-            log.warn("控制器未运行，忽略音频帧: extensionName={}, frameName={}",
-                    extensionName, audioFrame.getName());
+            log.warn("控制器未运行，忽略音频帧: extensionName={}, frameId={}",
+                    extensionName, audioFrame.getId());
             return;
         }
 
-        log.debug("控制器收到音频帧: extensionName={}, frameName={}",
-                extensionName, audioFrame.getName());
+        log.debug("控制器收到音频帧: extensionName={}, frameId={}",
+                extensionName, audioFrame.getId());
         handleControllerAudioFrame(audioFrame, env);
     }
 
     @Override
-    public void onVideoFrame(com.tenframework.core.message.VideoFrame videoFrame, AsyncExtensionEnv env) {
+    public void onVideoFrame(VideoFrameMessage videoFrame, AsyncExtensionEnv env) {
         if (!isRunning) {
-            log.warn("控制器未运行，忽略视频帧: extensionName={}, frameName={}",
-                    extensionName, videoFrame.getName());
+            log.warn("控制器未运行，忽略视频帧: extensionName={}, frameId={}",
+                    extensionName, videoFrame.getId());
             return;
         }
 
-        log.debug("控制器收到视频帧: extensionName={}, frameName={}",
-                extensionName, videoFrame.getName());
+        log.debug("控制器收到视频帧: extensionName={}, frameId={}",
+                extensionName, videoFrame.getId());
         handleControllerVideoFrame(videoFrame, env);
     }
 
@@ -153,33 +156,34 @@ public abstract class AbstractController implements Extension {
     /**
      * 处理控制器数据
      */
-    protected abstract void handleControllerData(com.tenframework.core.message.Data data, AsyncExtensionEnv context);
+    protected abstract void handleControllerData(DataMessage data, AsyncExtensionEnv context);
 
     /**
      * 处理控制器音频帧
      */
-    protected abstract void handleControllerAudioFrame(com.tenframework.core.message.AudioFrame audioFrame,
+    protected abstract void handleControllerAudioFrame(AudioFrameMessage audioFrame,
             AsyncExtensionEnv context);
 
     /**
      * 处理控制器视频帧
      */
-    protected abstract void handleControllerVideoFrame(com.tenframework.core.message.VideoFrame videoFrame,
+    protected abstract void handleControllerVideoFrame(VideoFrameMessage videoFrame,
             AsyncExtensionEnv context);
 
     /**
      * 发送错误结果
      */
     protected void sendErrorResult(Command command, AsyncExtensionEnv context, String errorMessage) {
-        CommandResult errorResult = CommandResult.error(command.getCommandId(), errorMessage);
+        CommandResult errorResult = CommandResult.fail(command.getId(), errorMessage); // 使用 Command.getId()
         context.sendResult(errorResult);
     }
 
     /**
      * 发送成功结果
      */
-    protected void sendSuccessResult(Command command, AsyncExtensionEnv context, Map<String, Object> result) {
-        CommandResult successResult = CommandResult.success(command.getCommandId(), result);
+    protected void sendSuccessResult(Command command, AsyncExtensionEnv context, Object result) {
+        CommandResult successResult = CommandResult.success(command.getId(),
+                result != null ? result.toString() : ""); // 将结果转换为String
         context.sendResult(successResult);
     }
 
@@ -190,6 +194,10 @@ public abstract class AbstractController implements Extension {
         // 这里需要访问Engine来转发命令
         // 在实际实现中，可能需要通过Engine的API来实现
         log.debug("转发命令到Extension: command={}, target={}", command.getName(), targetExtension);
+        // 示例：可以构建一个新的命令，并修改其目的地，然后通过 env.sendCommand 发送
+        // command.setDestLocs(Collections.singletonList(new
+        // Location().setGraphId(env.getGraphId()).setNodeId(targetExtension)));
+        // env.sendCommand(command);
     }
 
     /**
@@ -199,5 +207,12 @@ public abstract class AbstractController implements Extension {
         for (String target : targetExtensions) {
             forwardCommand(command, context, target);
         }
+    }
+
+    @Override
+    public String getAppUri() {
+        // AbstractController 可能不直接持有 AppUri，从 AsyncExtensionEnv 获取
+        return null; // 或者可以从 env 获取： asyncExtensionEnv != null ? asyncExtensionEnv.getAppUri() :
+        // "unknown";
     }
 }

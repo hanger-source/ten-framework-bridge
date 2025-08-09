@@ -1,8 +1,11 @@
 package com.tenframework.core.command;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import com.tenframework.core.engine.Engine;
-import com.tenframework.core.graph.GraphDefinition;
 import com.tenframework.core.graph.ExtensionInfo;
+import com.tenframework.core.graph.GraphDefinition;
 import com.tenframework.core.message.CommandResult;
 import com.tenframework.core.message.Location;
 import com.tenframework.core.message.command.AddExtensionToGraphCommand;
@@ -11,12 +14,9 @@ import com.tenframework.core.message.command.Command;
 import com.tenframework.core.message.command.RemoveExtensionFromGraphCommand;
 import com.tenframework.core.message.command.StartGraphCommand;
 import com.tenframework.core.message.command.StopGraphCommand;
-import com.tenframework.core.message.command.TimerCommand;
 import com.tenframework.core.message.command.TimeoutCommand;
+import com.tenframework.core.message.command.TimerCommand;
 import lombok.extern.slf4j.Slf4j;
-
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * `RemoveExtensionFromGraphCommandHandler` 负责处理
@@ -24,7 +24,7 @@ import java.util.List;
  * 该命令用于动态地从一个运行中的 Graph (Engine) 移除 Extension 实例。
  */
 @Slf4j
-public class RemoveExtensionFromGraphCommandHandler implements GraphEventCommandHandler {
+public class RemoveExtensionFromGraphCommandHandler implements EngineCommandHandler {
 
     /**
      * 通用处理方法，将命令分发给具体的处理方法。

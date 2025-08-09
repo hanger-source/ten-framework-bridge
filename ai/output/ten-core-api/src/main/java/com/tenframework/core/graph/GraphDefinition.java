@@ -52,17 +52,6 @@ public class GraphDefinition {
     // 新增字段用于存储原始 JSON 内容
     private String jsonContent;
 
-    // 简化构造函数，主要用于从 JSON 加载后进行填充或程序化构建
-    public GraphDefinition(String appUri, String graphName) {
-        this.appUri = appUri;
-        this.graphName = graphName;
-        this.graphId = UUID.randomUUID().toString(); // 默认生成一个 UUID
-        this.extensionGroupsInfo = new ArrayList<>(); // 初始化为可变列表
-        this.extensionsInfo = new ArrayList<>(); // 初始化为可变列表
-        this.connections = new ArrayList<>(); // 初始化为可变列表
-        this.jsonContent = ""; // 默认空字符串
-    }
-
     public GraphDefinition(String appUri, String graphJsonDefinition) {
         this.appUri = appUri;
         this.jsonContent = graphJsonDefinition; // 保存原始 JSON
@@ -120,9 +109,4 @@ public class GraphDefinition {
             this.connections = new ArrayList<>();
         }
     }
-
-    // TODO: 可能需要添加一个 parseJson() 方法来支持在对象创建后解析 JSON
-    // public static GraphDefinition fromJson(String appUri, String jsonContent) {
-    // return new GraphDefinition(appUri, jsonContent);
-    // }
 }

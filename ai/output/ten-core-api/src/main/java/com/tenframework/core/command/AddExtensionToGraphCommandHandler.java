@@ -1,29 +1,22 @@
 package com.tenframework.core.command;
 
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.HashMap;
 import java.util.ArrayList;
+import java.util.List;
 
 import com.tenframework.core.engine.Engine;
 import com.tenframework.core.extension.Extension;
-import com.tenframework.core.extension.system.ClientConnectionExtension;
+import com.tenframework.core.graph.ExtensionInfo;
 import com.tenframework.core.graph.GraphDefinition;
-import com.tenframework.core.graph.GraphInstance;
-import com.tenframework.core.message.Command;
 import com.tenframework.core.message.CommandResult;
 import com.tenframework.core.message.Location;
-import com.tenframework.core.message.MessageConstants;
 import com.tenframework.core.message.command.AddExtensionToGraphCommand;
+import com.tenframework.core.message.command.CloseAppCommand;
 import com.tenframework.core.message.command.Command;
-import com.tenframework.core.message.command.ExtensionInfo;
 import com.tenframework.core.message.command.RemoveExtensionFromGraphCommand;
 import com.tenframework.core.message.command.StartGraphCommand;
 import com.tenframework.core.message.command.StopGraphCommand;
-import com.tenframework.core.message.command.TimerCommand;
 import com.tenframework.core.message.command.TimeoutCommand;
-import com.tenframework.core.message.command.CloseAppCommand;
+import com.tenframework.core.message.command.TimerCommand;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -31,11 +24,11 @@ import lombok.extern.slf4j.Slf4j;
  * 该命令用于动态地向一个运行中的 Graph (Engine) 添加新的 Extension 实例。
  */
 @Slf4j
-public class AddExtensionToGraphCommandHandler implements GraphEventCommandHandler {
+public class AddExtensionToGraphCommandHandler implements EngineCommandHandler {
 
     /**
      * 通用处理方法，将命令分发给具体的处理方法。
-     * 
+     *
      * @param engine  Engine 实例。
      * @param command 要处理的命令。
      * @return 命令处理结果。
@@ -62,7 +55,7 @@ public class AddExtensionToGraphCommandHandler implements GraphEventCommandHandl
 
     /**
      * 处理 `AddExtensionToGraphCommand` 命令。
-     * 
+     *
      * @param engine  Engine 实例。
      * @param command `AddExtensionToGraphCommand` 命令对象。
      * @return 命令处理结果。

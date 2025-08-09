@@ -1,31 +1,5 @@
 package com.tenframework.core.engine;
 
-import com.tenframework.core.app.App;
-import com.tenframework.core.connection.Connection;
-import com.tenframework.core.extension.AsyncExtensionEnv;
-import com.tenframework.core.extension.ExtensionContext;
-import com.tenframework.core.graph.GraphDefinition;
-import com.tenframework.core.graph.ExtensionInfo;
-import com.tenframework.core.message.AudioFrameMessage;
-import com.tenframework.core.message.CommandResult;
-import com.tenframework.core.message.DataMessage;
-import com.tenframework.core.message.Location;
-import com.tenframework.core.message.Message;
-import com.tenframework.core.message.MessageType;
-import com.tenframework.core.message.VideoFrameMessage;
-import com.tenframework.core.message.command.CloseAppCommand;
-import com.tenframework.core.message.command.Command;
-import com.tenframework.core.message.command.StartGraphCommand;
-import com.tenframework.core.message.command.StopGraphCommand;
-import com.tenframework.core.message.command.TimerCommand;
-import com.tenframework.core.message.command.TimeoutCommand;
-import com.tenframework.core.path.PathManager;
-import com.tenframework.core.runloop.Runloop;
-import com.tenframework.core.remote.DummyRemote;
-import com.tenframework.core.remote.Remote;
-import lombok.extern.slf4j.Slf4j;
-import org.agrona.concurrent.ManyToOneConcurrentArrayQueue;
-
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -36,7 +10,22 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
-import static com.tenframework.core.message.MessageType.*;
+import com.tenframework.core.app.App;
+import com.tenframework.core.connection.Connection;
+import com.tenframework.core.extension.AsyncExtensionEnv;
+import com.tenframework.core.extension.ExtensionContext;
+import com.tenframework.core.graph.GraphDefinition;
+import com.tenframework.core.message.CommandResult;
+import com.tenframework.core.message.Location;
+import com.tenframework.core.message.Message;
+import com.tenframework.core.message.command.Command;
+import com.tenframework.core.message.command.StartGraphCommand;
+import com.tenframework.core.path.PathManager;
+import com.tenframework.core.remote.DummyRemote;
+import com.tenframework.core.remote.Remote;
+import com.tenframework.core.runloop.Runloop;
+import lombok.extern.slf4j.Slf4j;
+import org.agrona.concurrent.ManyToOneConcurrentArrayQueue;
 
 /**
  * Engine 是 ten-framework 中 Graph 的运行时实例，负责管理 Extension、处理消息路由和命令执行。
@@ -51,52 +40,53 @@ public final class Engine implements MessageSubmitter, CommandSubmitter {
     private final boolean hasOwnLoop; // 是否拥有自己的 Runloop
     private final ConcurrentMap<Long, CompletableFuture<Object>> commandFutures; // 用于跟踪命令结果的 Future
     private final List<Connection> orphanConnections; // 存储未被 Remote 认领的 Connection
-
+    private final Map<String, Remote> remotes; // 管理 Remote 实例
     private GraphDefinition graphDefinition; // 图的静态定义
     private PathManager pathManager; // 路径管理器，负责图内路由
     private DefaultExtensionMessageDispatcher extensionMessageDispatcher; // 消息分发器
     private ExtensionContext extensionContext; // 扩展上下文
     private App app; // 引用所属的 App 实例
-    private final Map<String, Remote> remotes; // 管理 Remote 实例
+    // 标识 Engine 是否准备好处理消息
+    private volatile boolean isReadyToHandleMsg = false;
 
     public Engine(String engineId, int queueCapacity, boolean hasOwnLoop) {
         this.engineId = engineId;
         this.hasOwnLoop = hasOwnLoop;
-        this.inMsgs = new ManyToOneConcurrentArrayQueue<>(queueCapacity);
-        this.commandFutures = new ConcurrentHashMap<>();
-        this.orphanConnections = Collections.synchronizedList(new ArrayList<>());
-        this.remotes = new ConcurrentHashMap<>();
+        inMsgs = new ManyToOneConcurrentArrayQueue<>(queueCapacity);
+        commandFutures = new ConcurrentHashMap<>();
+        orphanConnections = Collections.synchronizedList(new ArrayList<>());
+        remotes = new ConcurrentHashMap<>();
 
         if (hasOwnLoop) {
-            this.runloop = new Runloop("EngineRunloop-" + engineId);
+            runloop = new Runloop("EngineRunloop-" + engineId);
         } else {
-            this.runloop = null; // 由 App 提供 Runloop
+            runloop = null; // 由 App 提供 Runloop
         }
     }
 
     /**
      * 初始化 Engine 的运行时环境。
+     *
      * @param startGraphCommand 启动图命令，包含图的 JSON 定义。
-     * @param appInstance App 实例引用。
+     * @param appInstance       App 实例引用。
      */
     public void initializeEngineRuntime(StartGraphCommand startGraphCommand, App appInstance) {
         log.info("Engine {}: 初始化运行时环境...", engineId);
-        this.app = appInstance;
-        this.graphDefinition = new GraphDefinition(app.getAppUri(), startGraphCommand.getGraphJsonDefinition());
-        this.pathManager = new PathManager(this.graphDefinition);
+        app = appInstance;
+        graphDefinition = new GraphDefinition(app.getAppUri(), startGraphCommand.getGraphJsonDefinition());
+        pathManager = new PathManager(graphDefinition);
 
         // 创建 EngineAsyncExtensionEnv 实例，将其作为 Extension 与 Engine 交互的接口
         Map<String, Object> initialProperties = new HashMap<>(); // 示例属性
         AsyncExtensionEnv engineAsyncExtensionEnv = new EngineAsyncExtensionEnv(
-                this.graphId, // ExtensionName 暂时使用 graphId，后续可根据具体 Extension 调整
-                this.graphId,
-                this.app.getAppUri(),
+            graphDefinition.getGraphId(), // ExtensionName 暂时使用 graphId，后续可根据具体 Extension 调整
+            graphDefinition.getGraphId(),
+            app.getAppUri(),
                 this, // MessageSubmitter
                 this, // CommandSubmitter
-                initialProperties
-        );
-        this.extensionContext = new ExtensionContext(this, graphDefinition, pathManager, engineAsyncExtensionEnv);
-        this.extensionMessageDispatcher = new DefaultExtensionMessageDispatcher(extensionContext, commandFutures);
+            initialProperties);
+        extensionContext = new ExtensionContext(this, graphDefinition, pathManager, engineAsyncExtensionEnv);
+        extensionMessageDispatcher = new DefaultExtensionMessageDispatcher(extensionContext, commandFutures);
 
         // 加载 Extension
         graphDefinition.getExtensionsInfo().forEach(extensionInfo -> {
@@ -120,13 +110,15 @@ public final class Engine implements MessageSubmitter, CommandSubmitter {
         if (hasOwnLoop && runloop != null) {
             log.info("Engine {}: 启动专属 Runloop。", engineId);
             // 注册内部消息队列，EngineAgent 会从 inMsgs 中排水
-            runloop.registerExternalEventSource(inMsgs::drain, () -> {}); // 第二个参数是 notifier，暂时为空 lambda
+            runloop.registerExternalEventSource(inMsgs::drain, () -> {
+            }); // 第二个参数是 notifier，暂时为空 lambda
             runloop.start(); // 启动 Runloop 线程
         } else if (app != null) {
             log.info("Engine {}: 使用 App 的 Runloop 进行消息处理注册。", engineId);
             // 将 Engine 的消息队列注册到 App 的 Runloop，让 App 负责调度处理
             app.getRunloop().ifPresent(appRunloop -> {
-                appRunloop.registerExternalEventSource(inMsgs::drain, () -> {});
+                appRunloop.registerExternalEventSource(inMsgs::drain, () -> {
+                });
             });
         } else {
             log.warn("Engine {}: 无法启动，既没有专属 Runloop，也没有关联 App 的 Runloop。", engineId);
@@ -140,7 +132,7 @@ public final class Engine implements MessageSubmitter, CommandSubmitter {
         log.info("Engine {}: 正在停止...", engineId);
         isReadyToHandleMsg = false;
         if (runloop != null) {
-            runloop.stop();
+            runloop.shutdown();
         } else if (app != null) {
             // 如果使用 App 的 Runloop，则从 App 的 Runloop 中注销
             app.getRunloop().ifPresent(appRunloop -> {
@@ -205,6 +197,7 @@ public final class Engine implements MessageSubmitter, CommandSubmitter {
     /**
      * 处理 Engine 接收到的消息。
      * 这是 Engine Runloop 线程中的核心处理逻辑。
+     *
      * @param message
      */
     private void processMessage(Message message) {
@@ -230,7 +223,8 @@ public final class Engine implements MessageSubmitter, CommandSubmitter {
                 if (message.getDestLocs() != null && app != null) {
                     for (Location destLoc : message.getDestLocs()) {
                         // 如果目的地不是当前 Engine，则通过 App 进行外部路由
-                        if (destLoc.getGraphId() == null || !destLoc.getGraphId().equals(this.graphId)) {
+                        if (destLoc.getGraphId() == null
+                            || !destLoc.getGraphId().equals(graphDefinition.getGraphId())) {
                             app.sendMessageToLocation(message, destLoc);
                             isRoutedExternally = true;
                             log.debug("Engine {}: 消息 {} 已路由到外部目的地: {}", engineId, message.getId(), destLoc);
@@ -256,7 +250,8 @@ public final class Engine implements MessageSubmitter, CommandSubmitter {
 
     private void processCommandResult(CommandResult commandResult) {
         log.debug("Engine {}: 处理命令结果: OriginalCommandId={}, StatusCode={}, Detail={}",
-                engineId, commandResult.getOriginalCommandId(), commandResult.getStatusCode(), commandResult.getDetail());
+            engineId, commandResult.getOriginalCommandId(), commandResult.getStatusCode(),
+            commandResult.getDetail());
 
         long originalCommandId = Long.parseLong(commandResult.getOriginalCommandId());
         CompletableFuture<Object> future = commandFutures.remove(originalCommandId);
@@ -265,7 +260,8 @@ public final class Engine implements MessageSubmitter, CommandSubmitter {
             if (commandResult.getStatusCode() == 0) { // 假设 0 为成功
                 future.complete(commandResult);
             } else {
-                future.completeExceptionally(new RuntimeException("Command failed with status: " + commandResult.getStatusCode() + ", Detail: " + commandResult.getDetail()));
+                future.completeExceptionally(new RuntimeException("Command failed with status: "
+                    + commandResult.getStatusCode() + ", Detail: " + commandResult.getDetail()));
             }
         } else {
             log.warn("Engine {}: 未找到与命令结果 {} 对应的 Future。", engineId, commandResult.getOriginalCommandId());
@@ -285,6 +281,7 @@ public final class Engine implements MessageSubmitter, CommandSubmitter {
     /**
      * 将 Connection 添加到孤立连接列表。
      * 孤立连接是指已经迁移到 Engine 但尚未绑定到具体 Remote 的连接。
+     *
      * @param connection 要添加的 Connection。
      */
     public void addOrphanConnection(Connection connection) {
@@ -294,6 +291,7 @@ public final class Engine implements MessageSubmitter, CommandSubmitter {
 
     /**
      * 根据 ID 查找孤立连接。
+     *
      * @param connId 连接 ID。
      * @return 匹配的 Connection，如果不存在则返回 Optional.empty()。
      */
@@ -305,12 +303,14 @@ public final class Engine implements MessageSubmitter, CommandSubmitter {
 
     /**
      * 获取或创建 Remote 实例。
-     * @param targetAppUri 目标 App 的 URI。
-     * @param targetGraphId 目标 Graph 的 ID。
+     *
+     * @param targetAppUri      目标 App 的 URI。
+     * @param targetGraphId     目标 Graph 的 ID。
      * @param initialConnection 可选的初始 Connection，如果创建新的 Remote 且需要关联。
      * @return 对应的 Remote 实例。
      */
-    public Optional<Remote> getOrCreateRemote(String targetAppUri, String targetGraphId, Optional<Connection> initialConnection) {
+    public Optional<Remote> getOrCreateRemote(String targetAppUri, String targetGraphId,
+        Optional<Connection> initialConnection) {
         // 使用 AppUri 和 GraphId 组合作为 Remote 的唯一 Key
         String remoteKey = targetAppUri + "/" + targetGraphId;
 
@@ -325,7 +325,8 @@ public final class Engine implements MessageSubmitter, CommandSubmitter {
                     DummyRemote dummyRemote = (DummyRemote) existingRemote;
                     if (!dummyRemote.getAssociatedConnection().isPresent()) {
                         dummyRemote.setAssociatedConnection(conn);
-                        log.info("Engine {}: 现有 Remote {} 关联了新的 Connection {}", engineId, remoteKey, conn.getConnectionId());
+                        log.info("Engine {}: 现有 Remote {} 关联了新的 Connection {}", engineId, remoteKey,
+                            conn.getConnectionId());
                     }
                 }
             });
@@ -352,7 +353,4 @@ public final class Engine implements MessageSubmitter, CommandSubmitter {
     public Optional<Runloop> getRunloop() {
         return Optional.ofNullable(runloop);
     }
-
-    // 标识 Engine 是否准备好处理消息
-    private volatile boolean isReadyToHandleMsg = false;
 }

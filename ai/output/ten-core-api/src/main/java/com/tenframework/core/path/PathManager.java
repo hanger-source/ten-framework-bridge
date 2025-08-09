@@ -12,7 +12,6 @@ import java.util.stream.Collectors;
 
 import com.tenframework.core.engine.Engine;
 import com.tenframework.core.engine.MessageSubmitter;
-import com.tenframework.core.extension.system.ClientConnectionExtension;
 import com.tenframework.core.message.CommandResult;
 import com.tenframework.core.message.Location;
 import com.tenframework.core.message.MessageConstants;

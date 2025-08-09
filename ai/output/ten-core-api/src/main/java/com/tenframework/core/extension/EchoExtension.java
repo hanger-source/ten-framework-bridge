@@ -4,11 +4,11 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 
-import com.tenframework.core.message.AudioFrame;
-import com.tenframework.core.message.Command;
+import com.tenframework.core.message.AudioFrameMessage;
+import com.tenframework.core.message.command.Command;
 import com.tenframework.core.message.CommandResult;
-import com.tenframework.core.message.Data;
-import com.tenframework.core.message.VideoFrame;
+import com.tenframework.core.message.DataMessage;
+import com.tenframework.core.message.VideoFrameMessage;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -125,7 +125,7 @@ public class EchoExtension implements Extension {
     }
 
     @Override
-    public void onData(Data data, AsyncExtensionEnv env) {
+    public void onData(DataMessage data, AsyncExtensionEnv env) {
         if (!isRunning) {
             log.warn("EchoExtension未运行，忽略数据: extensionName={}, dataName={}",
                     extensionName, data.getName());
@@ -144,7 +144,7 @@ public class EchoExtension implements Extension {
                 Thread.sleep(30);
 
                 // 创建回显数据
-                Data echoData = Data.binary("echo_data", data.getDataBytes());
+                DataMessage echoData = DataMessage.binary("echo_data", data.getDataBytes());
                 echoData.setProperties(Map.of(
                         "original_data_name", data.getName(),
                         "processed_by", extensionName,
@@ -168,7 +168,7 @@ public class EchoExtension implements Extension {
     }
 
     @Override
-    public void onAudioFrame(AudioFrame audioFrame, AsyncExtensionEnv env) {
+    public void onAudioFrame(AudioFrameMessage audioFrame, AsyncExtensionEnv env) {
         if (!isRunning) {
             log.warn("EchoExtension未运行，忽略音频帧: extensionName={}, frameName={}",
                     extensionName, audioFrame.getName());
@@ -185,7 +185,7 @@ public class EchoExtension implements Extension {
     }
 
     @Override
-    public void onVideoFrame(VideoFrame videoFrame, AsyncExtensionEnv env) {
+    public void onVideoFrame(VideoFrameMessage videoFrame, AsyncExtensionEnv env) {
         if (!isRunning) {
             log.warn("EchoExtension未运行，忽略视频帧: extensionName={}, frameName={}",
                     extensionName, videoFrame.getName());

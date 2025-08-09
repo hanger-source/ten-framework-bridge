@@ -2,57 +2,57 @@ package com.tenframework.core.graph;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
+import lombok.NoArgsConstructor;
+import lombok.AllArgsConstructor;
+import lombok.experimental.Accessors;
 
 import java.util.List;
 import java.util.Map;
-import com.tenframework.core.graph.RoutingRule;
 
+/**
+ * 表示图中的连接配置，用于定义消息路由规则。
+ * 对应 property.json 中 connections 数组中的每个连接对象。
+ */
 @Data
+@NoArgsConstructor
+@AllArgsConstructor
+@Accessors(chain = true)
 public class ConnectionConfig {
     /**
-     * 连接的源节点名称
+     * 连接的源 Extension 名称。
+     * 对应 property.json 中的 "extension" 字段。
      */
-    private String source;
+    @JsonProperty("extension")
+    private String sourceExtensionName;
 
     /**
-     * 连接的目标节点名称列表
+     * 命令消息的路由规则列表。
+     * 对应 property.json 中的 "cmd" 数组。
      */
-    private List<String> destinations;
+    @JsonProperty("cmd")
+    private List<RoutingRuleDefinition> commandRules;
 
     /**
-     * 连接的类型 (例如 "data", "command")
+     * 数据消息的路由规则列表。
+     * 对应 property.json 中的 "data" 数组。
      */
-    private String type;
+    @JsonProperty("data")
+    private List<RoutingRuleDefinition> dataRules;
 
     /**
-     * 可选的条件表达式，用于消息路由。
-     * 例如： "message.properties.someValue > 10"
+     * 音频帧消息的路由规则列表。
+     * 对应 property.json 中的 "audio_frame" 数组。
      */
-    private String condition;
+    @JsonProperty("audio_frame")
+    private List<RoutingRuleDefinition> audioFrameRules;
 
     /**
-     * 消息内容路由规则列表。
-     * 如果匹配，将优先使用这些规则定义的targets。
+     * 视频帧消息的路由规则列表。
+     * 对应 property.json 中的 "video_frame" 数组。
      */
-    @JsonProperty("routing_rules")
-    private List<RoutingRule> routingRules;
+    @JsonProperty("video_frame")
+    private List<RoutingRuleDefinition> videoFrameRules;
 
-    /**
-     * 是否进行广播。如果为true，将忽略condition和routingRules，消息发送给所有destinations。
-     */
-    private boolean broadcast = false;
-
-    /**
-     * 连接优先级。当存在多条匹配的连接时，优先级高的连接优先（值越大优先级越高）。
-     * 默认为0。
-     */
-    private int priority = 0;
-
-    /**
-     * 路由此连接所需的最小消息优先级。
-     * 只有当消息的优先级大于或等于此值时，此连接才会被考虑。
-     * 默认为0。
-     */
-    @JsonProperty("min_priority")
-    private Integer minPriority = 0;
+    // 移除旧的字段，如 source, destinations, type, condition, routingRules, broadcast,
+    // priority, minPriority
 }
