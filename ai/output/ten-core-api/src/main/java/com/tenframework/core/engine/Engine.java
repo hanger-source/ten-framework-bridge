@@ -76,9 +76,15 @@ public class Engine implements Agent, MessageSubmitter, CommandSubmitter, Messag
         if (hasOwnLoop) {
             runloop = new Runloop("%s-runloop".formatted(engineId)); // 每个 Engine 都有自己的 Runloop
             runloop.registerExternalAgent(this); // 注册 Engine 自身作为 Runloop 的外部事件源
-        } else if (app.getAppRunloop() != null) { // 如果使用 App 的 Runloop
-            // 将 Engine 的 doWork 方法注册到 App 的 Runloop
-            app.getAppRunloop().registerExternalAgent(this);
+        } else { // 如果没有自己的 Runloop，则尝试使用 App 的 Runloop
+            // 确保 app.getAppRunloop() 不为 null，否则这是一个逻辑错误
+            if (app.getAppRunloop() == null) {
+                throw new IllegalStateException(
+                    "Engine %s requires a Runloop, but neither hasOwnLoop is true nor app.getAppRunloop() is available."
+                        .formatted(engineId));
+            }
+            runloop = app.getAppRunloop(); // 使用 App 的 Runloop
+            runloop.registerExternalAgent(this); // 将 Engine 的 doWork 方法注册到 App 的 Runloop
         }
 
         commandFutures = new ConcurrentHashMap<>();
@@ -267,8 +273,7 @@ public class Engine implements Agent, MessageSubmitter, CommandSubmitter, Messag
         log.debug("Engine {}: 处理消息: ID={}, Type={}, SrcLoc={}", engineId, msgId, msgType, message.getSrcLoc());
 
         // 1. 如果是命令，首先尝试通过注册的命令处理器处理
-        if (message instanceof Command) {
-            Command command = (Command) message;
+        if (message instanceof Command command) {
 
             // 为入站命令创建 PathIn，以便后续可以追踪其结果或上下文
             pathTable.createInPath(command);

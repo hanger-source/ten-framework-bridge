@@ -78,12 +78,6 @@ public class SimpleToolExtension extends AbstractToolProvider {
     }
 
     @Override
-    protected void onToolProviderStop(AsyncExtensionEnv context) { // 修复：实现抽象方法
-        // 默认空实现
-        log.info("SimpleToolExtension: onToolProviderStop called.");
-    }
-
-    @Override
     public void onDeinit(AsyncExtensionEnv env) {
         log.info("SimpleToolExtension: {} onDeinit called.", getExtensionName());
         // 可以在这里释放工具资源
