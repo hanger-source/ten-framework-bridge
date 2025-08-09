@@ -5,6 +5,7 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 import com.tenframework.core.message.AudioFrameMessage;
+import com.tenframework.core.message.Location;
 import com.tenframework.core.message.command.Command;
 import com.tenframework.core.message.CommandResult;
 import com.tenframework.core.message.DataMessage;
@@ -62,7 +63,8 @@ public class SimpleLLMExtension extends AbstractAIServiceHub {
     @Override
     protected void handleAIServiceAudioFrame(AudioFrameMessage audioFrame, AsyncExtensionEnv env) {
         log.debug("LLM收到音频帧: {} ({}Hz, {}ch)", audioFrame.getName(),
-                audioFrame.getSampleRate(), audioFrame.getChannels());
+                audioFrame.getSampleRate(), audioFrame.getNumberOfChannel()); // 修复：getChannels() 改为
+                                                                              // getNumberOfChannel()
         // 模拟处理音频帧
     }
 
@@ -87,20 +89,26 @@ public class SimpleLLMExtension extends AbstractAIServiceHub {
     // 示例：LLM可以发送一个命令到其他Extension
     public CompletableFuture<Object> sendLLMCommand(String targetExtension, String commandName,
             Map<String, Object> args) {
-        // 使用通用的 Command 构造函数，这里假设我们发送一个 DATA_MESSAGE 类型的命令作为示例
+        // 使用通用的 Command 构造函数，这里假设我们发送一个 DATA 类型的命令作为示例
         // 实际应用中，这里应该根据具体业务定义 Command 子类
         Command cmd = new Command(
-                MessageType.DATA_MESSAGE, // 使用一个通用的消息类型
-                asyncExtensionEnv.getCurrentLocation(),
-                Collections.singletonList(asyncExtensionEnv.createLocation(targetExtension)),
+                com.tenframework.core.util.MessageUtils.generateUniqueId(), // 修复：添加 id
+                new Location().setAppUri(asyncExtensionEnv.getAppUri()).setGraphId(asyncExtensionEnv.getGraphId())
+                        .setNodeId(asyncExtensionEnv.getExtensionName()), // 修复：srcLoc
+                MessageType.DATA, // 修复：使用 DATA
+                Collections.singletonList(new Location().setAppUri(asyncExtensionEnv.getAppUri())
+                        .setGraphId(asyncExtensionEnv.getGraphId()).setNodeId(targetExtension)), // 修复：createLocation()
+                                                                                                 // 替换为构建Location
+                args, // 修复：传递 properties
+                System.currentTimeMillis(), // 修复：传递 timestamp
                 commandName) {
             // 匿名内部类，可以添加特定的属性，如果需要
             // 例如，可以传递 args 到 properties
             {
-                setProperties(args);
+                // setProperties(args); // 属性已在构造函数中传递
             }
         };
-        cmd.setId(String.valueOf(generateCommandId()));
+        // cmd.setId(String.valueOf(generateCommandId())); // ID 已在构造函数中设置
         return submitCommand(cmd);
     }
 }

@@ -2,6 +2,8 @@ package com.tenframework.core.command.app;
 
 import java.util.Map;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.tenframework.core.app.App;
 import com.tenframework.core.connection.Connection;
 import com.tenframework.core.engine.Engine;
@@ -19,6 +21,8 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class StartGraphCommandHandler implements AppCommandHandler {
 
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+
     @Override
     public Object handle(App app, Command command, Connection connection) {
         if (!(command instanceof StartGraphCommand)) {
@@ -33,7 +37,22 @@ public class StartGraphCommandHandler implements AppCommandHandler {
         }
 
         StartGraphCommand startCommand = (StartGraphCommand) command;
-        String targetGraphId = startCommand.getGraphId(); // 从命令中获取目标 graphId
+        String targetGraphId = null;
+
+        if (startCommand.getPredefinedGraphName() != null && !startCommand.getPredefinedGraphName().isEmpty()) {
+            targetGraphId = startCommand.getPredefinedGraphName();
+        } else if (startCommand.getDestLocs() != null && !startCommand.getDestLocs().isEmpty()) {
+            targetGraphId = startCommand.getDestLocs().get(0).getGraphId();
+        } else if (startCommand.getGraphJsonDefinition() != null) {
+            // 如果提供了 JSON 定义，解析它来获取 graphId
+            try {
+                GraphDefinition tempGraphDef = new GraphDefinition(app.getAppUri(),
+                        startCommand.getGraphJsonDefinition());
+                targetGraphId = tempGraphDef.getGraphId();
+            } catch (Exception e) {
+                log.error("StartGraphCommandHandler: 解析 graphJsonDefinition 失败: {}", e.getMessage());
+            }
+        }
 
         // 优先从预定义图中查找 GraphDefinition
         GraphDefinition graphDefinition = null;
@@ -90,8 +109,15 @@ public class StartGraphCommandHandler implements AppCommandHandler {
             connection.setRemoteLocation(startCommand.getSrcLoc());
 
             // 返回成功的 CommandResult 给发起方
-            CommandResult successResult = CommandResult.success(startCommand.getId(),
-                    Map.of("graph_id", actualGraphId, "message", "Engine started and connection migrated."));
+            String detailJson;
+            try {
+                detailJson = OBJECT_MAPPER.writeValueAsString(
+                        Map.of("graph_id", actualGraphId, "message", "Engine started and connection migrated."));
+            } catch (JsonProcessingException e) {
+                log.error("Failed to serialize StartGraphCommand result detail: {}", e.getMessage(), e);
+                detailJson = "Error: Failed to serialize result."; // 提供一个默认的错误消息
+            }
+            CommandResult successResult = CommandResult.success(startCommand.getId(), detailJson);
             connection.sendOutboundMessage(successResult);
             log.info("App: 发送 StartGraphCommand 成功结果给连接 {}。", connection.getRemoteAddress());
         } else {

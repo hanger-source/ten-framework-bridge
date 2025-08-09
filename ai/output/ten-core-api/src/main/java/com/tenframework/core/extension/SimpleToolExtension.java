@@ -1,12 +1,16 @@
 package com.tenframework.core.extension;
 
+import java.io.IOException;
 import java.util.Map;
+import java.util.Collections;
+import java.util.List;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tenframework.core.message.AudioFrameMessage;
-import com.tenframework.core.message.command.Command;
 import com.tenframework.core.message.CommandResult;
 import com.tenframework.core.message.DataMessage;
 import com.tenframework.core.message.VideoFrameMessage;
+import com.tenframework.core.message.command.Command;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -14,6 +18,46 @@ import lombok.extern.slf4j.Slf4j;
  */
 @Slf4j
 public class SimpleToolExtension extends AbstractToolProvider {
+
+    private static final ObjectMapper objectMapper = new ObjectMapper(); // 在 SimpleToolExtension 中创建自己的 ObjectMapper 实例
+    private long messageCount = 0;
+
+    @Override
+    protected List<ToolMetadata> initializeTools() { // 修复：返回类型为 List<ToolMetadata>
+        // 默认空实现，子类可以在这里初始化工具
+        log.info("SimpleToolExtension: initializeTools called.");
+        return Collections.emptyList(); // 修复：返回一个空的 List<ToolMetadata>
+    }
+
+    @Override
+    protected void onToolProviderConfigure(AsyncExtensionEnv context) { // 修复：实现抽象方法
+        // 默认空实现
+        log.info("SimpleToolExtension: onToolProviderConfigure called.");
+    }
+
+    @Override
+    protected void onToolProviderInit(AsyncExtensionEnv context) { // 修复：实现抽象方法
+        // 默认空实现
+        log.info("SimpleToolExtension: onToolProviderInit called.");
+    }
+
+    @Override
+    protected void onToolProviderStart(AsyncExtensionEnv context) { // 修复：实现抽象方法
+        // 默认空实现
+        log.info("SimpleToolExtension: onToolProviderStart called.");
+    }
+
+    @Override
+    protected void onToolProviderStop(AsyncExtensionEnv context) { // 修复：实现抽象方法
+        // 默认空实现
+        log.info("SimpleToolExtension: onToolProviderStop called.");
+    }
+
+    @Override
+    protected void onToolProviderDeinit(AsyncExtensionEnv context) { // 修复：实现抽象方法
+        // 默认空实现
+        log.info("SimpleToolExtension: onToolProviderDeinit called.");
+    }
 
     @Override
     public void onInit(AsyncExtensionEnv env) {
@@ -34,6 +78,12 @@ public class SimpleToolExtension extends AbstractToolProvider {
     }
 
     @Override
+    protected void onToolProviderStop(AsyncExtensionEnv context) { // 修复：实现抽象方法
+        // 默认空实现
+        log.info("SimpleToolExtension: onToolProviderStop called.");
+    }
+
+    @Override
     public void onDeinit(AsyncExtensionEnv env) {
         log.info("SimpleToolExtension: {} onDeinit called.", getExtensionName());
         // 可以在这里释放工具资源
@@ -43,9 +93,14 @@ public class SimpleToolExtension extends AbstractToolProvider {
     protected void handleToolCommand(Command command, AsyncExtensionEnv context) {
         log.debug("工具扩展收到命令: {}", command.getName());
         // 模拟处理命令并发送结果
-        // env.sendResult(new CommandResult(command.getCommandId(), "Tool Processed: " +
-        // command.getName()));
-        sendCommandResult(command.getId(), Map.of("tool_response", "Hello from Tool!"), null);
+        String detailJson;
+        try {
+            detailJson = objectMapper.writeValueAsString(Map.of("tool_response", "Hello from Tool!"));
+        } catch (IOException e) {
+            log.error("Failed to serialize tool command result detail: {}", e.getMessage(), e);
+            detailJson = "Error: Failed to serialize result.";
+        }
+        sendSuccessResult(command, context, detailJson); // 修复：调用父类的 sendSuccessResult 方法，传递序列化后的字符串
     }
 
     @Override
@@ -57,7 +112,8 @@ public class SimpleToolExtension extends AbstractToolProvider {
     @Override
     protected void handleToolAudioFrame(AudioFrameMessage audioFrame, AsyncExtensionEnv context) {
         log.debug("工具扩展收到音频帧: {} ({}Hz, {}ch)", audioFrame.getName(),
-                audioFrame.getSampleRate(), audioFrame.getChannels());
+                audioFrame.getSampleRate(), audioFrame.getNumberOfChannel()); // 修复：getChannels() 改为
+                                                                              // getNumberOfChannel()
         // 模拟处理音频帧
     }
 
@@ -68,7 +124,7 @@ public class SimpleToolExtension extends AbstractToolProvider {
     }
 
     @Override
-    protected void handleToolCommandResult(CommandResult commandResult, AsyncExtensionEnv context) {
+    public void onCommandResult(CommandResult commandResult, AsyncExtensionEnv env) { // 修复：方法名和访问修饰符
         log.debug("工具扩展收到命令结果: {}", commandResult.getId());
         // 处理上游命令的结果
     }

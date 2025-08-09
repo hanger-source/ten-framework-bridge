@@ -2,6 +2,7 @@ package com.tenframework.core.extension;
 
 import java.io.IOException;
 import java.util.Map;
+import java.util.Collections;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tenframework.core.message.AudioFrameMessage;
@@ -9,6 +10,8 @@ import com.tenframework.core.message.CommandResult;
 import com.tenframework.core.message.DataMessage;
 import com.tenframework.core.message.Location;
 import com.tenframework.core.message.MessageConstants;
+import com.tenframework.core.message.MessageType;
+import com.tenframework.core.message.MessageUtils;
 import com.tenframework.core.message.VideoFrameMessage;
 import com.tenframework.core.message.command.Command;
 import lombok.extern.slf4j.Slf4j;
@@ -37,7 +40,7 @@ public class SimpleEchoExtension extends BaseExtension {
     private long messageCount = 0;
 
     @Override
-    protected void handleCommand(Command command, AsyncExtensionEnv env) {
+    public void onCommand(Command command, AsyncExtensionEnv env) { // 修复：方法名和访问修饰符
         // 开发者只需关注业务逻辑
         String commandName = command.getName();
         log.info("收到命令: {}", commandName);
@@ -46,20 +49,31 @@ public class SimpleEchoExtension extends BaseExtension {
         String echoMessage = echoPrefix + commandName;
 
         // 使用BaseExtension提供的便捷方法发送结果
-        CommandResult result = CommandResult.success(command.getCommandId(),
-                Map.of("echo_message", echoMessage, "count", ++messageCount));
-        result.setSourceLocation(new Location(context.getAppUri(), context.getGraphId(), context.getExtensionName()));
-        sendResult(result);
+        String detailJson;
+        try {
+            detailJson = objectMapper.writeValueAsString(new java.util.HashMap<String, Object>() {
+                {
+                    put("echo_message", echoMessage);
+                    put("count", ++messageCount);
+                }
+            });
+        } catch (IOException e) {
+            log.error("Failed to serialize command result detail: {}", e.getMessage(), e);
+            detailJson = "Error: Failed to serialize result.";
+        }
+        CommandResult result = CommandResult.success(command.getId(), detailJson);
+        // result.setSourceLocation(new Location(context.getAppUri(),
+        // context.getGraphId(), context.getExtensionName())); // srcLoc 应该在构造时传入
+        env.sendResult(result);
     }
 
     @Override
-    protected void handleData(DataMessage data, AsyncExtensionEnv env) {
+    public void onData(DataMessage data, AsyncExtensionEnv env) { // 修复：方法名和访问修饰符
         String dataName = data.getName();
         log.info("SimpleEchoExtension收到数据: name={}, sourceLocation={}",
-                dataName, data.getSourceLocation());
-        log.debug("原始数据内容类型: {}, 编码: {}", data.getContentType(), data.getEncoding());
-        log.debug("SimpleEchoExtension: Message properties at handleData start: {}", data.getProperties()); // Debug log
-        if (data.hasData()) {
+                dataName, data.getSrcLoc());
+        log.debug("SimpleEchoExtension: Message properties at onData start: {}", data.getProperties()); // Debug log
+        if (data.getDataBytes() != null && data.getDataBytes().length > 0) {
             log.debug("原始数据大小: {} bytes", data.getDataSize());
         } else {
             log.debug("原始数据不包含有效负载。");
@@ -88,14 +102,27 @@ public class SimpleEchoExtension extends BaseExtension {
             originalPayload.put("content", echoContent);
             log.debug("更新后的payload: {}", originalPayload);
 
-            DataMessage echoData = DataMessage.json(MessageConstants.DATA_NAME_ECHO_DATA,
-                    objectMapper.writeValueAsString(originalPayload));
-            echoData.setProperties(Map.of("original_name", dataName, "count", ++messageCount));
+            // 使用ObjectMapper将Map序列化回字节数组
+            byte[] echoDataBytes = objectMapper.writeValueAsBytes(originalPayload);
 
             // source Location 作为destination Location
-            Location location = new Location(env.getAppUri(), env.getGraphId(),
-                    data.getSourceLocation().extensionName());
-            echoData.addDestinationLocation(location);
+            Location destinationLocation = new Location(env.getAppUri(), env.getGraphId(),
+                    data.getSrcLoc().getNodeId()); // 修复：extensionName() 改为 getNodeId()
+
+            // 构造新的 DataMessage
+            DataMessage echoData = new DataMessage(com.tenframework.core.util.MessageUtils.generateUniqueId(),
+                    MessageType.DATA,
+                    new Location().setAppUri(env.getAppUri()).setGraphId(env.getGraphId())
+                            .setNodeId(env.getExtensionName()), // 修复：getCurrentLocation() 替换为构建Location
+                    Collections.singletonList(destinationLocation), echoDataBytes); // 使用新的构造函数
+
+            echoData.setProperties(new java.util.HashMap<String, Object>() {
+                {
+                    put("original_name", dataName);
+                    put("count", ++messageCount);
+                    put("msgpack_ext_type", Byte.valueOf(MessageConstants.TEN_MSGPACK_EXT_TYPE_MSG));
+                }
+            });
 
             // 通过 EngineAsyncExtensionEnv 提交回显数据
             env.sendData(echoData); // 将sendMessage替换为sendData
@@ -109,7 +136,7 @@ public class SimpleEchoExtension extends BaseExtension {
     }
 
     @Override
-    protected void handleAudioFrame(AudioFrameMessage audioFrame, AsyncExtensionEnv env) {
+    public void onAudioFrame(AudioFrameMessage audioFrame, AsyncExtensionEnv env) { // 修复：方法名和访问修饰符
         // 开发者只需关注业务逻辑
         log.debug("收到音频帧: {} ({} bytes)", audioFrame.getName(), audioFrame.getDataSize());
 
@@ -118,7 +145,7 @@ public class SimpleEchoExtension extends BaseExtension {
     }
 
     @Override
-    protected void handleVideoFrame(VideoFrameMessage videoFrame, AsyncExtensionEnv env) {
+    public void onVideoFrame(VideoFrameMessage videoFrame, AsyncExtensionEnv env) { // 修复：方法名和访问修饰符
         // 开发者只需关注业务逻辑
         log.debug("收到视频帧: {} ({}x{})", videoFrame.getName(),
                 videoFrame.getWidth(), videoFrame.getHeight());

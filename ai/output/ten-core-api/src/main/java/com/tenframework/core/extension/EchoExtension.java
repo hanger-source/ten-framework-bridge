@@ -4,6 +4,7 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tenframework.core.message.AudioFrameMessage;
 import com.tenframework.core.message.CommandResult;
 import com.tenframework.core.message.DataMessage;
@@ -26,6 +27,8 @@ import lombok.extern.slf4j.Slf4j;
  */
 @Slf4j
 public class EchoExtension implements Extension {
+
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     // 移除重复的字段定义
     // private String extensionName;
@@ -115,11 +118,15 @@ public class EchoExtension implements Extension {
                 Thread.sleep(50);
 
                 // 创建回显结果
-                CommandResult result = CommandResult.success(command.getId(), Map.of(
-                        "original_command", command.getName(),
-                        "echo_content", "Echo: " + command.getName(),
-                        "processed_by", getExtensionName(),
-                        "message_count", messageCount));
+                String detailJson = OBJECT_MAPPER.writeValueAsString(new java.util.HashMap<String, Object>() {
+                    {
+                        put("original_command", command.getName());
+                        put("echo_content", "Echo: " + command.getName());
+                        put("processed_by", getExtensionName());
+                        put("message_count", messageCount);
+                    }
+                });
+                CommandResult result = CommandResult.success(command.getId(), detailJson);
                 result.setName("echo_result");
 
                 // 发送结果
@@ -158,12 +165,19 @@ public class EchoExtension implements Extension {
                 Thread.sleep(30);
 
                 // 创建回显数据
-                DataMessage echoData = new DataMessage(MessageUtils.TEN_MSGPACK_EXT_TYPE_MSG, data.getSrcLoc(),
-                        MessageType.DATA, data.getDestLocs(), data.getDataBytes()); // 修正为直接构造 DataMessage
-                echoData.setProperties(Map.of(
-                        "original_data_name", data.getName(),
-                        "processed_by", getExtensionName(),
-                        "message_count", messageCount));
+                DataMessage echoData = new DataMessage(com.tenframework.core.util.MessageUtils.generateUniqueId(),
+                        MessageType.DATA,
+                        data.getSrcLoc(), data.getDestLocs(), data.getDataBytes());
+                echoData.setProperties(new java.util.HashMap<String, Object>() {
+                    {
+                        put("original_data_name", data.getName());
+                        put("processed_by", getExtensionName());
+                        put("message_count", messageCount);
+                        put("msgpack_ext_type", Byte.valueOf(MessageUtils.TEN_MSGPACK_EXT_TYPE_MSG)); // 将
+                                                                                                      // MessageUtils.TEN_MSGPACK_EXT_TYPE_MSG
+                                                                                                      // 作为属性传递
+                    }
+                });
 
                 // 设置目标位置（如果有的话）
                 if (data.getDestLocs() != null && !data.getDestLocs().isEmpty()) { // 修正为 getDestLocs()

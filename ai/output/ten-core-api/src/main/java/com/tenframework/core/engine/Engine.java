@@ -11,6 +11,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
 import com.tenframework.core.app.App;
+import com.tenframework.core.app.MessageReceiver;
 import com.tenframework.core.command.EngineCommandHandler;
 import com.tenframework.core.command.engine.TimeoutCommandHandler;
 import com.tenframework.core.command.engine.TimerCommandHandler;
@@ -43,7 +44,7 @@ import static com.tenframework.core.message.MessageType.CMD_TIMER;
  */
 @Slf4j
 @Getter
-public class Engine implements Agent, MessageSubmitter, CommandSubmitter {
+public class Engine implements Agent, MessageSubmitter, CommandSubmitter, MessageReceiver {
 
     private final String engineId; // 对应 graph_id
     private final GraphDefinition graphDefinition; // 引擎所加载的 Graph 的定义
@@ -67,39 +68,21 @@ public class Engine implements Agent, MessageSubmitter, CommandSubmitter {
         this.graphDefinition = graphDefinition;
         this.app = app;
         this.hasOwnLoop = hasOwnLoop; // 在构造函数开头初始化
-        runloop = new Runloop("%s-runloop".formatted(engineId)); // 每个 Engine 都有自己的 Runloop
         pathTable = new PathTable(PathTableAttachedTo.ENGINE, this, this); // PathTable 依赖 GraphDefinition
-
         // 移除 EngineAsyncExtensionEnv 的创建，将其职责委托给 ExtensionContext
         extensionContext = new ExtensionContext(this, app, pathTable, this, this); // 将 Engine 自身作为 MessageSubmitter 和
-                                                                                   // CommandSubmitter 传递
 
         // Engine 自身的 Runloop 初始化
         if (hasOwnLoop) {
-            runloop.registerExternalEventSource(() -> {
-                try {
-                    return doWork();
-                } catch (Exception e) {
-                    log.error("Error in Engine doWork: ", e);
-                    return 0;
-                }
-            }, null); // 注册 Engine 自身作为 Runloop 的外部事件源
+            runloop = new Runloop("%s-runloop".formatted(engineId)); // 每个 Engine 都有自己的 Runloop
+            runloop.registerExternalAgent(this); // 注册 Engine 自身作为 Runloop 的外部事件源
         } else if (app.getAppRunloop() != null) { // 如果使用 App 的 Runloop
             // 将 Engine 的 doWork 方法注册到 App 的 Runloop
-            app.getAppRunloop().registerExternalEventSource(() -> {
-                try {
-                    return doWork();
-                } catch (Exception e) {
-                    log.error("Error in Engine doWork: ", e);
-                    return 0;
-                }
-            }, null);
+            app.getAppRunloop().registerExternalAgent(this);
         }
 
-        // PathTable
         commandFutures = new ConcurrentHashMap<>();
         messageDispatcher = new DefaultExtensionMessageDispatcher(extensionContext, commandFutures); // 消息派发器依赖
-        // ExtensionContext
         commandHandlers = new HashMap<>(); // 初始化命令处理器映射
         registerCommandHandlers(); // 注册命令处理器
 
@@ -126,7 +109,13 @@ public class Engine implements Agent, MessageSubmitter, CommandSubmitter {
 
     @Override
     public String roleName() {
-        return "Engine-" + engineId;
+        return "Engine-%s".formatted(engineId);
+    }
+
+    @Override
+    public void handleInboundMessage(Message message, Connection connection) {
+        // 简单地将消息提交到内部队列，由 doWork 统一处理
+        submitMessage(message);
     }
 
     /**
@@ -173,6 +162,7 @@ public class Engine implements Agent, MessageSubmitter, CommandSubmitter {
         isReadyToHandleMsg = false;
         if (runloop != null) {
             runloop.shutdown();
+            runloop.registerExternalAgent(this);
         } else if (app.getAppRunloop() != null) { // 如果使用 App 的 Runloop，则从 App 的 Runloop 中注销
             // Agrona 没有直接的 unregister 方法，这里简化处理，实际可能需要更复杂的机制
             log.warn("Engine {}: 无法从 App 的 Runloop 注销消息源，需要手动管理资源。", engineId);
@@ -221,15 +211,15 @@ public class Engine implements Agent, MessageSubmitter, CommandSubmitter {
         // 调用 pathTable.createOutPath 来跟踪此命令的返回路径
         // 假设命令的 srcLoc 是返回位置，且默认返回策略为 FIRST_ERROR_OR_LAST_OK
         pathTable.createOutPath(
-            command.getId(), // commandId
-            command.getParentCommandId(), // parentCommandId
-            command.getName(), // commandName
-            command.getSrcLoc(), // sourceLocation
-            command.getDestLocs() != null && !command.getDestLocs().isEmpty() ? command.getDestLocs().get(0) : null,
-            // destinationLocation
-            future, // resultFuture
-            ResultReturnPolicy.FIRST_ERROR_OR_LAST_OK, // returnPolicy
-            command.getSrcLoc() // returnLocation (假设返回到命令的源位置)
+                command.getId(), // commandId
+                command.getParentCommandId(), // parentCommandId
+                command.getName(), // commandName
+                command.getSrcLoc(), // sourceLocation
+                command.getDestLocs() != null && !command.getDestLocs().isEmpty() ? command.getDestLocs().get(0) : null,
+                // destinationLocation
+                future, // resultFuture
+                ResultReturnPolicy.FIRST_ERROR_OR_LAST_OK, // returnPolicy
+                command.getSrcLoc() // returnLocation (假设返回到命令的源位置)
         );
 
         if (!inMsgs.offer(command)) {
@@ -257,7 +247,6 @@ public class Engine implements Agent, MessageSubmitter, CommandSubmitter {
      *
      * @param message 传入的消息。
      */
-    @Override
     public void processMessage(Message message) {
         String msgId = message.getId();
         MessageType msgType = message.getType();

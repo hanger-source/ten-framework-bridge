@@ -36,16 +36,16 @@ public class DummyRemote extends Remote {
     }
 
     @Override
-    public CompletableFuture<Boolean> sendMessage(Message message) {
+    public void sendMessage(Message message) {
         if (!isActive()) {
             log.warn("DummyRemote: Remote {} 不活跃，无法发送消息: {}", getRemoteId(), message.getId());
-            return CompletableFuture.completedFuture(false);
+            return;
         }
-        log.debug("DummyRemote {}: 准备发送消息 {} 到 {}.", getRemoteId(), message.getId(), getRemoteLocation());
-        return associatedConnection.map(conn -> {
-            CompletableFuture<Void> future = conn.sendOutboundMessage(message);
-            return future.thenApply(v -> true); // 假设发送成功则返回true
-        }).orElseGet(() -> CompletableFuture.completedFuture(false));
+        log.debug("DummyRemote {}: 准备发送消息 {} 到 {}.", getRemoteId(), getRemoteEngineLocation().toString());
+        associatedConnection.ifPresent(conn -> {
+            conn.sendOutboundMessage(message);
+            log.debug("DummyRemote: 消息 {} 已通过关联的 Connection {} 发送。", message.getId(), conn.getConnectionId());
+        });
     }
 
     @Override
