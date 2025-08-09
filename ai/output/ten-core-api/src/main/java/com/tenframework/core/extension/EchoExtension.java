@@ -33,7 +33,7 @@ public class EchoExtension implements Extension {
     private boolean isRunning = false;
     private long messageCount = 0;
     // 新增：保留 AsyncExtensionEnv 引用，方便其他方法使用
-    private AsyncExtensionEnv context;
+    private AsyncExtensionEnv env;
 
     // 构造函数
     public EchoExtension() {
@@ -43,18 +43,18 @@ public class EchoExtension implements Extension {
     @Override
     public String getExtensionName() {
         // 从 env 中获取 extensionName，确保一致性
-        return context != null ? context.getExtensionName() : null;
+        return env != null ? env.getExtensionName() : null;
     }
 
     @Override
     public String getAppUri() {
         // 从 env 中获取 appUri，确保一致性
-        return context != null ? context.getAppUri() : null;
+        return env != null ? env.getAppUri() : null;
     }
 
     @Override
     public void onConfigure(AsyncExtensionEnv env) {
-        context = env; // 保存 env 引用
+        this.env = env; // 保存 env 引用
         // 从 env 中获取 extensionName，确保一致性
         // this.extensionName = env.getExtensionName(); // 已通过 getter 获取
         // this.appUri = env.getAppUri(); // 已通过 getter 获取
@@ -158,7 +158,7 @@ public class EchoExtension implements Extension {
                 Thread.sleep(30);
 
                 // 创建回显数据
-                DataMessage echoData = new DataMessage(MessageUtils.generateUniqueId(), data.getSrcLoc(),
+                DataMessage echoData = new DataMessage(MessageUtils.TEN_MSGPACK_EXT_TYPE_MSG, data.getSrcLoc(),
                         MessageType.DATA, data.getDestLocs(), data.getDataBytes()); // 修正为直接构造 DataMessage
                 echoData.setProperties(Map.of(
                         "original_data_name", data.getName(),

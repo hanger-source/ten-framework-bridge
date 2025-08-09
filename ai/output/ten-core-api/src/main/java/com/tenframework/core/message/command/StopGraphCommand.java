@@ -1,17 +1,17 @@
 package com.tenframework.core.message.command;
 
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.tenframework.core.message.Location;
-import com.tenframework.core.message.Message;
 import com.tenframework.core.message.MessageType;
+import com.tenframework.core.util.MessageUtils;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 import lombok.experimental.Accessors;
-
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
 
 /**
  * 停止图命令消息，对齐C/Python中的TEN_MSG_TYPE_CMD_STOP_GRAPH。
@@ -53,8 +53,8 @@ public class StopGraphCommand extends Command {
      */
     public StopGraphCommand(String id, Location srcLoc, List<Location> destLocs,
             Map<String, Object> properties, long timestamp, String graphId) {
-        super(id, MessageType.CMD_STOP_GRAPH, srcLoc, destLocs, MessageType.CMD_STOP_GRAPH.name(), properties,
-                timestamp); // 修正为调用 Command 的构造函数
+        super(id, srcLoc, MessageType.CMD_STOP_GRAPH, destLocs, properties,
+            timestamp, MessageType.CMD_STOP_GRAPH.name()); // 修正为调用 Command 的构造函数
         this.graphId = graphId;
     }
 
@@ -66,8 +66,9 @@ public class StopGraphCommand extends Command {
      * @param graphId  图ID。
      */
     public StopGraphCommand(Location srcLoc, List<Location> destLocs, String graphId) {
-        super(MessageUtils.generateUniqueId(), MessageType.CMD_STOP_GRAPH, srcLoc, destLocs,
-                MessageType.CMD_STOP_GRAPH.name()); // 修正为调用 Command 的简化构造函数
+        super(MessageUtils.generateUniqueId(), srcLoc, MessageType.CMD_STOP_GRAPH, destLocs,
+            Collections.emptyMap(), System.currentTimeMillis(),
+            MessageType.CMD_STOP_GRAPH.name());
         this.graphId = graphId;
     }
 

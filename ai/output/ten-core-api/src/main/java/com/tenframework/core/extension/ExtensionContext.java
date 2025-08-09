@@ -1,5 +1,9 @@
 package com.tenframework.core.extension;
 
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
+
 import com.tenframework.core.app.App;
 import com.tenframework.core.engine.CommandSubmitter;
 import com.tenframework.core.engine.Engine;
@@ -14,13 +18,6 @@ import com.tenframework.core.message.command.Command;
 import com.tenframework.core.path.PathTable;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap; // 引入 ConcurrentHashMap
 
 /**
  * `ExtensionContext` 封装了 `Extension` 的运行时环境。
@@ -38,14 +35,11 @@ public class ExtensionContext {
     private final PathTable pathTable; // 消息路由表
     private final MessageSubmitter messageSubmitter; // 用于向 Engine 提交消息
     private final CommandSubmitter commandSubmitter; // 用于向 Engine 提交命令
-
+    private final Map<String, Extension> loadedExtensions; // 存储已加载和配置的 Extension 实例
     private String extensionName; // 当前 Extension 的名称
     private String graphId; // 当前 Extension 所属的 Graph ID
     private String appUri; // 当前 Extension 所属的 App URI
-
     private AsyncExtensionEnv currentExtensionEnv; // 当前 Extension 专属的 AsyncExtensionEnv 实例
-
-    private final Map<String, Extension> loadedExtensions; // 存储已加载和配置的 Extension 实例
 
     public ExtensionContext(Engine engine, App app, PathTable pathTable, MessageSubmitter messageSubmitter,
             CommandSubmitter commandSubmitter) {
@@ -54,7 +48,7 @@ public class ExtensionContext {
         this.pathTable = pathTable;
         this.messageSubmitter = messageSubmitter;
         this.commandSubmitter = commandSubmitter;
-        this.loadedExtensions = new ConcurrentHashMap<>(); // 初始化 Map
+        loadedExtensions = new ConcurrentHashMap<>(); // 初始化 Map
 
         log.info("ExtensionContext created for Engine: {}, App: {}", engine.getEngineId(), app.getAppUri());
     }
@@ -70,14 +64,14 @@ public class ExtensionContext {
     public AsyncExtensionEnv createExtensionEnv(String extensionName, String extensionType,
             Map<String, Object> initialProperties) {
         this.extensionName = extensionName; // 设置当前上下文的 Extension 名称
-        this.appUri = app.getAppUri();
-        this.graphId = engine.getEngineId(); // EngineId 即 GraphId
+        appUri = app.getAppUri();
+        graphId = engine.getEngineId(); // EngineId 即 GraphId
 
-        this.currentExtensionEnv = new EngineAsyncExtensionEnv(
+        currentExtensionEnv = new EngineAsyncExtensionEnv(
                 extensionName,
                 extensionType,
-                this.appUri,
-                this.graphId,
+            appUri,
+            graphId,
                 messageSubmitter,
                 commandSubmitter,
                 initialProperties);
@@ -119,7 +113,7 @@ public class ExtensionContext {
                 // 这里 ext.getAppUri() 用于判断是否有效，因为 env.getGraphId() 可能会在清理时为空
                 ext.onDeinit(ext.getAppUri() != null ? currentExtensionEnv : null);
             } catch (Exception e) {
-                log.error("Extension {} deinitialization failed: {}", ext.getExtensionName(), e.getMessage(), e);
+                log.error("Extension {} deinitialization failed: {}", ext.getClass(), e.getMessage(), e);
             }
         });
         loadedExtensions.clear();

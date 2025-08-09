@@ -1,17 +1,16 @@
 package com.tenframework.core.message.command;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+
 import com.tenframework.core.message.Location;
-import com.tenframework.core.message.Message;
 import com.tenframework.core.message.MessageType;
+import com.tenframework.core.util.MessageUtils;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 import lombok.experimental.Accessors;
-
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
 
 /**
  * 关闭应用命令消息，对齐C/Python中的TEN_MSG_TYPE_CMD_CLOSE_APP。
@@ -46,7 +45,8 @@ public class CloseAppCommand extends Command {
      */
     public CloseAppCommand(String id, Location srcLoc, List<Location> destLocs,
             Map<String, Object> properties, long timestamp) {
-        super(id, MessageType.CMD_CLOSE_APP, srcLoc, destLocs, MessageType.CMD_CLOSE_APP.name(), properties, timestamp); // 修正为调用
+        super(id, srcLoc, MessageType.CMD_CLOSE_APP, destLocs, properties, timestamp,
+            MessageType.CMD_CLOSE_APP.name()); // 修正为调用
                                                                                                                          // Command
                                                                                                                          // 的构造函数
     }
@@ -57,8 +57,8 @@ public class CloseAppCommand extends Command {
      * @param srcLoc 源位置。
      */
     public CloseAppCommand(Location srcLoc) {
-        super(MessageUtils.generateUniqueId(), MessageType.CMD_CLOSE_APP, srcLoc, Collections.emptyList(),
-                MessageType.CMD_CLOSE_APP.name()); // 修正为调用 Command 的简化构造函数
+        super(MessageUtils.generateUniqueId(), srcLoc, MessageType.CMD_CLOSE_APP, Collections.emptyList()
+            , Collections.emptyMap(), System.currentTimeMillis(), MessageType.CMD_CLOSE_APP.name());
     }
 
 }

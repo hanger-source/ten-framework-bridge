@@ -471,9 +471,4 @@ public abstract class BaseExtension implements Extension {
     public String getExtensionName() {
         return extensionName;
     }
-
-    @Override
-    public String getGraphId() {
-        return graphId;
-    }
 }

@@ -1,5 +1,9 @@
 package com.tenframework.core.message;
 
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -7,9 +11,7 @@ import lombok.NoArgsConstructor;
 import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
 
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
+import static com.tenframework.core.message.MessageType.VIDEO_FRAME;
 
 /**
  * 视频帧消息，对齐C/Python中的TEN_MSG_TYPE_VIDEO_FRAME。
@@ -98,7 +100,7 @@ public class VideoFrameMessage extends Message {
      */
     public VideoFrameMessage(String id, Location srcLoc, List<Location> destLocs,
             int pixelFormat, long frameTimestamp, int width, int height, boolean isEof, byte[] data) {
-        super(id, MessageType.VIDEO_FRAME, srcLoc, destLocs, null, Collections.emptyMap(), System.currentTimeMillis()); // 传入
+        super(id, VIDEO_FRAME, srcLoc, destLocs, null, Collections.emptyMap(), System.currentTimeMillis()); // 传入
                                                                                                                         // null
                                                                                                                         // 作为
                                                                                                                         // name
@@ -108,6 +110,45 @@ public class VideoFrameMessage extends Message {
         this.height = height;
         this.isEof = isEof;
         this.data = data;
+    }
+
+    /**
+     * 创建黑色视频帧。
+     *
+     * @param id          消息ID
+     * @param srcLoc      源位置
+     * @param timestamp   消息时间戳
+     * @param width       宽度
+     * @param height      高度
+     * @param pixelFormat 像素格式
+     * @return 黑色视频帧实例
+     */
+    public static VideoFrameMessage black(String id, Location srcLoc, long timestamp, int width, int height,
+        int pixelFormat) {
+        VideoFrameMessage frame = new VideoFrameMessage(id, srcLoc, VIDEO_FRAME, Collections.emptyList(),
+            Map.of(), timestamp, // properties, timestamp
+            pixelFormat, 0L, width, height, false, null); // frameTimestamp 默认 0L, data为null
+
+        // 创建黑色帧数据（全0）
+        int size = frame.getUncompressedSize();
+        byte[] blackData = new byte[size];
+        frame.setData(blackData); // 使用setData设置内部buf
+
+        return frame;
+    }
+
+    /**
+     * 创建EOF标记视频帧。
+     *
+     * @param id        消息ID
+     * @param srcLoc    源位置
+     * @param timestamp 消息时间戳
+     * @return EOF视频帧实例
+     */
+    public static VideoFrameMessage eof(String id, Location srcLoc, long timestamp) {
+        return new VideoFrameMessage(id, srcLoc, VIDEO_FRAME, Collections.emptyList(),
+            Map.of(), timestamp, // properties, timestamp
+            0, 0L, 0, 0, true, new byte[0]); // pixelFormat, frameTimestamp, width, height, isEof, data
     }
 
     /**
@@ -128,7 +169,7 @@ public class VideoFrameMessage extends Message {
      * 设置视频数据（字节数组）。
      */
     public void setDataBytes(byte[] bytes) {
-        this.data = bytes;
+        data = bytes;
     }
 
     /**
@@ -182,45 +223,6 @@ public class VideoFrameMessage extends Message {
         return !hasData();
     }
 
-    /**
-     * 创建黑色视频帧。
-     *
-     * @param id          消息ID
-     * @param srcLoc      源位置
-     * @param timestamp   消息时间戳
-     * @param width       宽度
-     * @param height      高度
-     * @param pixelFormat 像素格式
-     * @return 黑色视频帧实例
-     */
-    public static VideoFrameMessage black(String id, Location srcLoc, long timestamp, int width, int height,
-            int pixelFormat) {
-        VideoFrameMessage frame = new VideoFrameMessage(id, MessageType.VIDEO_FRAME, srcLoc, Collections.emptyList(),
-                null, Map.of(), timestamp,
-                pixelFormat, timestamp, width, height, false, null); // data为null
-
-        // 创建黑色帧数据（全0）
-        int size = frame.getUncompressedSize();
-        byte[] blackData = new byte[size];
-        frame.setData(blackData); // 使用setData设置内部buf
-
-        return frame;
-    }
-
-    /**
-     * 创建EOF标记视频帧。
-     *
-     * @param id        消息ID
-     * @param srcLoc    源位置
-     * @param timestamp 消息时间戳
-     * @return EOF视频帧实例
-     */
-    public static VideoFrameMessage eof(String id, Location srcLoc, long timestamp) {
-        return new VideoFrameMessage(id, MessageType.VIDEO_FRAME, srcLoc, Collections.emptyList(),
-                null, Map.of(), timestamp,
-                0, timestamp, 0, 0, true, new byte[0]);
-    }
-
     public boolean checkIntegrity() { // 移除 @Override
         return getId() != null && !getId().isEmpty() &&
                 width >= 0 && height >= 0; // 宽度和高度必须非负
@@ -229,7 +231,7 @@ public class VideoFrameMessage extends Message {
     @Override
     public VideoFrameMessage clone() {
         // 实现深拷贝
-        return new VideoFrameMessage(this.getId(), this.getSrcLoc(), this.getDestLocs(),
-                this.pixelFormat, this.frameTimestamp, this.width, this.height, this.isEof, this.getDataBytes());
+        return new VideoFrameMessage(getId(), getSrcLoc(), getDestLocs(),
+            pixelFormat, frameTimestamp, width, height, isEof, getDataBytes());
     }
 }

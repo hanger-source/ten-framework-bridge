@@ -9,6 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.util.UUID;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * DummyRemote 是 Remote 抽象类的一个简化实现，用于测试和占位。
@@ -20,7 +21,8 @@ public class DummyRemote extends Remote {
     // 简化：目前只关联一个 Connection，实际 Remote 可能管理多个 Connection
     private Optional<Connection> associatedConnection;
 
-    public DummyRemote(String remoteId, Location remoteEngineLocation, Engine localEngine, Optional<Connection> initialConnection) {
+    public DummyRemote(String remoteId, Location remoteEngineLocation, Engine localEngine,
+            Optional<Connection> initialConnection) {
         super(remoteId, remoteEngineLocation, localEngine);
         this.associatedConnection = initialConnection;
         log.info("DummyRemote: 创建了 Remote 实例: remoteId={}, remoteEngineLocation={}, localEngineId={}",
@@ -34,20 +36,16 @@ public class DummyRemote extends Remote {
     }
 
     @Override
-    public void sendMessage(Message message) {
+    public CompletableFuture<Boolean> sendMessage(Message message) {
         if (!isActive()) {
             log.warn("DummyRemote: Remote {} 不活跃，无法发送消息: {}", getRemoteId(), message.getId());
-            return;
+            return CompletableFuture.completedFuture(false);
         }
-        // 模拟消息发送，通常会通过 Connection 或其他网络通道发送
-        log.info("DummyRemote: 发送消息: remoteId={}, messageId={}, messageType={}",
-                getRemoteId(), message.getId(), message.getType());
-
-        associatedConnection.ifPresent(conn -> {
-            conn.sendMessage(message); // 通过关联的 Connection 发送消息
-            log.debug("DummyRemote: 消息 {} 已通过关联的 Connection {} 发送。", message.getId(), conn.getConnectionId());
-        });
-        // TODO: 如果没有 associatedConnection，可能需要通过 Engine 找到对应的 Connection 或其他 Remote 机制发送
+        log.debug("DummyRemote {}: 准备发送消息 {} 到 {}.", getRemoteId(), message.getId(), getRemoteLocation());
+        return associatedConnection.map(conn -> {
+            CompletableFuture<Void> future = conn.sendOutboundMessage(message);
+            return future.thenApply(v -> true); // 假设发送成功则返回true
+        }).orElseGet(() -> CompletableFuture.completedFuture(false));
     }
 
     @Override

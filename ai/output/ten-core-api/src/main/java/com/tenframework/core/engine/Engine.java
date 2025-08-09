@@ -15,11 +15,8 @@ import com.tenframework.core.command.EngineCommandHandler;
 import com.tenframework.core.command.engine.TimeoutCommandHandler;
 import com.tenframework.core.command.engine.TimerCommandHandler;
 import com.tenframework.core.connection.Connection;
-import com.tenframework.core.extension.AsyncExtensionEnv;
-import com.tenframework.core.extension.EngineAsyncExtensionEnv;
-import com.tenframework.core.extension.Extension;
 import com.tenframework.core.extension.ExtensionContext;
-import com.tenframework.core.graph.ExtensionInfo; // 导入 ExtensionInfo
+import com.tenframework.core.graph.ExtensionInfo;
 import com.tenframework.core.graph.GraphDefinition;
 import com.tenframework.core.message.CommandResult;
 import com.tenframework.core.message.Location;
@@ -28,6 +25,7 @@ import com.tenframework.core.message.MessageType;
 import com.tenframework.core.message.command.Command;
 import com.tenframework.core.path.PathTable;
 import com.tenframework.core.path.PathTableAttachedTo;
+import com.tenframework.core.path.ResultReturnPolicy;
 import com.tenframework.core.remote.DummyRemote;
 import com.tenframework.core.remote.Remote;
 import com.tenframework.core.runloop.Runloop;
@@ -64,11 +62,12 @@ public class Engine implements Agent, MessageSubmitter, CommandSubmitter {
 
     private volatile boolean isClosing = false;
 
-    public Engine(String engineId, GraphDefinition graphDefinition, Runloop appRunloop, App app) {
+    public Engine(String engineId, GraphDefinition graphDefinition, App app, boolean hasOwnLoop) {
         this.engineId = engineId;
         this.graphDefinition = graphDefinition;
         this.app = app;
-        runloop = new Runloop(engineId + "-runloop"); // 每个 Engine 都有自己的 Runloop
+        this.hasOwnLoop = hasOwnLoop; // 在构造函数开头初始化
+        runloop = new Runloop("%s-runloop".formatted(engineId)); // 每个 Engine 都有自己的 Runloop
         pathTable = new PathTable(PathTableAttachedTo.ENGINE, this, this); // PathTable 依赖 GraphDefinition
 
         // 移除 EngineAsyncExtensionEnv 的创建，将其职责委托给 ExtensionContext
@@ -77,10 +76,24 @@ public class Engine implements Agent, MessageSubmitter, CommandSubmitter {
 
         // Engine 自身的 Runloop 初始化
         if (hasOwnLoop) {
-            runloop.registerExternalEventSource(this::doWork, null); // 注册 Engine 自身作为 Runloop 的外部事件源
+            runloop.registerExternalEventSource(() -> {
+                try {
+                    return doWork();
+                } catch (Exception e) {
+                    log.error("Error in Engine doWork: ", e);
+                    return 0;
+                }
+            }, null); // 注册 Engine 自身作为 Runloop 的外部事件源
         } else if (app.getAppRunloop() != null) { // 如果使用 App 的 Runloop
             // 将 Engine 的 doWork 方法注册到 App 的 Runloop
-            app.getAppRunloop().registerExternalEventSource(this::doWork, null);
+            app.getAppRunloop().registerExternalEventSource(() -> {
+                try {
+                    return doWork();
+                } catch (Exception e) {
+                    log.error("Error in Engine doWork: ", e);
+                    return 0;
+                }
+            }, null);
         }
 
         // PathTable
@@ -91,7 +104,6 @@ public class Engine implements Agent, MessageSubmitter, CommandSubmitter {
         registerCommandHandlers(); // 注册命令处理器
 
         inMsgs = new ManyToOneConcurrentArrayQueue<>(1024); // 恢复 inMsgs 初始化
-        hasOwnLoop = true; // 假设 Engine 默认有自己的 Runloop
         orphanConnections = Collections.synchronizedList(new ArrayList<>()); // 恢复 orphanConnections 初始化
         remotes = new ConcurrentHashMap<>(); // 恢复 remotes 初始化
         isReadyToHandleMsg = true; // 恢复 isReadyToHandleMsg 初始化
@@ -161,12 +173,9 @@ public class Engine implements Agent, MessageSubmitter, CommandSubmitter {
         isReadyToHandleMsg = false;
         if (runloop != null) {
             runloop.shutdown();
-        } else if (app != null) {
-            // 如果使用 App 的 Runloop，则从 App 的 Runloop 中注销
-            app.getAppRunloop().ifPresent(appRunloop -> {
-                // Agrona 没有直接的 unregister 方法，这里简化处理，实际可能需要更复杂的机制
-                log.warn("Engine {}: 无法从 App 的 Runloop 注销消息源，需要手动管理资源。", engineId);
-            });
+        } else if (app.getAppRunloop() != null) { // 如果使用 App 的 Runloop，则从 App 的 Runloop 中注销
+            // Agrona 没有直接的 unregister 方法，这里简化处理，实际可能需要更复杂的机制
+            log.warn("Engine {}: 无法从 App 的 Runloop 注销消息源，需要手动管理资源。", engineId);
         }
         if (extensionContext != null) {
             extensionContext.cleanup();
@@ -179,6 +188,9 @@ public class Engine implements Agent, MessageSubmitter, CommandSubmitter {
 
         commandFutures.forEach((cmdId, future) -> future.cancel(true)); // 取消所有未完成的命令
         commandFutures.clear();
+
+        // 清理 PathTable 中与此 Engine 相关的路径
+        pathTable.cleanupPathsForGraph(engineId);
 
         log.info("Engine {}: 已停止并清理资源。", engineId);
     }
@@ -205,6 +217,21 @@ public class Engine implements Agent, MessageSubmitter, CommandSubmitter {
         long commandId = Long.parseLong(command.getId()); // 假设 Command ID 是 long 字符串
         CompletableFuture<Object> future = new CompletableFuture<>();
         commandFutures.put(commandId, future);
+
+        // 调用 pathTable.createOutPath 来跟踪此命令的返回路径
+        // 假设命令的 srcLoc 是返回位置，且默认返回策略为 FIRST_ERROR_OR_LAST_OK
+        pathTable.createOutPath(
+            command.getId(), // commandId
+            command.getParentCommandId(), // parentCommandId
+            command.getName(), // commandName
+            command.getSrcLoc(), // sourceLocation
+            command.getDestLocs() != null && !command.getDestLocs().isEmpty() ? command.getDestLocs().get(0) : null,
+            // destinationLocation
+            future, // resultFuture
+            ResultReturnPolicy.FIRST_ERROR_OR_LAST_OK, // returnPolicy
+            command.getSrcLoc() // returnLocation (假设返回到命令的源位置)
+        );
+
         if (!inMsgs.offer(command)) {
             log.warn("Engine {}: 内部命令队列已满，命令 {} 被丢弃。", engineId, command.getId());
             future.completeExceptionally(new RuntimeException("Engine command queue full."));
@@ -253,6 +280,10 @@ public class Engine implements Agent, MessageSubmitter, CommandSubmitter {
         // 1. 如果是命令，首先尝试通过注册的命令处理器处理
         if (message instanceof Command) {
             Command command = (Command) message;
+
+            // 为入站命令创建 PathIn，以便后续可以追踪其结果或上下文
+            pathTable.createInPath(command);
+
             EngineCommandHandler handler = commandHandlers.get(command.getType());
             if (handler != null) {
                 try {
@@ -268,6 +299,8 @@ public class Engine implements Agent, MessageSubmitter, CommandSubmitter {
                     if (future != null) {
                         future.completeExceptionally(e);
                     }
+                } finally {
+                    pathTable.removeInPath(command.getId()); // 无论成功或失败，都移除入站路径
                 }
                 return; // 命令已被处理，不再继续路由到 Extension
             } else {
@@ -277,6 +310,7 @@ public class Engine implements Agent, MessageSubmitter, CommandSubmitter {
                 if (future != null) {
                     future.completeExceptionally(new UnsupportedOperationException("未知命令类型或没有注册处理器: " + msgType));
                 }
+                pathTable.removeInPath(command.getId()); // 移除入站路径
                 return;
             }
         } else if (message instanceof CommandResult) { // 新增：处理命令结果消息

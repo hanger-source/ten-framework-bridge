@@ -1,18 +1,16 @@
 package com.tenframework.core.message.command;
 
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.tenframework.core.message.Location;
-import com.tenframework.core.message.Message;
 import com.tenframework.core.message.MessageType;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 import lombok.experimental.Accessors;
-
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import com.tenframework.core.message.MessageUtils;
 
 /**
  * 超时命令消息，对齐C/Python中的TEN_MSG_TYPE_CMD_TIMEOUT。
@@ -54,9 +52,7 @@ public class TimeoutCommand extends Command {
      */
     public TimeoutCommand(String id, Location srcLoc, List<Location> destLocs,
             Map<String, Object> properties, long timestamp, Long timerId) {
-        super(id, MessageType.CMD_TIMEOUT, srcLoc, destLocs, MessageType.CMD_TIMEOUT.name(), properties, timestamp); // 修正为调用
-                                                                                                                     // Command
-                                                                                                                     // 的构造函数
+        super(id, srcLoc, MessageType.CMD_TIMEOUT, destLocs, properties, timestamp, MessageType.CMD_TIMER.name());
         this.timerId = timerId;
     }
 
@@ -69,7 +65,8 @@ public class TimeoutCommand extends Command {
      * @param timerId  定时器ID。
      */
     public TimeoutCommand(String id, Location srcLoc, List<Location> destLocs, Long timerId) {
-        super(id, MessageType.CMD_TIMEOUT, srcLoc, destLocs, MessageType.CMD_TIMEOUT.name()); // 修正为调用 Command 的简化构造函数
+        super(id, srcLoc, MessageType.CMD_TIMEOUT, destLocs, Collections.emptyMap(),
+            System.currentTimeMillis(), MessageType.CMD_TIMEOUT.name());
         this.timerId = timerId;
     }
 

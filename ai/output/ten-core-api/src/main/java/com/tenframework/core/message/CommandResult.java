@@ -1,14 +1,15 @@
 package com.tenframework.core.message;
 
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.tenframework.core.util.MessageUtils;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 import lombok.experimental.Accessors;
-
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
 
 @EqualsAndHashCode(callSuper = true)
 @Data
@@ -54,11 +55,11 @@ public class CommandResult extends Message implements Cloneable { // 实现 Clon
             String detail) {
         super(MessageUtils.generateUniqueId(), MessageType.CMD_RESULT, srcLoc, destLocs); // 自动生成 id
         this.originalCommandId = originalCommandId;
-        this.originalCmdType = MessageType.CMD_RESULT.ordinal(); // 简化，实际可能需要原始命令的 type
-        this.originalCmdName = originalCommandId; // 原始命令的 ID 作为名称
+        originalCmdType = MessageType.CMD_RESULT.ordinal(); // 简化，实际可能需要原始命令的 type
+        originalCmdName = originalCommandId; // 原始命令的 ID 作为名称
         this.statusCode = statusCode;
-        this.isFinal = true; // 假设结果是最终的
-        this.isCompleted = true; // 假设结果是完成的
+        isFinal = true; // 假设结果是最终的
+        isCompleted = true; // 假设结果是完成的
 
         // detail 放入 properties map
         if (detail != null) {
@@ -66,9 +67,19 @@ public class CommandResult extends Message implements Cloneable { // 实现 Clon
         }
     }
 
+    public static CommandResult success(String originalCommandId, String detail) {
+        // 使用 MessageUtils.generateUniqueId() 生成 id，并提供默认的 srcLoc 和 destLocs
+        return new CommandResult(new Location(), Collections.emptyList(), originalCommandId, 0, detail);
+    }
+
+    public static CommandResult fail(String originalCommandId, String errorMessage) {
+        // 使用 MessageUtils.generateUniqueId() 生成 id，并提供默认的 srcLoc 和 destLocs
+        return new CommandResult(new Location(), Collections.emptyList(), originalCommandId, -1, errorMessage);
+    }
+
     // 新增：判断命令是否成功
     public boolean isSuccess() {
-        return this.statusCode == 0;
+        return statusCode == 0;
     }
 
     // 新增：获取错误信息 (如果存在)
@@ -128,15 +139,5 @@ public class CommandResult extends Message implements Cloneable { // 实现 Clon
             return (String) getProperties().get("detail");
         }
         return null;
-    }
-
-    public static CommandResult success(String originalCommandId, String detail) {
-        // 使用 MessageUtils.generateUniqueId() 生成 id，并提供默认的 srcLoc 和 destLocs
-        return new CommandResult(new Location(), Collections.emptyList(), originalCommandId, 0, detail);
-    }
-
-    public static CommandResult fail(String originalCommandId, String errorMessage) {
-        // 使用 MessageUtils.generateUniqueId() 生成 id，并提供默认的 srcLoc 和 destLocs
-        return new CommandResult(new Location(), Collections.emptyList(), originalCommandId, -1, errorMessage);
     }
 }

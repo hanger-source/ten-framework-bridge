@@ -1,16 +1,15 @@
 package com.tenframework.core.message;
 
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
-
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
 
 /**
  * 音频帧消息，对齐C/Python中的TEN_MSG_TYPE_AUDIO_FRAME。
@@ -149,6 +148,49 @@ public class AudioFrameMessage extends Message {
     }
 
     /**
+     * 创建静音音频帧。
+     *
+     * @param id             消息ID
+     * @param srcLoc         源位置
+     * @param timestamp      消息时间戳
+     * @param durationMs     持续时长（毫秒）
+     * @param sampleRate     采样率
+     * @param channels       声道数
+     * @param bytesPerSample 每采样字节数
+     * @return 静音音频帧实例
+     */
+    public static AudioFrameMessage silence(String id, Location srcLoc, long timestamp, int durationMs, int sampleRate,
+        int channels, int bytesPerSample) {
+        int samplesPerChannel = (durationMs * sampleRate) / 1000;
+        int totalSamples = samplesPerChannel * channels;
+        byte[] silenceData = new byte[totalSamples * bytesPerSample];
+        // 默认为0，表示静音
+
+        return new AudioFrameMessage(id, srcLoc, MessageType.AUDIO_FRAME, Collections.emptyList(),
+            Map.of(), timestamp, // properties, timestamp
+            0L, sampleRate, bytesPerSample, samplesPerChannel, channels,
+            0L, 0, // channelLayout, dataFormat 默认值
+            silenceData, 0, false); // buf, lineSize, isEof 默认值
+    }
+
+    /**
+     * 创建EOF标记音频帧。
+     *
+     * @param id        消息ID
+     * @param srcLoc    源位置
+     * @param timestamp 消息时间戳
+     * @return EOF音频帧实例
+     */
+    public static AudioFrameMessage eof(String id, Location srcLoc, long timestamp) {
+        return new AudioFrameMessage(id, srcLoc, MessageType.AUDIO_FRAME, Collections.emptyList(),
+            Map.of(), timestamp, // properties, timestamp
+            0L, 0, 0, 0, 0, // frameTimestamp, sampleRate, bytesPerSample, samplesPerChannel,
+            // numberOfChannel
+            0L, 0, // channelLayout, dataFormat
+            new byte[0], 0, true); // buf, lineSize, isEof
+    }
+
+    /**
      * 获取音频数据大小（字节数）。
      */
     public int getDataSize() {
@@ -166,7 +208,7 @@ public class AudioFrameMessage extends Message {
      * 设置音频数据（字节数组）。
      */
     public void setDataBytes(byte[] bytes) {
-        this.buf = bytes;
+        buf = bytes;
     }
 
     /**
@@ -217,47 +259,6 @@ public class AudioFrameMessage extends Message {
         return !hasData();
     }
 
-    /**
-     * 创建静音音频帧。
-     *
-     * @param id             消息ID
-     * @param srcLoc         源位置
-     * @param timestamp      消息时间戳
-     * @param durationMs     持续时长（毫秒）
-     * @param sampleRate     采样率
-     * @param channels       声道数
-     * @param bytesPerSample 每采样字节数
-     * @return 静音音频帧实例
-     */
-    public static AudioFrameMessage silence(String id, Location srcLoc, long timestamp, int durationMs, int sampleRate,
-            int channels, int bytesPerSample) {
-        int samplesPerChannel = (durationMs * sampleRate) / 1000;
-        int totalSamples = samplesPerChannel * channels;
-        byte[] silenceData = new byte[totalSamples * bytesPerSample];
-        // 默认为0，表示静音
-
-        return new AudioFrameMessage(id, MessageType.AUDIO_FRAME, srcLoc, Collections.emptyList(),
-                null, Map.of(), timestamp, // 传入 null 作为 name，Map.of() 作为 properties
-                frameTimestamp, sampleRate, bytesPerSample, samplesPerChannel, numberOfChannel,
-                channelLayout, dataFormat, buf, lineSize, isEof);
-    }
-
-    /**
-     * 创建EOF标记音频帧。
-     *
-     * @param id        消息ID
-     * @param srcLoc    源位置
-     * @param timestamp 消息时间戳
-     * @return EOF音频帧实例
-     */
-    public static AudioFrameMessage eof(String id, Location srcLoc, long timestamp) {
-        return new AudioFrameMessage(id, MessageType.AUDIO_FRAME, srcLoc, Collections.emptyList(), null, Map.of(),
-                timestamp, // 传入 null 作为 name
-                0L, 0, // channelLayout, dataFormat 默认值
-                new byte[0], 0, true, // buf, lineSize, isEof 默认值
-                0, 0, 0, 0, 0); // 额外的参数，由于构造函数变长，需要补充
-    }
-
     public boolean checkIntegrity() { // 移除 @Override
         // 假设Message基类有一个checkIntegrity方法，或者在这里实现完整逻辑
         return getId() != null && !getId().isEmpty() &&
@@ -277,9 +278,9 @@ public class AudioFrameMessage extends Message {
     @Override
     public AudioFrameMessage clone() {
         // 实现深拷贝
-        return new AudioFrameMessage(this.getId(), this.getSrcLoc(), this.getDestLocs(),
-                this.frameTimestamp, this.sampleRate, this.bytesPerSample,
-                this.samplesPerChannel, this.numberOfChannel, this.channelLayout,
-                this.dataFormat, this.buf != null ? this.buf.clone() : null, this.lineSize, this.isEof);
+        return new AudioFrameMessage(getId(), getSrcLoc(), getDestLocs(),
+            frameTimestamp, sampleRate, bytesPerSample,
+            samplesPerChannel, numberOfChannel, channelLayout,
+            dataFormat, buf != null ? buf.clone() : null, lineSize, isEof);
     }
 }

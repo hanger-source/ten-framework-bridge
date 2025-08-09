@@ -5,7 +5,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -26,8 +25,6 @@ import com.tenframework.core.message.Location;
 import com.tenframework.core.message.MessageType;
 import com.tenframework.core.message.VideoFrameMessage;
 import com.tenframework.core.message.command.Command;
-import com.tenframework.core.util.JsonUtils;
-import com.tenframework.core.util.MessageUtils;
 import lombok.Builder;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
@@ -46,37 +43,33 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public abstract class AbstractLLMExtension implements Extension {
 
-    protected String extensionName;
-    protected boolean isRunning = false;
-    protected Map<String, Object> configuration;
-    protected AsyncExtensionEnv context;
-
     // 异步处理队列 - 核心组件
     private final BlockingQueue<LLMInputItem> processingQueue;
     private final ExecutorService processingExecutor;
     private final AtomicBoolean processingTaskRunning = new AtomicBoolean(false);
     private final AtomicReference<Future<?>> currentProcessingTask = new AtomicReference<>();
-
     // 工具管理
     private final List<ToolMetadata> availableTools = new CopyOnWriteArrayList<>();
     private final Object toolsLock = new Object();
-
     // 会话状态
     private final Map<String, Object> sessionState = new ConcurrentHashMap<>();
     private final AtomicBoolean interrupted = new AtomicBoolean(false);
-
     // 性能监控 (简化或移除，因为 metrics 包不存在)
     private final ObjectMapper objectMapper = new ObjectMapper(); // 用于 JSON 解析
+    protected String extensionName;
+    protected boolean isRunning = false;
+    protected Map<String, Object> configuration;
+    protected AsyncExtensionEnv context;
 
     public AbstractLLMExtension() {
-        this.processingQueue = new LinkedBlockingQueue<>();
-        this.processingExecutor = Executors.newVirtualThreadPerTaskExecutor();
+        processingQueue = new LinkedBlockingQueue<>();
+        processingExecutor = Executors.newVirtualThreadPerTaskExecutor();
     }
 
     @Override
     public void onConfigure(AsyncExtensionEnv env) {
-        this.extensionName = env.getExtensionName();
-        this.context = env;
+        extensionName = env.getExtensionName();
+        context = env;
         log.info("LLM扩展配置阶段: extensionName={}", extensionName);
         onLLMConfigure(env);
     }
@@ -90,8 +83,8 @@ public abstract class AbstractLLMExtension implements Extension {
     @Override
     public void onStart(AsyncExtensionEnv env) {
         log.info("LLM扩展启动阶段: extensionName={}", extensionName);
-        this.isRunning = true;
-        this.interrupted.set(false);
+        isRunning = true;
+        interrupted.set(false);
 
         // 启动处理队列
         startProcessingQueue(env);
@@ -101,7 +94,7 @@ public abstract class AbstractLLMExtension implements Extension {
     @Override
     public void onStop(AsyncExtensionEnv env) {
         log.info("LLM扩展停止阶段: extensionName={}", extensionName);
-        this.isRunning = false;
+        isRunning = false;
 
         // 停止处理队列
         stopProcessingQueue();
@@ -469,6 +462,16 @@ public abstract class AbstractLLMExtension implements Extension {
         return sessionState;
     }
 
+    @Override
+    public String getExtensionName() {
+        return extensionName;
+    }
+
+    @Override
+    public String getAppUri() {
+        return context != null ? context.getAppUri() : null;
+    }
+
     /**
      * LLM输入项
      */
@@ -492,20 +495,5 @@ public abstract class AbstractLLMExtension implements Extension {
         private String description;
         private Map<String, Object> parameters; // 工具参数的JSON Schema
         private List<String> required; // 必填参数列表
-    }
-
-    @Override
-    public String getExtensionName() {
-        return extensionName;
-    }
-
-    @Override
-    public String getAppUri() {
-        return context != null ? context.getAppUri() : null;
-    }
-
-    @Override
-    public String getGraphId() {
-        return context != null ? context.getGraphId() : null;
     }
 }

@@ -13,6 +13,7 @@ import com.tenframework.core.message.command.Command;
  */
 public interface Extension {
 
+    String getExtensionName();
     /**
      * Extension 配置回调方法。
      *

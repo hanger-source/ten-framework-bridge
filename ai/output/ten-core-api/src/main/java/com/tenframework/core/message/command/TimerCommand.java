@@ -1,17 +1,17 @@
 package com.tenframework.core.message.command;
 
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.tenframework.core.message.Location;
-import com.tenframework.core.message.Message;
 import com.tenframework.core.message.MessageType;
+import com.tenframework.core.util.MessageUtils;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 import lombok.experimental.Accessors;
-
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
 
 /**
  * 定时器命令消息，对齐C/Python中的TEN_MSG_TYPE_CMD_TIMER。
@@ -55,7 +55,7 @@ public class TimerCommand extends Command {
      * 对应C端 `ten_cmd_timer_t` 结构体中的 `times` 字段。
      */
     @JsonProperty("times")
-    private Integer times;
+    private Integer times; // -1 表示无限循环
 
     /**
      * 全参构造函数，用于创建定时器命令消息。
@@ -72,9 +72,7 @@ public class TimerCommand extends Command {
     public TimerCommand(String id, Location srcLoc, List<Location> destLocs,
             Map<String, Object> properties, long timestamp,
             Long timerId, Long timeoutUs, Integer times) {
-        super(id, MessageType.CMD_TIMER, srcLoc, destLocs, MessageType.CMD_TIMER.name(), properties, timestamp); // 修正为调用
-                                                                                                                 // Command
-                                                                                                                 // 的构造函数
+        super(id, srcLoc, MessageType.CMD_TIMER, destLocs, properties, timestamp, MessageType.CMD_TIMER.name());
         this.timerId = timerId;
         this.timeoutUs = timeoutUs;
         this.times = times;
@@ -90,12 +88,27 @@ public class TimerCommand extends Command {
      * @param timeoutUs 超时时间（微秒）。
      * @param times     重复次数。
      */
-    public TimerCommand(String id, Location srcLoc, List<Location> destLocs, Long timerId, Long timeoutUs,
-            Integer times) {
-        super(id, MessageType.CMD_TIMER, srcLoc, destLocs, MessageType.CMD_TIMER.name()); // 修正为调用 Command 的简化构造函数
+    public TimerCommand(Long timerId, Long timeoutUs, Integer times) {
+        super(MessageUtils.generateUniqueId(), MessageType.CMD_TIMER, new Location(), Collections.emptyList(),
+            MessageType.CMD_TIMER.name());
         this.timerId = timerId;
         this.timeoutUs = timeoutUs;
         this.times = times;
     }
 
+    /**
+     * 简化构造函数，仅包含必要的定时器信息
+     *
+     * @param id        消息ID。
+     * @param srcLoc    源位置。
+     * @param timerId   定时器ID。
+     * @param timeoutUs 超时时间（微秒）。
+     * @param times     重复次数。
+     */
+    public TimerCommand(String id, Location srcLoc, Long timerId, Long timeoutUs, Integer times) {
+        super(id, MessageType.CMD_TIMER, srcLoc, Collections.emptyList(), MessageType.CMD_TIMER.name());
+        this.timerId = timerId;
+        this.timeoutUs = timeoutUs;
+        this.times = times;
+    }
 }

@@ -1,5 +1,7 @@
 package com.tenframework.core.command.app;
 
+import java.util.Map;
+
 import com.tenframework.core.app.App;
 import com.tenframework.core.connection.Connection;
 import com.tenframework.core.engine.Engine;
@@ -10,8 +12,6 @@ import com.tenframework.core.message.Location;
 import com.tenframework.core.message.command.Command;
 import com.tenframework.core.message.command.StartGraphCommand;
 import lombok.extern.slf4j.Slf4j;
-
-import java.util.Map;
 
 /**
  * `StartGraphCommandHandler` 处理 `StartGraphCommand` 命令，负责启动 Engine。
@@ -62,7 +62,7 @@ public class StartGraphCommandHandler implements AppCommandHandler {
         Engine engine = app.getEngines().get(actualGraphId);
         if (engine == null) {
             log.info("App: 创建新的 Engine 实例，Graph ID: {}", actualGraphId);
-            engine = new Engine(actualGraphId, graphDefinition, app.getAppRunloop(), app);
+            engine = new Engine(actualGraphId, graphDefinition, app, true);
             app.getEngines().put(actualGraphId, engine);
             engine.start(); // 启动 Engine 及其 Runloop
             log.info("App: Engine {} 已启动。", actualGraphId);

@@ -1,20 +1,18 @@
 package com.tenframework.core.message.command;
 
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.tenframework.core.graph.ExtensionGroupInfo;
+import com.tenframework.core.graph.ExtensionInfo;
 import com.tenframework.core.message.Location;
-import com.tenframework.core.message.Message;
 import com.tenframework.core.message.MessageType;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 import lombok.experimental.Accessors;
-
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-
-import com.tenframework.core.graph.ExtensionGroupInfo;
-import com.tenframework.core.graph.ExtensionInfo;
 
 @EqualsAndHashCode(callSuper = true)
 @Data
@@ -43,8 +41,8 @@ public class StartGraphCommand extends Command {
             Map<String, Object> properties, long timestamp,
             Boolean longRunningMode, String predefinedGraphName,
             List<ExtensionGroupInfo> extensionGroupsInfo, List<ExtensionInfo> extensionsInfo, String graphJson) {
-        super(id, MessageType.CMD_START_GRAPH, srcLoc, destLocs, MessageType.CMD_START_GRAPH.name(), properties,
-                timestamp);
+        super(id, srcLoc, MessageType.CMD_START_GRAPH, destLocs, properties,
+            timestamp, MessageType.CMD_START_GRAPH.name());
         this.longRunningMode = longRunningMode;
         this.predefinedGraphName = predefinedGraphName;
         this.extensionGroupsInfo = extensionGroupsInfo;
@@ -52,13 +50,18 @@ public class StartGraphCommand extends Command {
         this.graphJson = graphJson;
     }
 
-    // 用于内部创建的构造函数，简化参数
+    /**
+     * 用于内部创建的构造函数，简化参数。
+     *
+     * @param longRunningMode 是否是长运行模式。
+     */
     public StartGraphCommand(String id, Location srcLoc, List<Location> destLocs, String graphJsonDefinition,
             boolean longRunningMode) {
-        super(id, MessageType.CMD_START_GRAPH, srcLoc, destLocs, MessageType.CMD_START_GRAPH.name()); // 修正为调用 Command
-                                                                                                      // 的简化构造函数
+        super(id, srcLoc, MessageType.CMD_START_GRAPH, destLocs,
+            Collections.emptyMap(), System.currentTimeMillis(),
+            MessageType.CMD_START_GRAPH.name()); // 修正为调用 Command 的构造函数
         this.longRunningMode = longRunningMode;
-        this.graphJson = graphJsonDefinition;
+        graphJson = graphJsonDefinition;
         // 其他属性可以根据需要设置，或在 Message 的 properties 中进行映射
     }
 
@@ -66,18 +69,19 @@ public class StartGraphCommand extends Command {
     public StartGraphCommand(String id, Location srcLoc, List<Location> destLocs, String message,
             String graphJsonDefinition,
             boolean longRunningMode) {
-        super(id, MessageType.CMD_START_GRAPH, srcLoc, destLocs, MessageType.CMD_START_GRAPH.name(),
-                Map.of("message", message), System.currentTimeMillis()); // 修正为调用 Command 的构造函数
+        super(id, srcLoc, MessageType.CMD_START_GRAPH, destLocs,
+            Map.of("message", message), System.currentTimeMillis(),
+            MessageType.CMD_START_GRAPH.name()); // 修正为调用 Command 的构造函数
         this.longRunningMode = longRunningMode;
-        this.graphJson = graphJsonDefinition;
+        graphJson = graphJsonDefinition;
     }
 
     // 辅助方法：获取 graphJsonDefinition (与 C 端字段名对齐)
     public String getGraphJsonDefinition() {
-        return this.graphJson;
+        return graphJson;
     }
 
     public boolean isLongRunningMode() {
-        return this.longRunningMode != null ? this.longRunningMode : false; // 默认为 false
+        return longRunningMode != null ? longRunningMode : false; // 默认为 false
     }
 }
