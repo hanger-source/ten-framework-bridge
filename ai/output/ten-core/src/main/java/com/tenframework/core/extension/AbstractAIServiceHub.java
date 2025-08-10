@@ -3,13 +3,12 @@ package com.tenframework.core.extension;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
-import com.tenframework.core.extension.ExtensionContext;
-import com.tenframework.core.tenenv.TenEnv;
 import com.tenframework.core.message.AudioFrameMessage;
 import com.tenframework.core.message.CommandResult;
 import com.tenframework.core.message.DataMessage;
 import com.tenframework.core.message.VideoFrameMessage;
 import com.tenframework.core.message.command.Command;
+import com.tenframework.core.tenenv.TenEnv;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 

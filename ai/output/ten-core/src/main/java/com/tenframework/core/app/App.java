@@ -91,46 +91,12 @@ public class App implements Agent {
      * @param configFilePath         配置文件路径 (例如 property.json)，可以为 null。
      */
     public App(String appUri, boolean hasOwnRunloopPerEngine, String configFilePath) {
-        this.appUri = appUri;
-        this.hasOwnRunloopPerEngine = hasOwnRunloopPerEngine;
-        engines = new ConcurrentHashMap<>();
-        orphanConnections = Collections.synchronizedList(new java.util.ArrayList<>());
-        // this.pathTable = new PathTable(); // App 级别 PathTable - 移除 App 级别 PathTable
-        remotes = new ConcurrentHashMap<>(); // 初始化远程连接映射
-        availableExtensions = new ConcurrentHashMap<>(); // 初始化 Extension 注册表
-
-        // 加载配置
-        if (configFilePath != null && !configFilePath.isEmpty()) {
-            loadConfig(configFilePath);
-        } else {
-            appConfig = new GraphConfig(new ConcurrentHashMap<>()); // 创建一个空的默认配置
-            log.warn("App: 未提供配置文件路径，使用默认空配置。");
-        }
-
-        appRunloop = new Runloop("AppRunloop-" + appUri);
-        appRunloop.registerExternalAgent(this); // 注册消息处理器到 App Runloop，传入this
-        // appTenEnv = new AppTenEnv(appUri, appConfig != null ?
-        // appConfig.getProperties() : Collections.emptyMap(), this,
-        // appRunloop); // 移除此行
-        // tenComponentRuntime = new TenComponentRuntime(appRunloop); // 移除此行
-
-        appCommandHandlers = new HashMap<>(); // 初始化 App 命令处理器映射
-        registerAppCommandHandlers(); // 注册 App 级别的命令处理器
-        inMsgs = new ManyToOneConcurrentArrayQueue<>(Runloop.DEFAULT_INTERNAL_QUEUE_CAPACITY); // 初始化 App 消息输入队列
-
-        // 初始化 App 自身的 TenEnvProxy 实例
-        appEnvProxy = new TenEnvProxy<>(appRunloop, new AppEnvImpl(this, appRunloop, appConfig), "App-" + appUri); // 为
-        // App
-        // 传入
-        // AppEnvImpl
-        // 实例
-        commandFutures = new ConcurrentHashMap<>(); // 初始化 commandFutures
-
-        log.info("App {} created with hasOwnRunloopPerEngine={}", appUri, hasOwnRunloopPerEngine);
+        this(appUri, hasOwnRunloopPerEngine, loadConfigInternal(configFilePath)); // 直接调用新的静态方法
+        log.info("App {} created via config file with hasOwnRunloopPerEngine={}", appUri, hasOwnRunloopPerEngine);
     }
 
     /**
-     * App 的构造函数。
+     * App 的主构造函数。
      *
      * @param appUri                 应用程序的 URI。
      * @param hasOwnRunloopPerEngine 是否为每个 Engine 创建独立的 Runloop。
@@ -141,13 +107,11 @@ public class App implements Agent {
         this.hasOwnRunloopPerEngine = hasOwnRunloopPerEngine;
         engines = new ConcurrentHashMap<>();
         orphanConnections = Collections.synchronizedList(new java.util.ArrayList<>());
-        // this.pathTable = new PathTable(); // App 级别 PathTable - 移除 App 级别 PathTable
         remotes = new ConcurrentHashMap<>(); // 初始化远程连接映射
         availableExtensions = new ConcurrentHashMap<>(); // 初始化 Extension 注册表
 
         this.appConfig = appConfig != null ? appConfig : new GraphConfig(new ConcurrentHashMap<>()); // 使用传入的配置或默认空配置
-        appRunloop = new Runloop("AppRunloop-" + appUri);
-        appRunloop.registerExternalAgent(this); // 注册消息处理器到 App Runloop，传入this
+        appRunloop = Runloop.createRunloopWithWorker("AppRunloop-%s".formatted(appUri), this);
 
         appCommandHandlers = new HashMap<>(); // 初始化 App 命令处理器映射
         registerAppCommandHandlers(); // 注册 App 级别的命令处理器
@@ -167,15 +131,21 @@ public class App implements Agent {
         appCommandHandlers.put(MessageType.CMD_CLOSE_APP, new CloseAppCommandHandler());
     }
 
-    // 私有方法：加载配置文件
-    private void loadConfig(String configFilePath) {
-        try {
-            String jsonContent = Files.readString(Paths.get(configFilePath));
-            appConfig = OBJECT_MAPPER.readValue(jsonContent, GraphConfig.class);
-            log.info("App: 从 {} 加载配置成功。", configFilePath);
-        } catch (IOException e) {
-            log.error("App: 加载配置文件 {} 失败: {}", configFilePath, e.getMessage());
-            appConfig = new GraphConfig(new ConcurrentHashMap<>()); // 加载失败时使用空配置
+    // 私有静态方法：加载配置文件，返回 GraphConfig
+    private static GraphConfig loadConfigInternal(String configFilePath) {
+        if (configFilePath != null && !configFilePath.isEmpty()) {
+            try {
+                String jsonContent = Files.readString(Paths.get(configFilePath));
+                GraphConfig config = OBJECT_MAPPER.readValue(jsonContent, GraphConfig.class);
+                log.info("App: 从 {} 加载配置成功。", configFilePath);
+                return config;
+            } catch (IOException e) {
+                log.error("App: 加载配置文件 {} 失败: {}", configFilePath, e.getMessage());
+                return new GraphConfig(new ConcurrentHashMap<>()); // 加载失败时使用空配置
+            }
+        } else {
+            log.warn("App: 未提供配置文件路径，使用默认空配置。");
+            return new GraphConfig(new ConcurrentHashMap<>()); // 创建一个空的默认配置
         }
     }
 
@@ -307,11 +277,11 @@ public class App implements Agent {
                 Remote targetRemote = remotes.get(remoteId);
                 if (targetRemote == null) {
                     log.warn("App: 目标 Remote {} (App URI) 不存在，消息 {} 无法路由。需要实现 Remote 的创建。", remoteId,
-                        message.getId());
+                            message.getId());
                     // 暂时发送回源连接，表示无法路由
                     if (sourceConnection != null) {
                         appEnvProxy.sendResult(CommandResult.fail(message.getId(),
-                            "Remote " + remoteId + " not found.")); // 使用 appEnvProxy 发送错误结果
+                                "Remote " + remoteId + " not found.")); // 使用 appEnvProxy 发送错误结果
                     }
                 } else {
                     log.debug("App: 路由消息 {} 到 Remote {}。", message.getId(), remoteId);
@@ -352,7 +322,7 @@ public class App implements Agent {
                     // 如果 remote 不存在，并且有 sourceConnection，通过 appEnvProxy 返回错误结果
                     if (sourceConnection != null) {
                         appEnvProxy.sendResult(CommandResult.fail(message.getId(),
-                            "Remote %s not found.".formatted(remoteAppUri)));
+                                "Remote %s not found.".formatted(remoteAppUri)));
                     }
                 }
             }
@@ -397,20 +367,20 @@ public class App implements Agent {
                         handler.handle(appEnvProxy, command, connection);
                     } catch (Exception e) {
                         log.error("App {}: 命令处理器处理命令 {} 失败: {}", appUri, command.getId(),
-                            e.getMessage(),
-                            e);
+                                e.getMessage(),
+                                e);
                         if (connection != null) {
                             CommandResult errorResult = CommandResult.fail(command.getId(),
-                                "App command handling failed: %s".formatted(e.getMessage()));
+                                    "App command handling failed: %s".formatted(e.getMessage()));
                             connection.sendOutboundMessage(errorResult);
                         }
                     }
                 } else {
                     log.warn("App {}: 未知 App 级别命令类型或没有注册处理器: {}", appUri,
-                        command.getType());
+                            command.getType());
                     if (connection != null) {
                         CommandResult errorResult = CommandResult.fail(command.getId(),
-                            "Unknown App command type or no handler registered: %s".formatted(command.getType()));
+                                "Unknown App command type or no handler registered: %s".formatted(command.getType()));
                         connection.sendOutboundMessage(errorResult);
                     }
                 }
@@ -447,7 +417,7 @@ public class App implements Agent {
      */
     public void routeCommandResult(CommandResult commandResult) {
         // 确保在 App 的 Runloop 线程中执行
-        if (!appRunloop.isCurrentThread()) {
+        if (appRunloop.isNotCurrentThread()) {
             appRunloop.postTask(() -> routeCommandResult(commandResult));
             return;
         }
@@ -459,8 +429,8 @@ public class App implements Agent {
                 future.complete(commandResult);
             } else {
                 future.completeExceptionally(new RuntimeException(
-                    "Command failed with status: %d, Detail: %s".formatted(commandResult.getStatusCode(),
-                        commandResult.getDetail())));
+                        "Command failed with status: %d, Detail: %s".formatted(commandResult.getStatusCode(),
+                                commandResult.getDetail())));
             }
         } else {
             log.warn("App {}: 未找到与命令结果 {} 对应的 Future。", appUri, commandResult.getOriginalCommandId());
@@ -482,7 +452,7 @@ public class App implements Agent {
     public CompletableFuture<CommandResult> submitCommand(Command command) {
         CompletableFuture<CommandResult> future = new CompletableFuture<>();
         // 确保在 App 的 Runloop 线程中执行
-        if (!appRunloop.isCurrentThread()) {
+        if (appRunloop.isNotCurrentThread()) {
             appRunloop.postTask(() -> {
                 // 将 CompletableFuture 放入 commandFutures 映射
                 commandFutures.put(command.getId(), future);

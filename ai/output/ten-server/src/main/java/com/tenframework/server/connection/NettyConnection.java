@@ -52,12 +52,7 @@ public class NettyConnection extends AbstractConnection {
         CompletableFuture<Void> future = new CompletableFuture<>();
         if (channel.isActive()) {
             try {
-                // 将 Message 对象序列化为 MsgPack 字节数组
-                byte[] msgpackData = objectMapper.writeValueAsBytes(message);
-                ByteBuf buffer = Unpooled.wrappedBuffer(msgpackData);
-                BinaryWebSocketFrame frame = new BinaryWebSocketFrame(buffer);
-
-                ChannelFuture writeFuture = channel.writeAndFlush(frame);
+                ChannelFuture writeFuture = channel.writeAndFlush(message);
                 writeFuture.addListener(f -> {
                     if (f.isSuccess()) {
                         log.debug("NettyConnection {}: 消息 {} (类型: {}) 发送成功。", getConnectionId(), message.getId(),

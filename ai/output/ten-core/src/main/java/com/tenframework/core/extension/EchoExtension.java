@@ -11,6 +11,8 @@ import com.tenframework.core.message.command.Command;
 import com.tenframework.core.tenenv.TenEnv;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.Map;
+
 /**
  * EchoExtension - 简单的回显扩展
  * 用于验证端到端消息流和生命周期
@@ -43,8 +45,8 @@ public class EchoExtension extends BaseExtension { // Extend BaseExtension
     }
 
     @Override
-    public void init(String extensionId, GraphConfig config, TenEnv env) { // 修改签名
-        super.init(extensionId, config, env); // Call super method
+    public void init(String extensionId, Map<String, Object> properties, TenEnv env) { // 修改签名
+        super.init(extensionId, properties, env); // Call super method
         this.extensionName = extensionId; // Re-assign for consistency if needed
         // this.env = env; // Set in BaseExtension
         log.info("EchoExtension {} initialized.", extensionId);

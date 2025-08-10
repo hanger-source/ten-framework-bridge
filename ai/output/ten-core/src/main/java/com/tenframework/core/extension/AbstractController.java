@@ -40,11 +40,11 @@ public abstract class AbstractController extends BaseExtension {
     // 移除 engine 和 extensionContext 字段
 
     @Override
-    public void init(String extensionId, GraphConfig config, TenEnv env) { // 修改签名
-        super.init(extensionId, config, env); // 调用父类方法
+    public void init(String extensionId, Map<String, Object> properties, TenEnv env) { // 修改签名
+        super.init(extensionId, properties, env); // 调用父类方法
         this.extensionName = extensionId; // 重新赋值，确保一致
         // this.env = env; // 已经在父类中设置
-        this.configuration = config.toMap(); // 重新赋值，确保一致
+        // this.configuration = config.toMap(); // 移除此行，因为已经在 BaseExtension 的 init 中处理
         log.info("AbstractController {} initialized with TenEnv.", extensionId);
     }
 

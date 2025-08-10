@@ -8,12 +8,17 @@ import com.tenframework.core.message.VideoFrameMessage;
 import com.tenframework.core.message.command.Command;
 import com.tenframework.core.tenenv.TenEnv;
 
+import java.util.Map;
+import java.util.Optional;
+
 /**
  * `Extension` 接口定义了 ten-framework 中 Extension 的生命周期回调和消息处理方法。
  * Extension 是 Engine 内部的业务处理单元，通过 `TenEnvProxy` 与 Engine 异步交互。
  * 它对应 C 语言中的 `ten_extension_t`。
  */
 public interface Extension {
+
+    String getExtensionId();
 
     String getExtensionName();
 
@@ -23,10 +28,10 @@ public interface Extension {
      * Extension 的初始化方法。
      *
      * @param extensionId Extension 的唯一 ID。
-     * @param config      Extension 的配置。
+     * @param properties  Extension 的配置属性。
      * @param env         此 Extension 的 TenEnv 环境句柄。
      */
-    default void init(String extensionId, GraphConfig config, TenEnv env) {
+    default void init(String extensionId, Map<String, Object> properties, TenEnv env) {
         // Default implementation
     }
 
@@ -133,4 +138,39 @@ public interface Extension {
     default void onVideoFrame(TenEnv env, VideoFrameMessage videoFrame) {
         // Default implementation
     }
+
+    // 新增属性访问方法
+    Optional<Object> getProperty(String path);
+
+    void setProperty(String path, Object value);
+
+    boolean hasProperty(String path);
+
+    void deleteProperty(String path);
+
+    Optional<Integer> getPropertyInt(String path);
+
+    void setPropertyInt(String path, int value);
+
+    Optional<Long> getPropertyLong(String path);
+
+    void setPropertyLong(String path, long value);
+
+    Optional<String> getPropertyString(String path);
+
+    void setPropertyString(String path, String value);
+
+    Optional<Boolean> getPropertyBool(String path);
+
+    void setPropertyBool(String path, boolean value);
+
+    Optional<Double> getPropertyDouble(String path);
+
+    void setPropertyDouble(String path, double value);
+
+    Optional<Float> getPropertyFloat(String path);
+
+    void setPropertyFloat(String path, float value);
+
+    void initPropertyFromJson(String jsonStr);
 }

@@ -1,7 +1,6 @@
 package com.tenframework.core.engine;
 
 import com.tenframework.core.message.Message;
-import com.tenframework.core.extension.ExtensionContext; // 引入 ExtensionContext
 
 /**
  * 负责将消息分发到Engine内部的Extension。

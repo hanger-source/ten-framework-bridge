@@ -13,6 +13,11 @@ import java.util.Map;
 @Accessors(chain = true)
 public class ExtensionGroupInfo {
 
+    public ExtensionGroupInfo(String extensionGroupInstanceName, Map<String, Object> property) {
+        this.extensionGroupInstanceName = extensionGroupInstanceName;
+        this.property = property;
+    }
+
     @JsonProperty("extension_group_addon_name")
     private String extensionGroupAddonName;
 

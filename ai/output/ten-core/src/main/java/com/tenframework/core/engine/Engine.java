@@ -16,7 +16,6 @@ import com.tenframework.core.command.EngineCommandHandler;
 import com.tenframework.core.command.engine.TimeoutCommandHandler;
 import com.tenframework.core.command.engine.TimerCommandHandler;
 import com.tenframework.core.connection.Connection;
-import com.tenframework.core.extension.ExtensionContext;
 import com.tenframework.core.graph.ExtensionInfo;
 import com.tenframework.core.graph.GraphDefinition;
 import com.tenframework.core.message.CommandResult;
@@ -50,7 +49,7 @@ public class Engine implements Agent, MessageSubmitter, CommandSubmitter { // Im
     private final GraphDefinition graphDefinition; // 引擎所加载的 Graph 的定义
     private final Runloop runloop; // 引擎自身的运行循环
     private final PathTable pathTable; // 消息路由表
-    private final ExtensionContext extensionContext; // 扩展上下文管理器
+    private final EngineExtensionContext engineExtensionContext; // 扩展上下文管理器
     private final ExtensionMessageDispatcher messageDispatcher; // 消息派发器
     private final Map<MessageType, EngineCommandHandler> commandHandlers; // 新增命令处理器映射
     private final ManyToOneConcurrentArrayQueue<Message> inMsgs; // 消息输入队列
@@ -79,8 +78,7 @@ public class Engine implements Agent, MessageSubmitter, CommandSubmitter { // Im
 
         // Engine 自身的 Runloop 初始化
         if (hasOwnLoop) {
-            runloop = new Runloop("%s-runloop".formatted(graphId)); // 每个 Engine 都有自己的 Runloop
-            runloop.registerExternalAgent(this); // 注册 Engine 自身作为 Runloop 的外部事件源
+            runloop = Runloop.createRunloopWithWorker("%s-runloop".formatted(graphId), this); // 每个 Engine 都有自己的 Runloop
         } else { // 如果没有自己的 Runloop，则尝试使用 App 的 Runloop
             // 确保 app.getAppRunloop() 不为 null，否则这是一个逻辑错误
             if (app.getAppRunloop() == null) {
@@ -89,7 +87,6 @@ public class Engine implements Agent, MessageSubmitter, CommandSubmitter { // Im
                         .formatted(graphId));
             }
             runloop = app.getAppRunloop(); // 使用 App 的 Runloop
-            runloop.registerExternalAgent(this); // 将 Engine 的 doWork 方法注册到 App 的 Runloop
         }
 
         // 移除不必要的初始化，TenEnvProxy 已经处理了底层 TenEnv 的概念
@@ -101,13 +98,14 @@ public class Engine implements Agent, MessageSubmitter, CommandSubmitter { // Im
         pathTable = new PathTable(PathTableAttachedTo.ENGINE, this, this); // Update
 
         // 修正 extensionContext 的初始化，使用 Engine 自身作为 MessageSubmitter 和 CommandSubmitter
-        extensionContext = new ExtensionContext(this, app, pathTable, this, this); // Pass this (Engine) as submitters
+        engineExtensionContext = new EngineExtensionContext(this, app, pathTable, this,
+            this); // Pass this (Engine) as submitters
 
         // 初始化消息派发器
         // DefaultExtensionMessageDispatcher 期望 ExtensionContext 和 ConcurrentMap<Long,
         // CompletableFuture<Object>>
         // 这里需要传递 commandFutures，并处理泛型兼容性问题
-        messageDispatcher = new DefaultExtensionMessageDispatcher(extensionContext,
+        messageDispatcher = new DefaultExtensionMessageDispatcher(engineExtensionContext,
             (ConcurrentMap)commandFutures); // Cast
         // to
         // raw
@@ -123,7 +121,7 @@ public class Engine implements Agent, MessageSubmitter, CommandSubmitter { // Im
         engineEnvProxy = new TenEnvProxy<>(runloop,
             new EngineEnvImpl(this, runloop, graphDefinition.getProperties(), app), // Modified parameters to match
             // EngineEnvImpl constructor
-            "Engine-" + graphId);
+            "Engine-%s".formatted(graphId));
 
         // 注册 Engine 级别的命令处理器
         commandHandlers = new HashMap<>(); // Initialize commandHandlers map here
@@ -165,7 +163,8 @@ public class Engine implements Agent, MessageSubmitter, CommandSubmitter { // Im
         if (graphDefinition.getExtensions() != null) {
             for (ExtensionInfo extInfo : graphDefinition.getExtensions()) {
                 // 加载 Extension
-                extensionContext.loadExtension(extInfo.getLoc().getExtensionName(), extInfo.getExtensionAddonName(),
+                engineExtensionContext.loadExtension(extInfo.getLoc().getExtensionName(),
+                    extInfo.getExtensionAddonName(),
                     graphDefinition.getProperties(), runloop, extInfo); // Pass graphDefinition.getProperties() as
                 // config
             }
@@ -183,7 +182,7 @@ public class Engine implements Agent, MessageSubmitter, CommandSubmitter { // Im
         isClosing = true;
 
         // 停止所有 Extension
-        extensionContext.unloadAllExtensions(); // Call unloadAllExtensions instead of cleanup
+        engineExtensionContext.unloadAllExtensions(); // Call unloadAllExtensions instead of cleanup
 
         // 清理所有命令的 CompletableFuture
         commandFutures.values().forEach(future -> {
@@ -262,7 +261,7 @@ public class Engine implements Agent, MessageSubmitter, CommandSubmitter { // Im
     private void processCommand(Command command) {
         // 如果是 App 级别或 Engine 级别的命令，由 Engine 自身处理
         if (command.getDestLocs() != null && !command.getDestLocs().isEmpty()) {
-            Location destLoc = command.getDestLocs().get(0); // 假设只处理第一个目的地
+            Location destLoc = command.getDestLocs().getFirst(); // 假设只处理第一个目的地
 
             if (graphId.equals(destLoc.getGraphId()) && destLoc.getExtensionName() == null) {
                 // 目标是当前 Engine 自身
@@ -287,7 +286,7 @@ public class Engine implements Agent, MessageSubmitter, CommandSubmitter { // Im
                 }
             } else if (graphId.equals(destLoc.getGraphId())) {
                 // 目标是当前 Engine 内部的 Extension
-                extensionContext.dispatchCommandToExtension(command, destLoc.getExtensionName());
+                engineExtensionContext.dispatchCommandToExtension(command, destLoc.getExtensionName());
             } else {
                 // 目标是其他 Engine 或 App，应由 App 路由
                 app.sendMessageToLocation(command, null); // 委托给 App 路由
@@ -358,7 +357,7 @@ public class Engine implements Agent, MessageSubmitter, CommandSubmitter { // Im
     @Override
     public void submitCommandResult(CommandResult commandResult) { // Renamed from routeCommandResult
         // 确保在 Engine 的 Runloop 线程中执行
-        if (!runloop.isCurrentThread()) {
+        if (runloop.isNotCurrentThread()) {
             runloop.postTask(() -> submitCommandResult(commandResult)); // Changed to submitCommandResult
             return;
         }
@@ -411,7 +410,7 @@ public class Engine implements Agent, MessageSubmitter, CommandSubmitter { // Im
     public CompletableFuture<CommandResult> submitCommand(Command command) {
         CompletableFuture<CommandResult> future = new CompletableFuture<>();
         // 确保在 Engine 的 Runloop 线程中执行
-        if (!runloop.isCurrentThread()) {
+        if (runloop.isNotCurrentThread()) {
             runloop.postTask(() -> {
                 // 将 CompletableFuture 放入 commandFutures 映射
                 commandFutures.put(Long.parseLong(command.getId()), future);

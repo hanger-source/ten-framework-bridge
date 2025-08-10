@@ -25,19 +25,17 @@ public class ExtensionEnvImpl implements TenEnv {
 
     private final String extensionId;
     private final Extension extension;
-    private final GraphConfig config;
     private final String appUri;
     private final String graphId;
     private final ExtensionCommandSubmitter commandSubmitter;
     private final ExtensionMessageSubmitter messageSubmitter;
     private final Runloop extensionRunloop; // Extension 所在的 Runloop
 
-    public ExtensionEnvImpl(String extensionId, Extension extension, GraphConfig config, String appUri, String graphId,
+    public ExtensionEnvImpl(String extensionId, Extension extension, String appUri, String graphId,
             ExtensionCommandSubmitter commandSubmitter, ExtensionMessageSubmitter messageSubmitter,
             Runloop extensionRunloop) {
         this.extensionId = extensionId;
         this.extension = extension;
-        this.config = config;
         this.appUri = appUri;
         this.graphId = graphId;
         this.commandSubmitter = commandSubmitter;
@@ -58,7 +56,7 @@ public class ExtensionEnvImpl implements TenEnv {
             return commandSubmitter.submitCommandFromExtension(command, extensionId);
         } else {
             return CompletableFuture.failedFuture(new IllegalStateException(
-                "ExtensionCommandSubmitter is null, cannot send command for Extension: %s".formatted(extensionId)));
+                    "ExtensionCommandSubmitter is null, cannot send command for Extension: %s".formatted(extensionId)));
         }
     }
 
@@ -117,87 +115,87 @@ public class ExtensionEnvImpl implements TenEnv {
 
     @Override
     public Optional<Object> getProperty(String path) {
-        return config.getProperty(path);
+        return extension.getProperty(path);
     }
 
     @Override
     public void setProperty(String path, Object value) {
-        config.setProperty(path, value);
+        extension.setProperty(path, value);
     }
 
     @Override
     public boolean hasProperty(String path) {
-        return config.hasProperty(path);
+        return extension.hasProperty(path);
     }
 
     @Override
     public void deleteProperty(String path) {
-        config.deleteProperty(path);
+        extension.deleteProperty(path);
     }
 
     @Override
     public Optional<Integer> getPropertyInt(String path) {
-        return config.getPropertyInt(path);
+        return extension.getPropertyInt(path);
     }
 
     @Override
     public void setPropertyInt(String path, int value) {
-        config.setPropertyInt(path, value);
+        extension.setPropertyInt(path, value);
     }
 
     @Override
     public Optional<Long> getPropertyLong(String path) {
-        return config.getPropertyLong(path);
+        return extension.getPropertyLong(path);
     }
 
     @Override
     public void setPropertyLong(String path, long value) {
-        config.setPropertyLong(path, value);
+        extension.setPropertyLong(path, value);
     }
 
     @Override
     public Optional<String> getPropertyString(String path) {
-        return config.getPropertyString(path);
+        return extension.getPropertyString(path);
     }
 
     @Override
     public void setPropertyString(String path, String value) {
-        config.setPropertyString(path, value);
+        extension.setPropertyString(path, value);
     }
 
     @Override
     public Optional<Boolean> getPropertyBool(String path) {
-        return config.getPropertyBool(path);
+        return extension.getPropertyBool(path);
     }
 
     @Override
     public void setPropertyBool(String path, boolean value) {
-        config.setPropertyBool(path, value);
+        extension.setPropertyBool(path, value);
     }
 
     @Override
     public Optional<Double> getPropertyDouble(String path) {
-        return config.getPropertyDouble(path);
+        return extension.getPropertyDouble(path);
     }
 
     @Override
     public void setPropertyDouble(String path, double value) {
-        config.setPropertyDouble(path, value);
+        extension.setPropertyDouble(path, value);
     }
 
     @Override
     public Optional<Float> getPropertyFloat(String path) {
-        return config.getPropertyFloat(path);
+        return extension.getPropertyFloat(path);
     }
 
     @Override
     public void setPropertyFloat(String path, float value) {
-        config.setPropertyFloat(path, value);
+        extension.setPropertyFloat(path, value);
     }
 
     @Override
     public void initPropertyFromJson(String jsonStr) {
-        config.initPropertyFromJson(jsonStr);
+        extension.initPropertyFromJson(jsonStr);
     }
 
     @Override

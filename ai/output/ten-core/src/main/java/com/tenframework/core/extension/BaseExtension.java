@@ -3,7 +3,11 @@ package com.tenframework.core.extension;
 import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.Optional;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tenframework.core.graph.GraphConfig;
 import com.tenframework.core.message.AudioFrameMessage;
 import com.tenframework.core.message.CommandResult;
@@ -36,12 +40,20 @@ public abstract class BaseExtension implements Extension {
 
     // Removed engine and extensionContext fields as per previous refactoring
     protected String extensionName;
+    protected String extensionId; // 新增：存储 Extension 的 ID
     protected TenEnv env; // Change from TenEnvProxy to TenEnv
-    protected Map<String, Object> configuration = Collections.emptyMap();
+    protected Map<String, Object> configuration; // Change to non-final and allow initialization in init
+
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     @Override
     public String getExtensionName() {
         return extensionName;
+    }
+
+    @Override
+    public String getExtensionId() {
+        return extensionId;
     }
 
     @Override
@@ -50,11 +62,13 @@ public abstract class BaseExtension implements Extension {
     }
 
     @Override
-    public void init(String extensionId, GraphConfig config, TenEnv env) { // Changed parameter to TenEnv
+    public void init(String extensionId, Map<String, Object> properties, TenEnv env) { // Changed parameter to
+                                                                                       // Map<String, Object>
+        this.extensionId = extensionId; // 设置 extensionId
         extensionName = extensionId;
         this.env = env; // Assign new TenEnv
-        configuration = config.toMap();
-        log.info("BaseExtension {} initialized with TenEnv.", extensionId);
+        this.configuration = new ConcurrentHashMap<>(properties); // Initialize properties
+        log.info("BaseExtension {} initialized with TenEnv and properties.", extensionId);
     }
 
     @Override
@@ -137,6 +151,216 @@ public abstract class BaseExtension implements Extension {
                 getExtensionName(),
                 videoFrame.getId(), videoFrame.getType(), inboundMessageCounter.get());
         errorCounter.incrementAndGet(); // Increment error count for unhandled video frames
+    }
+
+    // ----------------------------------------------------------------------------------------------------------------
+    // 属性访问方法 (实现 Extension 接口)
+    // ----------------------------------------------------------------------------------------------------------------
+
+    @Override
+    public Optional<Object> getProperty(String path) {
+        return getPropertyInternal(configuration, path);
+    }
+
+    @Override
+    public void setProperty(String path, Object value) {
+        setPropertyInternal(configuration, path, value);
+    }
+
+    @Override
+    public boolean hasProperty(String path) {
+        return getProperty(path).isPresent();
+    }
+
+    @Override
+    public void deleteProperty(String path) {
+        deletePropertyInternal(configuration, path);
+    }
+
+    @Override
+    public Optional<Integer> getPropertyInt(String path) {
+        return getProperty(path).map(o -> {
+            if (o instanceof Integer) {
+                return (Integer) o;
+            } else if (o instanceof String) {
+                try {
+                    return Integer.parseInt((String) o);
+                } catch (NumberFormatException e) {
+                    return null; // 或者抛出异常
+                }
+            } else {
+                return null; // 或者抛出异常
+            }
+        });
+    }
+
+    @Override
+    public void setPropertyInt(String path, int value) {
+        setProperty(path, value);
+    }
+
+    @Override
+    public Optional<Long> getPropertyLong(String path) {
+        return getProperty(path).map(o -> {
+            if (o instanceof Long) {
+                return (Long) o;
+            } else if (o instanceof Integer) {
+                return ((Integer) o).longValue();
+            } else if (o instanceof String) {
+                try {
+                    return Long.parseLong((String) o);
+                } catch (NumberFormatException e) {
+                    return null; // 或者抛出异常
+                }
+            } else {
+                return null; // 或者抛出异常
+            }
+        });
+    }
+
+    @Override
+    public void setPropertyLong(String path, long value) {
+        setProperty(path, value);
+    }
+
+    @Override
+    public Optional<String> getPropertyString(String path) {
+        return getProperty(path).map(Object::toString);
+    }
+
+    @Override
+    public void setPropertyString(String path, String value) {
+        setProperty(path, value);
+    }
+
+    @Override
+    public Optional<Boolean> getPropertyBool(String path) {
+        return getProperty(path).map(o -> {
+            if (o instanceof Boolean) {
+                return (Boolean) o;
+            } else if (o instanceof String) {
+                return Boolean.parseBoolean((String) o);
+            } else {
+                return null;
+            }
+        });
+    }
+
+    @Override
+    public void setPropertyBool(String path, boolean value) {
+        setProperty(path, value);
+    }
+
+    @Override
+    public Optional<Double> getPropertyDouble(String path) {
+        return getProperty(path).map(o -> {
+            if (o instanceof Double) {
+                return (Double) o;
+            } else if (o instanceof Float) {
+                return ((Float) o).doubleValue();
+            } else if (o instanceof String) {
+                try {
+                    return Double.parseDouble((String) o);
+                } catch (NumberFormatException e) {
+                    return null;
+                }
+            } else {
+                return null;
+            }
+        });
+    }
+
+    @Override
+    public void setPropertyDouble(String path, double value) {
+        setProperty(path, value);
+    }
+
+    @Override
+    public Optional<Float> getPropertyFloat(String path) {
+        return getProperty(path).map(o -> {
+            if (o instanceof Float) {
+                return (Float) o;
+            } else if (o instanceof Double) {
+                return ((Double) o).floatValue();
+            } else if (o instanceof String) {
+                try {
+                    return Float.parseFloat((String) o);
+                } catch (NumberFormatException e) {
+                    return null;
+                }
+            } else {
+                return null;
+            }
+        });
+    }
+
+    @Override
+    public void setPropertyFloat(String path, float value) {
+        setProperty(path, value);
+    }
+
+    @Override
+    public void initPropertyFromJson(String jsonStr) {
+        try {
+            Map<String, Object> jsonMap = OBJECT_MAPPER.readValue(jsonStr, Map.class);
+            this.configuration.putAll(jsonMap);
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException("Failed to initialize properties from JSON", e);
+        }
+    }
+
+    // 辅助方法，用于处理嵌套路径 (与 GraphConfig 复制，考虑重构)
+    private Optional<Object> getPropertyInternal(Map<String, Object> currentMap, String path) {
+        String[] parts = path.split("\\.", 2);
+        String currentKey = parts[0];
+        if (!currentMap.containsKey(currentKey)) {
+            return Optional.empty();
+        }
+
+        Object value = currentMap.get(currentKey);
+        if (parts.length == 1) {
+            return Optional.ofNullable(value);
+        } else {
+            if (value instanceof Map) {
+                return getPropertyInternal((Map<String, Object>) value, parts[1]);
+            } else {
+                return Optional.empty(); // 路径中有嵌套，但当前值不是Map
+            }
+        }
+    }
+
+    private void setPropertyInternal(Map<String, Object> currentMap, String path, Object value) {
+        String[] parts = path.split("\\.", 2);
+        String currentKey = parts[0];
+        if (parts.length == 1) {
+            currentMap.put(currentKey, value);
+        } else {
+            currentMap.computeIfAbsent(currentKey, k -> new ConcurrentHashMap<>());
+            if (currentMap.get(currentKey) instanceof Map) {
+                setPropertyInternal((Map<String, Object>) currentMap.get(currentKey), parts[1], value);
+            } else {
+                // 如果中间节点不是Map，则抛出异常或覆盖
+                throw new IllegalArgumentException(
+                        "Cannot set property: intermediate path '" + currentKey + "' is not a map.");
+            }
+        }
+    }
+
+    private void deletePropertyInternal(Map<String, Object> currentMap, String path) {
+        String[] parts = path.split("\\.", 2);
+        String currentKey = parts[0];
+        if (!currentMap.containsKey(currentKey)) {
+            return;
+        }
+
+        if (parts.length == 1) {
+            currentMap.remove(currentKey);
+        } else {
+            Object value = currentMap.get(currentKey);
+            if (value instanceof Map) {
+                deletePropertyInternal((Map<String, Object>) value, parts[1]);
+            }
+        }
     }
 
     /**

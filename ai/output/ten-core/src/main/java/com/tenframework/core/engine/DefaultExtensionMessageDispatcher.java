@@ -5,7 +5,6 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentMap;
 
-import com.tenframework.core.extension.ExtensionContext;
 import com.tenframework.core.message.Location;
 import com.tenframework.core.message.Message;
 import com.tenframework.core.message.command.Command;
@@ -20,22 +19,22 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class DefaultExtensionMessageDispatcher implements ExtensionMessageDispatcher {
 
-    private final ExtensionContext extensionContext;
+    private final EngineExtensionContext engineExtensionContext;
     private final PathTable pathTable;
     private final ConcurrentMap<Long, CompletableFuture<Object>> commandFutures;
 
-    public DefaultExtensionMessageDispatcher(ExtensionContext extensionContext,
+    public DefaultExtensionMessageDispatcher(EngineExtensionContext engineExtensionContext,
             ConcurrentMap<Long, CompletableFuture<Object>> commandFutures) {
-        this.extensionContext = extensionContext;
-        pathTable = extensionContext.getPathTable(); // 从 ExtensionContext 获取 PathTable
+        this.engineExtensionContext = engineExtensionContext;
+        pathTable = engineExtensionContext.getPathTable(); // 从 ExtensionContext 获取 PathTable
         this.commandFutures = commandFutures;
         log.info("DefaultExtensionMessageDispatcher created for Engine: {}",
-            extensionContext.getEngine().getGraphId());
+            engineExtensionContext.getEngine().getGraphId());
     }
 
     @Override
     public void dispatchMessage(Message message) {
-        String engineId = extensionContext.getEngine().getGraphId();
+        String engineId = engineExtensionContext.getEngine().getGraphId();
         log.debug("DefaultExtensionMessageDispatcher: 正在派发消息: ID={}, Type={}, SrcLoc={}, DestLocs={}",
                 message.getId(), message.getType(), message.getSrcLoc(), message.getDestLocs());
 
@@ -51,7 +50,8 @@ public class DefaultExtensionMessageDispatcher implements ExtensionMessageDispat
 
         for (Location targetLocation : targetLocations) {
             // 确保目的地是当前 Engine 内部的 Extension
-            if (!targetLocation.getGraphId().equals(extensionContext.getEngine().getGraphDefinition().getGraphId())) {
+            if (!targetLocation.getGraphId().equals(
+                engineExtensionContext.getEngine().getGraphDefinition().getGraphId())) {
                 log.warn("DefaultExtensionMessageDispatcher: 消息 {} 的目的地 {} 不属于当前 Engine {}，跳过内部派发。",
                         message.getId(), targetLocation, engineId);
                 continue;
@@ -74,7 +74,8 @@ public class DefaultExtensionMessageDispatcher implements ExtensionMessageDispat
             }
 
             try {
-                extensionContext.dispatchMessageToExtension(finalMessageToSend, targetLocation.getExtensionName());
+                engineExtensionContext.dispatchMessageToExtension(finalMessageToSend,
+                    targetLocation.getExtensionName());
             } catch (Exception e) {
                 log.error("DefaultExtensionMessageDispatcher: 派发消息 {} 到 Extension {} 失败: {}",
                     message.getId(), targetLocation.getExtensionName(), e.getMessage(), e);
@@ -84,7 +85,8 @@ public class DefaultExtensionMessageDispatcher implements ExtensionMessageDispat
                     long commandId = Long.parseLong(command.getId());
                     if (commandFutures.containsKey(commandId)) {
                         commandFutures.get(commandId).completeExceptionally(
-                                new RuntimeException("Failed to dispatch command to extension: " + e.getMessage()));
+                            new RuntimeException(
+                                "Failed to dispatch command to extension: %s".formatted(e.getMessage())));
                         commandFutures.remove(commandId);
                     }
                 }

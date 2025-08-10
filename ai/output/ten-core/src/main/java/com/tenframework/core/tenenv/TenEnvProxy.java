@@ -71,16 +71,6 @@ public record TenEnvProxy<T extends TenEnv>(
         });
     }
 
-    public void notifyCallback(Runnable callback) {
-        targetRunloop.postTask(() -> {
-            try {
-                callback.run();
-            } catch (Exception e) {
-                log.error("Failed to proxy callback to {}: {}", signature, e.getMessage(), e);
-            }
-        });
-    }
-
     @Override
     public void sendResult(CommandResult commandResult) {
         targetRunloop.postTask(() -> {
@@ -219,6 +209,6 @@ public record TenEnvProxy<T extends TenEnv>(
     public void close() {
         log.info("TenEnvProxy {}: Received close signal. Delegating to target TenEnv.", signature); // Changed name to
                                                                                                     // signature
-        targetRunloop.postTask(() -> targetEnv.close());
+        targetRunloop.postTask(targetEnv::close);
     }
 }

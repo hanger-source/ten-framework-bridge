@@ -1,32 +1,28 @@
 package com.tenframework.core.runloop;
 
-import java.util.List;
 import java.util.Objects;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.LockSupport;
 
 import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.agrona.concurrent.Agent;
 import org.agrona.concurrent.AgentRunner;
 import org.agrona.concurrent.BackoffIdleStrategy;
 import org.agrona.concurrent.IdleStrategy;
 import org.agrona.concurrent.ManyToOneConcurrentArrayQueue;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * Runloop 类负责线程管理和任务调度，对齐 C 语言的 ten_runloop。
- * 基于 Agrona AgentRunner 实现单线程事件循环，处理内部任务和外部 Agent 列表。
+ * 基于 Agrona AgentRunner 实现单线程事件循环，处理内部任务和work Agent 列表。
  *
  * 特性：
  * - 批量消费内部任务（可配置批量大小）
- * - 支持注册多个外部 Agent（在单线程内部按顺序调用它们的 doWork()）
  * - 使用 BackoffIdleStrategy（折中自旋 -> yield -> sleep）
  * - 提交任务后唤醒 runloop 线程以提高响应性
- * - 生命周期 onStart / onClose 会转发到注册的外部 Agent
+ * - 生命周期 onStart / onClose 会转发到注册的work Agent
  */
 @Slf4j
 public class Runloop {
@@ -37,10 +33,9 @@ public class Runloop {
     private static final int DEFAULT_INTERNAL_TASK_BATCH = 64;
 
     private final ManyToOneConcurrentArrayQueue<Runnable> taskQueue;
-    private final RunloopAgent coreAgent;
+    private final Agent workAgent;
+    private final LoopAgent coreAgent;
     private final int internalTaskBatchSize;
-    // 注册的外部 Agents（线程安全，读多写少场景适合 CopyOnWriteArrayList）
-    private final List<Agent> externalAgents = new CopyOnWriteArrayList<>();
     private final AtomicBoolean shuttingDown = new AtomicBoolean(false); // 新增：指示 runloop 是否正在关闭
     // ThreadLocal 用于存储当前线程的 Runloop 实例，支持线程亲和性检查
     private final ThreadLocal<Runloop> currentRunloopThreadLocal = new ThreadLocal<>();
@@ -48,7 +43,12 @@ public class Runloop {
     private volatile boolean running = false;
     @Getter
     private volatile Thread coreThread;
+    /**
+     * -- SETTER --
+     * 设置外部唤醒器（可选）。当外部有新事件时，可调用该 notifier 或直接调用 runloop.wakeup()。
+     */
     // 可选的外部唤醒器（外部可在有新事件时调用该 Runnable）
+    @Setter
     private volatile Runnable externalEventSourceNotifier;
 
     /**
@@ -56,8 +56,8 @@ public class Runloop {
      *
      * @param name runloop 名称（用于线程名）
      */
-    public Runloop(String name) {
-        this(name, DEFAULT_INTERNAL_QUEUE_CAPACITY, DEFAULT_INTERNAL_TASK_BATCH);
+    private Runloop(String name, Agent workAgent) {
+        this(name, workAgent, DEFAULT_INTERNAL_QUEUE_CAPACITY, DEFAULT_INTERNAL_TASK_BATCH);
     }
 
     /**
@@ -67,7 +67,7 @@ public class Runloop {
      * @param requestedCapacity     初始容量（会向上调整为 2 的幂）
      * @param internalTaskBatchSize 每轮最多处理多少个内部任务
      */
-    public Runloop(String name, int requestedCapacity, int internalTaskBatchSize) {
+    private Runloop(String name, Agent workAgent, int requestedCapacity, int internalTaskBatchSize) {
         Objects.requireNonNull(name, "name");
 
         int capacity = Math.max(1, Integer.highestOneBit(requestedCapacity));
@@ -76,41 +76,16 @@ public class Runloop {
         }
         taskQueue = new ManyToOneConcurrentArrayQueue<>(capacity);
         this.internalTaskBatchSize = Math.max(1, internalTaskBatchSize);
-        coreAgent = new RunloopAgent(name);
+        this.workAgent = workAgent;
+        coreAgent = new LoopAgent(name);
     }
 
-    /**
-     * 注册一个外部 Agent。外部 Agent 的 doWork/onStart/onClose 将在 Runloop 的线程中被调用。
-     *
-     * @param agent 非空的 Agent
-     */
-    public void registerExternalAgent(Agent agent) {
-        Objects.requireNonNull(agent, "agent");
-        externalAgents.add(agent);
-        log.info("Runloop: 注册外部 Agent -> {}", agent.roleName());
+    public static Runloop createRunloopWithWorker(String name, Agent workAgent) {
+        return new Runloop(name, workAgent);
     }
 
-    /**
-     * 注销一个外部 Agent（如果已注册）。
-     *
-     * @param agent 要注销的 Agent
-     * @return 如果存在并移除返回 true，否则 false
-     */
-    public boolean unregisterExternalAgent(Agent agent) {
-        boolean removed = externalAgents.remove(agent);
-        if (removed) {
-            log.info("Runloop: 注销外部 Agent -> {}", agent.roleName());
-        }
-        return removed;
-    }
-
-    /**
-     * 设置外部唤醒器（可选）。当外部有新事件时，可调用该 notifier 或直接调用 runloop.wakeup()。
-     *
-     * @param notifier Runnable，允许为空
-     */
-    public void setExternalEventSourceNotifier(Runnable notifier) {
-        externalEventSourceNotifier = notifier;
+    public static Runloop createRunloop(String name) {
+        return new Runloop(name, null);
     }
 
     /**
@@ -252,17 +227,17 @@ public class Runloop {
     }
 
     // 判断当前线程是否是 Runloop 的核心线程
-    public boolean isCurrentThread() {
-        return Thread.currentThread() == coreThread;
+    public boolean isNotCurrentThread() {
+        return Thread.currentThread() != coreThread;
     }
 
     /**
-     * 内部 Agent，负责合并内部队列任务与所有外部 Agent 的 doWork 调用。
+     * 内部 Agent，负责合并内部队列任务与所有work Agent 的 doWork 调用。
      */
-    private class RunloopAgent implements Agent {
+    private class LoopAgent implements Agent {
         private final String name;
 
-        RunloopAgent(String name) {
+        LoopAgent(String name) {
             this.name = name;
         }
 
@@ -292,21 +267,19 @@ public class Runloop {
                 workDone++;
             }
 
-            // 2) 调用所有外部 Agents 的 doWork()
-            if (!externalAgents.isEmpty()) {
-                for (Agent agent : externalAgents) {
+            if (workAgent != null) {
+                // 2) 调用work Agent 的 doWork()
+                try {
+                    int w = workAgent.doWork();
+                    if (w > 0) {
+                        workDone += w;
+                    }
+                } catch (Throwable e) {
                     try {
-                        int w = agent.doWork();
-                        if (w > 0) {
-                            workDone += w;
-                        }
-                    } catch (Throwable e) {
-                        try {
-                            log.error("RunloopAgent: 外部 Agent {} 执行异常", agent.roleName(), e);
-                        } catch (Throwable ignore) {
-                            // 防止 agent.roleName() 本身抛异常影响主循环
-                            log.error("RunloopAgent: 外部 Agent 执行异常 (无法获取 roleName)", e);
-                        }
+                        log.error("RunloopAgent: work Agent {} 执行异常", workAgent.roleName(), e);
+                    } catch (Throwable ignore) {
+                        // 防止 agent.roleName() 本身抛异常影响主循环
+                        log.error("RunloopAgent: work Agent 执行异常 (无法获取 roleName)", e);
                     }
                 }
             }
@@ -317,15 +290,15 @@ public class Runloop {
         @Override
         public void onStart() {
             log.info("{} started.", roleName());
-            // 转发 onStart 到外部 Agents，保护性捕获异常
-            for (Agent agent : externalAgents) {
+            // 转发 onStart 到work Agents，保护性捕获异常
+            if (workAgent != null) {
                 try {
-                    agent.onStart();
+                    workAgent.onStart();
                 } catch (Throwable e) {
                     try {
-                        log.error("RunloopAgent: 外部 Agent {} onStart 异常", agent.roleName(), e);
+                        log.error("RunloopAgent: work Agent {} onStart 异常", workAgent.roleName(), e);
                     } catch (Throwable ignore) {
-                        log.error("RunloopAgent: 外部 Agent onStart 异常 (无法获取 roleName)", e);
+                        log.error("RunloopAgent: work Agent onStart 异常 (无法获取 roleName)", e);
                     }
                 }
             }
@@ -337,15 +310,15 @@ public class Runloop {
             // 移除内部队列清理，由 Runloop.shutdown() 统一处理剩余任务
             // taskQueue.clear();
 
-            // 转发 onClose 到外部 Agents
-            for (Agent agent : externalAgents) {
+            // 转发 onClose 到work Agents
+            if (workAgent != null) {
                 try {
-                    agent.onClose();
+                    workAgent.onClose();
                 } catch (Throwable e) {
                     try {
-                        log.error("RunloopAgent: 外部 Agent {} onClose 异常", agent.roleName(), e);
+                        log.error("RunloopAgent: work Agent {} onClose 异常", workAgent.roleName(), e);
                     } catch (Throwable ignore) {
-                        log.error("RunloopAgent: 外部 Agent onClose 异常 (无法获取 roleName)", e);
+                        log.error("RunloopAgent: work Agent onClose 异常 (无法获取 roleName)", e);
                     }
                 }
             }
