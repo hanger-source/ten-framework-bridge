@@ -8,6 +8,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.tenframework.core.util.MessageUtils;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
+import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.experimental.Accessors;
 
@@ -17,15 +18,20 @@ import lombok.experimental.Accessors;
 @Accessors(chain = true)
 public class CommandResult extends Message implements Cloneable { // 实现 Cloneable
 
+    // Getters for specific properties
+    @Getter
     @JsonProperty("original_cmd_id")
     private String originalCommandId;
 
+    @Getter
     @JsonProperty("original_cmd_type")
     private int originalCmdType;
 
+    @Getter
     @JsonProperty("original_cmd_name")
     private String originalCmdName;
 
+    @Getter
     @JsonProperty("status_code")
     private int statusCode;
 
@@ -101,28 +107,10 @@ public class CommandResult extends Message implements Cloneable { // 实现 Clon
     // 重写 clone 方法以支持深拷贝或浅拷贝（取决于需求），这里提供浅拷贝示例
     @Override
     public CommandResult clone() throws CloneNotSupportedException {
-        CommandResult cloned = (CommandResult) super.clone();
         // 对于引用类型字段，如果需要深拷贝，则在此处进行
         // 例如：cloned.setSrcLoc(this.getSrcLoc().clone());
         // 如果 properties 需要深拷贝，也在此处处理
-        return cloned;
-    }
-
-    // Getters for specific properties
-    public String getOriginalCommandId() {
-        return originalCommandId;
-    }
-
-    public int getOriginalCmdType() {
-        return originalCmdType;
-    }
-
-    public String getOriginalCmdName() {
-        return originalCmdName;
-    }
-
-    public int getStatusCode() {
-        return statusCode;
+        return (CommandResult)super.clone();
     }
 
     public boolean isFinal() {

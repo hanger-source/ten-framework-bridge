@@ -1,17 +1,16 @@
 package com.tenframework.core.engine;
 
-import com.tenframework.core.extension.ExtensionContext;
-import com.tenframework.core.message.CommandResult;
-import com.tenframework.core.message.Message;
-import com.tenframework.core.message.Location;
-import com.tenframework.core.message.command.Command;
-import com.tenframework.core.path.PathTable;
-import lombok.extern.slf4j.Slf4j;
-
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentMap;
+
+import com.tenframework.core.extension.ExtensionContext;
+import com.tenframework.core.message.Location;
+import com.tenframework.core.message.Message;
+import com.tenframework.core.message.command.Command;
+import com.tenframework.core.path.PathTable;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * `DefaultExtensionMessageDispatcher` 是 `ExtensionMessageDispatcher` 接口的默认实现。
@@ -28,15 +27,15 @@ public class DefaultExtensionMessageDispatcher implements ExtensionMessageDispat
     public DefaultExtensionMessageDispatcher(ExtensionContext extensionContext,
             ConcurrentMap<Long, CompletableFuture<Object>> commandFutures) {
         this.extensionContext = extensionContext;
-        this.pathTable = extensionContext.getPathTable(); // 从 ExtensionContext 获取 PathTable
+        pathTable = extensionContext.getPathTable(); // 从 ExtensionContext 获取 PathTable
         this.commandFutures = commandFutures;
         log.info("DefaultExtensionMessageDispatcher created for Engine: {}",
-                extensionContext.getEngine().getEngineId());
+            extensionContext.getEngine().getGraphId());
     }
 
     @Override
     public void dispatchMessage(Message message) {
-        String engineId = extensionContext.getEngine().getEngineId();
+        String engineId = extensionContext.getEngine().getGraphId();
         log.debug("DefaultExtensionMessageDispatcher: 正在派发消息: ID={}, Type={}, SrcLoc={}, DestLocs={}",
                 message.getId(), message.getType(), message.getSrcLoc(), message.getDestLocs());
 
@@ -65,24 +64,23 @@ public class DefaultExtensionMessageDispatcher implements ExtensionMessageDispat
                 // 目前 Message 已被设计为可变，所以这里可以简单地克隆以避免副作用。
                 // 更安全的做法是设计为不可变消息或明确每次都克隆。
                 try {
-                    finalMessageToSend = (Message) message.clone(); // 假设Message实现了Cloneable
+                    finalMessageToSend = message.clone();
                     finalMessageToSend.setDestLocs(Collections.singletonList(targetLocation)); // 设置单目的地
                 } catch (CloneNotSupportedException e) {
                     log.error("DefaultExtensionMessageDispatcher: 克隆消息 {} 失败，无法发送到多个目的地: {}", message.getId(),
                             e.getMessage());
-                    continue; // 无法克隆，跳过此目的地
+                    continue;
                 }
             }
 
             try {
-                extensionContext.dispatchMessageToExtension(finalMessageToSend);
+                extensionContext.dispatchMessageToExtension(finalMessageToSend, targetLocation.getExtensionName());
             } catch (Exception e) {
                 log.error("DefaultExtensionMessageDispatcher: 派发消息 {} 到 Extension {} 失败: {}",
-                        message.getId(), targetLocation.getNodeId(), e.getMessage(), e);
+                    message.getId(), targetLocation.getExtensionName(), e.getMessage(), e);
                 // 对于命令，如果派发失败，应该使对应的 CompletableFuture 失败
                 // 这部分逻辑现在也主要由 Engine.processMessage 负责，这里作为兜底。
-                if (message instanceof Command) {
-                    Command command = (Command) message;
+                if (message instanceof Command command) {
                     long commandId = Long.parseLong(command.getId());
                     if (commandFutures.containsKey(commandId)) {
                         commandFutures.get(commandId).completeExceptionally(
@@ -92,5 +90,10 @@ public class DefaultExtensionMessageDispatcher implements ExtensionMessageDispat
                 }
             }
         }
+    }
+
+    @Override
+    public void dispatchOtherMessage(Message message) {
+        dispatchMessage(message); // 委托给 dispatchMessage
     }
 }

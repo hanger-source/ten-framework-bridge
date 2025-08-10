@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.LockSupport;
 
 import lombok.Getter;
@@ -13,22 +14,26 @@ import org.agrona.concurrent.AgentRunner;
 import org.agrona.concurrent.BackoffIdleStrategy;
 import org.agrona.concurrent.IdleStrategy;
 import org.agrona.concurrent.ManyToOneConcurrentArrayQueue;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Runloop 类负责线程管理和任务调度，对齐 C 语言的 ten_runloop。
  * 基于 Agrona AgentRunner 实现单线程事件循环，处理内部任务和外部 Agent 列表。
  *
  * 特性：
- *  - 批量消费内部任务（可配置批量大小）
- *  - 支持注册多个外部 Agent（在单线程内部按顺序调用它们的 doWork()）
- *  - 使用 BackoffIdleStrategy（折中自旋 -> yield -> sleep）
- *  - 提交任务后唤醒 runloop 线程以提高响应性
- *  - 生命周期 onStart / onClose 会转发到注册的外部 Agent
+ * - 批量消费内部任务（可配置批量大小）
+ * - 支持注册多个外部 Agent（在单线程内部按顺序调用它们的 doWork()）
+ * - 使用 BackoffIdleStrategy（折中自旋 -> yield -> sleep）
+ * - 提交任务后唤醒 runloop 线程以提高响应性
+ * - 生命周期 onStart / onClose 会转发到注册的外部 Agent
  */
 @Slf4j
 public class Runloop {
 
-    private static final int DEFAULT_INTERNAL_QUEUE_CAPACITY = 1024;
+    public static final int DEFAULT_INTERNAL_QUEUE_CAPACITY = 1024; // Ensure public static final
+    // private static final Logger log = LoggerFactory.getLogger(Runloop.class); //
+    // Explicitly declare log
     private static final int DEFAULT_INTERNAL_TASK_BATCH = 64;
 
     private final ManyToOneConcurrentArrayQueue<Runnable> taskQueue;
@@ -36,6 +41,9 @@ public class Runloop {
     private final int internalTaskBatchSize;
     // 注册的外部 Agents（线程安全，读多写少场景适合 CopyOnWriteArrayList）
     private final List<Agent> externalAgents = new CopyOnWriteArrayList<>();
+    private final AtomicBoolean shuttingDown = new AtomicBoolean(false); // 新增：指示 runloop 是否正在关闭
+    // ThreadLocal 用于存储当前线程的 Runloop 实例，支持线程亲和性检查
+    private final ThreadLocal<Runloop> currentRunloopThreadLocal = new ThreadLocal<>();
     private AgentRunner agentRunner;
     private volatile boolean running = false;
     @Getter
@@ -114,28 +122,39 @@ public class Runloop {
             return;
         }
         running = true;
+        shuttingDown.set(false); // 确保启动时不是关闭状态
 
         IdleStrategy idleStrategy = new BackoffIdleStrategy(
-            1, // maxSpins
-            1, // maxYields
-            TimeUnit.NANOSECONDS.toNanos(50), // minParkPeriodNs
-            TimeUnit.MICROSECONDS.toNanos(100) // maxParkPeriodNs
+                1, // maxSpins
+                1, // maxYields
+                TimeUnit.NANOSECONDS.toNanos(50), // minParkPeriodNs
+                TimeUnit.MICROSECONDS.toNanos(100) // maxParkPeriodNs
         );
 
         agentRunner = new AgentRunner(
-            idleStrategy,
-            (throwable) -> log.error("Runloop AgentRunner 未捕获异常", throwable),
-            null,
-            coreAgent
-        );
+                idleStrategy,
+                (throwable) -> log.error("Runloop AgentRunner 未捕获异常", throwable),
+                null,
+                coreAgent);
 
-        Thread agentThread = new Thread(agentRunner, "%s-RunLoop".formatted(coreAgent.roleName()));
+        coreThread = useThread();
+
+        log.info("Runloop started. Thread: {}", coreThread.getName());
+    }
+
+    private Thread useThread() {
+        Thread agentThread = new Thread(agentRunner, "%s-RunLoop".formatted(coreAgent.roleName())) {
+            @Override
+            public void run() {
+                currentRunloopThreadLocal.set(Runloop.this); // 在 Runloop 线程中设置 ThreadLocal
+                super.run();
+                currentRunloopThreadLocal.remove(); // 线程退出时清理
+            }
+        };
         agentThread.setDaemon(false);
         agentThread.setUncaughtExceptionHandler((thread, ex) -> log.error("Runloop AgentRunner 线程未捕获异常", ex));
         agentThread.start();
-        coreThread = agentThread;
-
-        log.info("Runloop started. Thread: {}", coreThread.getName());
+        return agentThread;
     }
 
     /**
@@ -148,6 +167,10 @@ public class Runloop {
         if (task == null) {
             throw new IllegalArgumentException("task must not be null");
         }
+        if (shuttingDown.get()) { // 在 running 之前检查 shuttingDown
+            log.warn("Runloop is shutting down, task will not be accepted.");
+            return false;
+        }
         if (!running) {
             log.warn("Runloop is not running, task will not be executed.");
             return false;
@@ -158,6 +181,8 @@ public class Runloop {
             log.warn("Runloop 内部任务队列已满，任务被丢弃。");
             return false;
         }
+
+        log.debug("Runloop {}: 任务提交成功，任务哈希：{}", coreAgent.name, System.identityHashCode(task));
 
         // 唤醒 runloop 线程以尽快处理任务
         Thread t = coreThread;
@@ -185,7 +210,8 @@ public class Runloop {
             log.warn("Runloop is not running, no need to shut down.");
             return;
         }
-        running = false;
+        shuttingDown.set(true); // 设置正在关闭标志
+        running = false; // 先设置为 false，防止新的任务入队
 
         try {
             if (agentRunner != null) {
@@ -193,6 +219,21 @@ public class Runloop {
             }
         } catch (Exception e) {
             log.error("Runloop AgentRunner close 异常", e);
+        }
+
+        // 确保所有剩余任务被处理，对齐 C 语言的语义
+        while (!taskQueue.isEmpty()) {
+            Runnable r = taskQueue.poll();
+            if (r != null) {
+                try {
+                    r.run();
+                } catch (Throwable e) {
+                    log.error("Runloop: 关闭时执行剩余任务异常", e);
+                }
+            } else {
+                // 如果队列突然为空，可能是被其他线程清空，或者没有更多任务了
+                break;
+            }
         }
 
         // 唤醒以确保正在 park 的线程能尽快退出
@@ -208,6 +249,11 @@ public class Runloop {
         }
 
         log.info("Runloop shutdown completed.");
+    }
+
+    // 判断当前线程是否是 Runloop 的核心线程
+    public boolean isCurrentThread() {
+        return Thread.currentThread() == coreThread;
     }
 
     /**
@@ -288,8 +334,8 @@ public class Runloop {
         @Override
         public void onClose() {
             log.info("{} closed.", roleName());
-            // 清理内部队列（注意：如果队列非常大，这里会花时间）
-            taskQueue.clear();
+            // 移除内部队列清理，由 Runloop.shutdown() 统一处理剩余任务
+            // taskQueue.clear();
 
             // 转发 onClose 到外部 Agents
             for (Agent agent : externalAgents) {

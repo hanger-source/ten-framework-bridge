@@ -18,7 +18,7 @@ public interface CommandSubmitter {
      * @return 返回一个 `CompletableFuture`，当命令处理完成时，该 Future 将被完成，包含命令执行的结果。
      *         如果命令处理失败，Future 将以异常方式完成。
      */
-    CompletableFuture<Object> submitCommand(Command command);
+    CompletableFuture<CommandResult> submitCommand(Command command);
 
     /**
      * 提交一个命令结果。

@@ -6,6 +6,7 @@ import com.tenframework.core.message.CommandResult;
 import com.tenframework.core.message.command.Command;
 import com.tenframework.core.message.command.TimeoutCommand;
 import com.tenframework.core.message.command.TimerCommand;
+import com.tenframework.core.tenenv.TenEnv;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -16,17 +17,17 @@ import lombok.extern.slf4j.Slf4j;
 public class TimeoutCommandHandler implements EngineCommandHandler {
 
     @Override
-    public Object handle(Engine engine, Command command) {
+    public Object handle(TenEnv engineEnv, Command command) {
         if (!(command instanceof TimeoutCommand)) {
             log.warn("TimeoutCommandHandler 收到非 TimeoutCommand 命令: {}", command.getType());
             // 返回失败结果
             return CommandResult.fail(command.getId(), "Unexpected command type for TimeoutHandler.");
         }
-        return handleTimeoutCommand(engine, (TimeoutCommand) command);
+        return handleTimeoutCommand(engineEnv, (TimeoutCommand) command);
     }
 
     @Override
-    public Object handleTimerCommand(Engine engine, TimerCommand command) {
+    public Object handleTimerCommand(TenEnv engineEnv, TimerCommand command) {
         // TimeoutCommandHandler 不处理 TimerCommand
         log.warn("TimeoutCommandHandler 不支持 TimerCommand: {}", command.getId());
         return CommandResult.fail(command.getId(),
@@ -34,9 +35,9 @@ public class TimeoutCommandHandler implements EngineCommandHandler {
     }
 
     @Override
-    public Object handleTimeoutCommand(Engine engine, TimeoutCommand command) {
+    public Object handleTimeoutCommand(TenEnv engineEnv, TimeoutCommand command) {
         log.info("Engine {}: 收到 TimeoutCommand: Command ID={}, Data={}",
-                engine.getEngineId(), command.getId(), command.getProperties());
+                engineEnv.getGraphId(), command.getId(), command.getProperties());
         // TODO: 根据实际业务需求处理 TimeoutCommand，例如触发某个业务逻辑
         // 假设这里只是简单返回成功
         return CommandResult.success(command.getId(), "Timeout command processed successfully.");

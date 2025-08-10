@@ -16,7 +16,7 @@
         <maven.compiler.target>21</maven.compiler.target>
         <netty.version>4.1.112.Final</netty.version>
         <slf4j.version>2.0.13</slf4j.version>
-        <lombok.version>1.18.36</lombok.version>
+        <lombok.version>1.18.38</lombok.version>
         <agrona.version>1.18.0</agrona.version>
         <msgpack.version>0.9.10</msgpack.version>
         <mvel2.version>2.5.0.Final</mvel2.version>

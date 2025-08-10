@@ -1,8 +1,9 @@
 package com.tenframework.core.command.app;
 
-import com.tenframework.core.app.App;
 import com.tenframework.core.connection.Connection;
 import com.tenframework.core.message.command.Command;
+import com.tenframework.core.tenenv.TenEnvProxy;
+import com.tenframework.core.app.AppEnvImpl;
 
 /**
  * `AppCommandHandler` 接口定义了处理 App 级别命令的契约。
@@ -13,10 +14,10 @@ public interface AppCommandHandler {
     /**
      * 处理 App 级别的命令。
      *
-     * @param app        App 实例。
-     * @param command    要处理的命令。
-     * @param connection 命令来源的连接，可能为 null (例如来自内部命令或自动启动)。
+     * @param appEnvProxy App 的 TenEnvProxy 实例。
+     * @param command     要处理的命令。
+     * @param connection  命令来源的连接，可能为 null (例如来自内部命令或自动启动)。
      * @return 命令处理的结果，通常是一个 CompletableFuture<Object> 或者 null。
      */
-    Object handle(App app, Command command, Connection connection);
+    Object handle(TenEnvProxy<AppEnvImpl> appEnvProxy, Command command, Connection connection);
 }

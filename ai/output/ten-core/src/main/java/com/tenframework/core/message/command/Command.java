@@ -40,6 +40,10 @@ public abstract class Command extends Message {
     @JsonProperty("parent_cmd_id")
     protected String parentCommandId; // 新增：父命令ID，对齐C端
 
+    public String getOriginalCommandId() {
+        return parentCommandId;
+    }
+
     public Command(String id, Location srcLoc, MessageType type, List<Location> destLocs,
             Map<String, Object> properties, long timestamp, String name) {
         super(id, type, srcLoc, destLocs, name, properties, timestamp);

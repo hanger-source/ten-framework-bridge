@@ -1,19 +1,17 @@
 package com.tenframework.core.command.app;
 
-import java.util.Map;
-
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.tenframework.core.app.App;
 import com.tenframework.core.connection.Connection;
 import com.tenframework.core.engine.Engine;
 import com.tenframework.core.graph.GraphDefinition;
 import com.tenframework.core.graph.PredefinedGraphEntry;
 import com.tenframework.core.message.CommandResult;
-import com.tenframework.core.message.Location;
 import com.tenframework.core.message.command.Command;
 import com.tenframework.core.message.command.StartGraphCommand;
+import com.tenframework.core.tenenv.TenEnvProxy;
 import lombok.extern.slf4j.Slf4j;
+import com.tenframework.core.app.AppEnvImpl;
 
 /**
  * `StartGraphCommandHandler` 处理 `StartGraphCommand` 命令，负责启动 Engine。
@@ -24,7 +22,9 @@ public class StartGraphCommandHandler implements AppCommandHandler {
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     @Override
-    public Object handle(App app, Command command, Connection connection) {
+    public Object handle(TenEnvProxy<AppEnvImpl> appEnvProxy, Command command, Connection connection) { // 修改签名
+        App app = appEnvProxy.targetEnv().getApp(); // 通过代理获取 App 实例
+
         if (!(command instanceof StartGraphCommand)) {
             log.warn("StartGraphCommandHandler 收到非 StartGraphCommand 命令: {}", command.getType());
             // 返回失败结果
@@ -57,73 +57,61 @@ public class StartGraphCommandHandler implements AppCommandHandler {
         // 优先从预定义图中查找 GraphDefinition
         GraphDefinition graphDefinition = null;
         if (targetGraphId != null && app.getPredefinedGraphsByName().containsKey(targetGraphId)) {
-            PredefinedGraphEntry entry = app.getPredefinedGraphsByName().get(targetGraphId);
-            graphDefinition = entry.getGraphDefinition();
-            log.info("App: 从预定义图中找到 GraphDefinition (graphId: {})。", targetGraphId);
-        } else if (startCommand.getGraphJsonDefinition() != null) {
-            // 如果命令中包含 JSON 定义，则解析它
-            graphDefinition = new GraphDefinition(app.getAppUri(), startCommand.getGraphJsonDefinition());
-            log.info("App: 从 StartGraphCommand 中解析 GraphDefinition (graphId: {})。", graphDefinition.getGraphId());
+            PredefinedGraphEntry entry = app.getPredefinedGraphsByName().get(targetGraphId); // 使用 app 实例
+            if (entry != null) {
+                graphDefinition = entry.getGraphDefinition();
+                log.info("StartGraphCommandHandler: 找到预定义图 {}。", targetGraphId);
+            }
+        }
+
+        // 如果没有找到预定义图，则尝试从命令中获取 JSON 定义
+        if (graphDefinition == null && startCommand.getGraphJsonDefinition() != null) {
+            try {
+                graphDefinition = new GraphDefinition(app.getAppUri(), startCommand.getGraphJsonDefinition()); // 使用 app
+                // 实例
+                log.info("StartGraphCommandHandler: 从 JSON 定义创建图 {}。", graphDefinition.getGraphId());
+            } catch (Exception e) {
+                log.error("StartGraphCommandHandler: 创建 GraphDefinition 失败: {}", e.getMessage(), e);
+                if (connection != null) {
+                    CommandResult errorResult = CommandResult.fail(command.getId(),
+                            "Failed to create GraphDefinition: " + e.getMessage());
+                    connection.sendOutboundMessage(errorResult);
+                }
+                return null;
+            }
         }
 
         if (graphDefinition == null) {
-            log.error("App: 无法获取 GraphDefinition，无法启动 Engine。StartGraphCommand ID: {}", startCommand.getId());
-            // 返回错误结果
+            log.warn("StartGraphCommandHandler: 无法获取 Graph 定义，命令 {} 无法处理。", command.getId());
             if (connection != null) {
-                CommandResult errorResult = CommandResult.fail(startCommand.getId(), "Failed to get GraphDefinition.");
+                CommandResult errorResult = CommandResult.fail(command.getId(), "Graph definition not found.");
                 connection.sendOutboundMessage(errorResult);
             }
             return null;
         }
 
-        String actualGraphId = graphDefinition.getGraphId(); // 确保使用解析后的 graphId
-
-        Engine engine = app.getEngines().get(actualGraphId);
-        if (engine == null) {
-            log.info("App: 创建新的 Engine 实例，Graph ID: {}", actualGraphId);
-            engine = new Engine(actualGraphId, graphDefinition, app, true);
-            app.getEngines().put(actualGraphId, engine);
-            engine.start(); // 启动 Engine 及其 Runloop
-            log.info("App: Engine {} 已启动。", actualGraphId);
-        } else {
-            log.info("App: Engine {} 已存在，重用现有实例。", actualGraphId);
+        String graphId = graphDefinition.getGraphId();
+        if (app.getEngines().containsKey(graphId)) { // 使用 app 实例
+            log.warn("StartGraphCommandHandler: Engine {} 已经存在，不再重复启动。", graphId);
+            if (connection != null) {
+                CommandResult errorResult = CommandResult.fail(command.getId(), "Engine already exists: " + graphId);
+                connection.sendOutboundMessage(errorResult);
+            }
+            return null;
         }
 
-        // 迁移 Connection 到 Engine
+        // 创建并启动新的 Engine
+        Engine engine = new Engine(graphId, graphDefinition, app, app.isHasOwnRunloopPerEngine()); // 使用 app 实例
+        app.getEngines().put(graphId, engine); // 使用 app 实例
+
+        engine.start(); // 启动 Engine
+
+        log.info("StartGraphCommandHandler: Engine {} 启动成功。", graphId);
         if (connection != null) {
-            if (app.getOrphanConnections().remove(connection)) {
-                log.info("App: 孤立连接 {} (Channel ID: {}) 已从孤立列表中移除。", connection.getRemoteAddress(),
-                        connection.getChannel().id().asShortText());
-            }
-            log.info("App: 正在将连接 {} 迁移到 Engine {}。", connection.getRemoteAddress(), actualGraphId);
-            connection.migrate(engine.getRunloop(),
-                    new Location().setAppUri(app.getAppUri()).setGraphId(actualGraphId)); // 迁移到
-            // Engine
-            // 的
-            // Runloop
-            // 在连接迁移成功后，Engine 会处理连接的后续消息
-            log.info("App: 连接 {} 已成功迁移到 Engine {}.", connection.getRemoteAddress(), actualGraphId);
-
-            // 重要：更新 Connection 的 remoteLocation 为 StartGraphCommand 中的 srcLoc
-            // 这表示 Connection 现在代表的是这个特定的远程客户端
-            connection.setRemoteLocation(startCommand.getSrcLoc());
-
-            // 返回成功的 CommandResult 给发起方
-            String detailJson;
-            try {
-                detailJson = OBJECT_MAPPER.writeValueAsString(
-                        Map.of("graph_id", actualGraphId, "message", "Engine started and connection migrated."));
-            } catch (JsonProcessingException e) {
-                log.error("Failed to serialize StartGraphCommand result detail: {}", e.getMessage(), e);
-                detailJson = "Error: Failed to serialize result."; // 提供一个默认的错误消息
-            }
-            CommandResult successResult = CommandResult.success(startCommand.getId(), detailJson);
+            CommandResult successResult = CommandResult.success(command.getId(),
+                    "Engine " + graphId + " started successfully.");
             connection.sendOutboundMessage(successResult);
-            log.info("App: 发送 StartGraphCommand 成功结果给连接 {}。", connection.getRemoteAddress());
-        } else {
-            // 如果没有连接 (例如是内部自动启动的图)
-            log.info("App: StartGraphCommand {} 处理完成，Engine {} 已启动。", startCommand.getId(), actualGraphId);
         }
-        return null; // App 级别命令通常不直接返回结果，而是通过 Connection.sendOutboundMessage 发送
+        return null;
     }
 }

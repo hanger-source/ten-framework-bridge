@@ -2,15 +2,16 @@ package com.tenframework.core.extension;
 
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.tenframework.core.graph.GraphConfig;
 import com.tenframework.core.message.AudioFrameMessage;
 import com.tenframework.core.message.CommandResult;
 import com.tenframework.core.message.DataMessage;
 import com.tenframework.core.message.VideoFrameMessage;
 import com.tenframework.core.message.command.Command;
+import com.tenframework.core.tenenv.TenEnv;
 import lombok.Builder;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
@@ -26,53 +27,75 @@ import lombok.extern.slf4j.Slf4j;
  * 4. 处理工具执行结果
  */
 @Slf4j
-public abstract class AbstractToolProvider implements Extension {
+public abstract class AbstractToolProvider extends BaseExtension { // Extend BaseExtension
 
     private final ObjectMapper objectMapper = new ObjectMapper(); // 用于 JSON 解析
-    protected String extensionName;
+    // protected String extensionName; // Handled by BaseExtension
     protected boolean isRunning = false;
-    protected Map<String, Object> configuration;
+    // protected Map<String, Object> configuration; // Handled by BaseExtension
     protected List<ToolMetadata> availableTools;
-    protected AsyncExtensionEnv env;
+    // protected TenEnvProxy<Extension> envProxy; // Replaced by TenEnv env in
+    // BaseExtension
+
+    // Removed init method, handled by BaseExtension
+    // @Override
+    // public void init(String extensionId, GraphConfig config, TenEnv env) {
+    // super.init(extensionId, config, env);
+    // this.extensionName = extensionId;
+    // this.env = env;
+    // this.configuration = config.toMap();
+    // log.info("AbstractToolProvider {} initialized with TenEnv.", extensionId);
+    // }
+
+    // Removed destroy method, handled by BaseExtension
+    // @Override
+    // public void destroy(TenEnv env) {
+    // super.destroy(env);
+    // log.info("AbstractToolProvider {} destroyed.", extensionName);
+    // }
 
     @Override
-    public void onConfigure(AsyncExtensionEnv env) {
-        extensionName = env.getExtensionName();
-        this.env = env;
-        // 配置属性将在子类中通过getProperty方法获取
-        log.info("工具提供者配置阶段: extensionName={}", extensionName);
-        onToolProviderConfigure(env);
+    public void onConfigure(TenEnv env) { // Changed parameter type
+        super.onConfigure(env); // Call super method
+        // extensionName = env.getExtensionName(); // 从 TenEnv 获取
+        log.info("工具提供者配置阶段: extensionName={}", extensionName != null ? extensionName : "(未设置)");
+        onToolProviderConfigure(env); // Changed parameter type
     }
 
     @Override
-    public void onInit(AsyncExtensionEnv env) {
-        log.info("工具提供者初始化阶段: extensionName={}", extensionName);
+    public void onInit(TenEnv env) { // Changed parameter type
+        super.onInit(env); // Call super method
+        log.info("工具提供者初始化阶段: extensionName={}", extensionName != null ? extensionName : "(未设置)");
         availableTools = initializeTools();
-        onToolProviderInit(env);
+        onToolProviderInit(env); // Changed parameter type
     }
 
     @Override
-    public void onStart(AsyncExtensionEnv env) {
-        log.info("工具提供者启动阶段: extensionName={}", extensionName);
+    public void onStart(TenEnv env) { // Changed parameter type
+        super.onStart(env); // Call super method
+        log.info("工具提供者启动阶段: extensionName={}", extensionName != null ? extensionName : "(未设置)");
         isRunning = true;
-        onToolProviderStart(env);
+        onToolProviderStart(env); // Changed parameter type
     }
 
     @Override
-    public void onStop(AsyncExtensionEnv env) {
-        log.info("工具提供者停止阶段: extensionName={}", extensionName);
+    public void onStop(TenEnv env) { // Changed parameter type
+        super.onStop(env); // Call super method
+        log.info("工具提供者停止阶段: extensionName={}", extensionName != null ? extensionName : "(未设置)");
         isRunning = false;
-        onToolProviderStop(env);
+        onToolProviderStop(env); // Changed parameter type
     }
 
     @Override
-    public void onDeinit(AsyncExtensionEnv env) {
-        log.info("工具提供者清理阶段: extensionName={}", extensionName);
-        onToolProviderDeinit(env);
+    public void onDeinit(TenEnv env) { // Changed parameter type
+        super.onDeinit(env); // Call super method
+        log.info("工具提供者清理阶段: extensionName={}", extensionName != null ? extensionName : "(未设置)");
+        onToolProviderDeinit(env); // Changed parameter type
     }
 
     @Override
-    public void onCommand(Command command, AsyncExtensionEnv env) {
+    public void onCmd(TenEnv env, Command command) { // Changed parameter type
+        super.onCmd(env, command); // 调用父类的 onCmd
         if (!isRunning) {
             log.warn("工具提供者未运行，忽略命令: extensionName={}, commandName={}",
                     extensionName, command.getName());
@@ -82,105 +105,107 @@ public abstract class AbstractToolProvider implements Extension {
         log.debug("工具提供者收到命令: extensionName={}, commandName={}",
                 extensionName, command.getName());
 
-        // 使用虚拟线程处理工具命令
-        CompletableFuture.runAsync(() -> {
-            try {
-                handleToolCommand(command, env);
-            } catch (Exception e) {
-                log.error("工具提供者命令处理异常: extensionName={}, commandName={}",
-                        extensionName, command.getName(), e);
-                sendErrorResult(command, env, "工具执行异常: " + e.getMessage());
-            }
-        }, env.getVirtualThreadExecutor());
+        // 直接处理工具命令，因为此方法已在 Runloop 线程上调用
+        try {
+            handleToolCommand(env, command);
+        } catch (Exception e) {
+            log.error("工具提供者命令处理异常: extensionName={}, commandName={}",
+                    extensionName, command.getName(), e);
+            sendErrorResult(env, command, "工具执行异常: " + e.getMessage());
+        }
     }
 
     @Override
-    public void onData(DataMessage data, AsyncExtensionEnv env) {
+    public void onDataMessage(TenEnv env, DataMessage data) { // Changed parameter type and method name
+        super.onDataMessage(env, data); // 调用父类的 onDataMessage
         if (!isRunning) {
             log.warn("工具提供者未运行，忽略数据: extensionName={}, dataId={}",
-                extensionName, data.getId());
+                    extensionName, data.getId());
             return;
         }
 
         log.debug("工具提供者收到数据: extensionName={}, dataId={}",
-            extensionName, data.getId());
-        // 异步处理数据
-        CompletableFuture.runAsync(() -> {
-            try {
-                handleToolData(data, env);
-            } catch (Exception e) {
-                log.error("工具提供者数据处理异常: extensionName={}, dataId={}",
+                extensionName, data.getId());
+        // 直接处理数据
+        try {
+            handleToolData(env, data);
+        } catch (Exception e) {
+            log.error("工具提供者数据处理异常: extensionName={}, dataId={}",
                     extensionName, data.getId(), e);
-            }
-        }, env.getVirtualThreadExecutor());
+        }
     }
 
     @Override
-    public void onAudioFrame(AudioFrameMessage audioFrame, AsyncExtensionEnv env) {
+    public void onAudioFrame(TenEnv env, AudioFrameMessage audioFrame) { // Changed parameter type
+        super.onAudioFrame(env, audioFrame); // 调用父类的 onAudioFrame
         if (!isRunning) {
             log.warn("工具提供者未运行，忽略音频帧: extensionName={}, frameId={}",
-                extensionName, audioFrame.getId());
+                    extensionName, audioFrame.getId());
             return;
         }
 
         log.debug("工具提供者收到音频帧: extensionName={}, frameId={}",
-            extensionName, audioFrame.getId());
-        // 异步处理音频帧
-        CompletableFuture.runAsync(() -> {
-            try {
-                handleToolAudioFrame(audioFrame, env);
-            } catch (Exception e) {
-                log.error("工具提供者音频帧处理异常: extensionName={}, frameId={}",
+                extensionName, audioFrame.getId());
+        // 直接处理音频帧
+        try {
+            handleToolAudioFrame(env, audioFrame);
+        } catch (Exception e) {
+            log.error("工具提供者音频帧处理异常: extensionName={}, frameId={}",
                     extensionName, audioFrame.getId(), e);
-            }
-        }, env.getVirtualThreadExecutor());
+        }
     }
 
     @Override
-    public void onVideoFrame(VideoFrameMessage videoFrame, AsyncExtensionEnv env) {
+    public void onVideoFrame(TenEnv env, VideoFrameMessage videoFrame) { // Changed parameter type
+        super.onVideoFrame(env, videoFrame); // 调用父类的 onVideoFrame
         if (!isRunning) {
             log.warn("工具提供者未运行，忽略视频帧: extensionName={}, frameId={}",
-                extensionName, videoFrame.getId());
+                    extensionName, videoFrame.getId());
             return;
         }
 
         log.debug("工具提供者收到视频帧: extensionName={}, frameId={}",
-            extensionName, videoFrame.getId());
-        // 异步处理视频帧
-        CompletableFuture.runAsync(() -> {
-            try {
-                handleToolVideoFrame(videoFrame, env);
-            } catch (Exception e) {
-                log.error("工具提供者视频帧处理异常: extensionName={}, frameId={}",
+                extensionName, videoFrame.getId());
+        // 直接处理视频帧
+        try {
+            handleToolVideoFrame(env, videoFrame);
+        } catch (Exception e) {
+            log.error("工具提供者视频帧处理异常: extensionName={}, videoFrameId={}",
                     extensionName, videoFrame.getId(), e);
-            }
-        }, env.getVirtualThreadExecutor());
+        }
+    }
+
+    @Override
+    public void onCmdResult(TenEnv env, CommandResult commandResult) { // Changed parameter type
+        super.onCmdResult(env, commandResult); // 调用父类的 onCmdResult
+        log.warn("Extension {} received unhandled CommandResult: {}. OriginalCommandId: {}", getExtensionName(),
+                commandResult.getId(), commandResult.getOriginalCommandId());
     }
 
     /**
      * 工具提供者配置阶段
      */
-    protected abstract void onToolProviderConfigure(AsyncExtensionEnv context);
+    protected abstract void onToolProviderConfigure(TenEnv context); // Changed parameter type
 
     /**
      * 工具提供者初始化阶段
      */
-    protected abstract void onToolProviderInit(AsyncExtensionEnv context);
+    protected abstract void onToolProviderInit(TenEnv context); // Changed parameter type
 
     /**
      * 工具提供者启动阶段
      */
-    protected abstract void onToolProviderStart(AsyncExtensionEnv context);
+    protected abstract void onToolProviderStart(TenEnv context); // Changed parameter type
 
     /**
      * 工具提供者停止阶段
      */
-    protected abstract void onToolProviderStop(AsyncExtensionEnv context);
+    protected abstract void onToolProviderStop(TenEnv context); // Changed parameter type
 
     /**
      * 工具提供者清理阶段
      */
-    protected abstract void onToolProviderDeinit(AsyncExtensionEnv context);
+    protected abstract void onToolProviderDeinit(TenEnv context); // Changed parameter type
 
     /**
      * 初始化可用工具列表
@@ -190,63 +215,27 @@ public abstract class AbstractToolProvider implements Extension {
     /**
      * 处理工具命令
      */
-    protected abstract void handleToolCommand(Command command, AsyncExtensionEnv context);
+    protected abstract void handleToolCommand(TenEnv context, Command command);
 
     /**
      * 处理工具数据
      */
-    protected abstract void handleToolData(DataMessage data, AsyncExtensionEnv context);
+    protected abstract void handleToolData(TenEnv context, DataMessage data);
 
     /**
      * 处理工具音频帧
      */
-    protected abstract void handleToolAudioFrame(AudioFrameMessage audioFrame,
-            AsyncExtensionEnv context);
+    protected abstract void handleToolAudioFrame(TenEnv context, AudioFrameMessage audioFrame);
 
     /**
      * 处理工具视频帧
      */
-    protected abstract void handleToolVideoFrame(VideoFrameMessage videoFrame,
-            AsyncExtensionEnv context);
-
-    /**
-     * 获取可用工具列表
-     */
-    public List<ToolMetadata> getAvailableTools() {
-        return availableTools;
-    }
-
-    /**
-     * 根据工具名称查找工具
-     */
-    public ToolMetadata findTool(String toolName) {
-        return availableTools.stream()
-                .filter(tool -> tool.getName().equals(toolName))
-                .findFirst()
-                .orElse(null);
-    }
-
-    /**
-     * 验证工具参数
-     */
-    protected boolean validateToolParameters(ToolMetadata tool, Map<String, Object> parameters) {
-        // 检查 required 字段是否存在于 parameters 中
-        if (tool.getRequired() != null) {
-            for (String requiredParam : tool.getRequired()) {
-                if (!parameters.containsKey(requiredParam)) {
-                    log.warn("缺少必需的工具参数: tool={}, param={}", tool.getName(), requiredParam);
-                    return false;
-                }
-            }
-        }
-        // TODO: 更复杂的参数验证，例如类型检查，可以结合 JSON Schema 库实现。
-        return true;
-    }
+    protected abstract void handleToolVideoFrame(TenEnv context, VideoFrameMessage videoFrame);
 
     /**
      * 发送错误结果
      */
-    protected void sendErrorResult(Command command, AsyncExtensionEnv context, String errorMessage) {
+    protected void sendErrorResult(TenEnv context, Command command, String errorMessage) {
         CommandResult errorResult = CommandResult.fail(command.getId(), errorMessage);
         context.sendResult(errorResult);
     }
@@ -254,15 +243,21 @@ public abstract class AbstractToolProvider implements Extension {
     /**
      * 发送成功结果
      */
-    protected void sendSuccessResult(Command command, AsyncExtensionEnv context, Object result) {
+    protected void sendSuccessResult(TenEnv context, Command command, Object result) {
         CommandResult successResult = CommandResult.success(command.getId(), result != null ? result.toString() : "");
         context.sendResult(successResult);
     }
 
-    @Override
-    public String getAppUri() {
-        return env != null ? env.getAppUri() : "unknown";
-    }
+    // Removed getAppUri and getExtensionName, handled by BaseExtension
+    // @Override
+    // public String getAppUri() {
+    // return env.getAppUri();
+    // }
+
+    // @Override
+    // public String getExtensionName() {
+    // return extensionName;
+    // }
 
     /**
      * 工具元数据，用于工具调用功能

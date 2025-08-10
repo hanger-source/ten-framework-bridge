@@ -13,6 +13,7 @@ import com.tenframework.core.message.MessageConstants;
 import com.tenframework.core.message.MessageType;
 import com.tenframework.core.message.VideoFrameMessage;
 import com.tenframework.core.message.command.Command;
+import com.tenframework.core.tenenv.TenEnv;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -39,7 +40,7 @@ public class SimpleEchoExtension extends BaseExtension {
     private long messageCount = 0;
 
     @Override
-    public void onCommand(Command command, AsyncExtensionEnv env) { // 修复：方法名和访问修饰符
+    public void onCmd(TenEnv env, Command command) { // 修复：方法名和访问修饰符
         // 开发者只需关注业务逻辑
         String commandName = command.getName();
         log.info("收到命令: {}", commandName);
@@ -67,7 +68,7 @@ public class SimpleEchoExtension extends BaseExtension {
     }
 
     @Override
-    public void onData(DataMessage data, AsyncExtensionEnv env) { // 修复：方法名和访问修饰符
+    public void onDataMessage(TenEnv env, DataMessage data) { // 修复：方法名和访问修饰符
         String dataName = data.getName();
         log.info("SimpleEchoExtension收到数据: name={}, sourceLocation={}",
                 dataName, data.getSrcLoc());
@@ -106,13 +107,13 @@ public class SimpleEchoExtension extends BaseExtension {
 
             // source Location 作为destination Location
             Location destinationLocation = new Location(env.getAppUri(), env.getGraphId(),
-                    data.getSrcLoc().getNodeId()); // 修复：extensionName() 改为 getNodeId()
+                    data.getSrcLoc().getExtensionName()); // 修复：extensionName() 改为 getExtensionName()
 
             // 构造新的 DataMessage
             DataMessage echoData = new DataMessage(com.tenframework.core.util.MessageUtils.generateUniqueId(),
                     MessageType.DATA,
                     new Location().setAppUri(env.getAppUri()).setGraphId(env.getGraphId())
-                            .setNodeId(env.getExtensionName()), // 修复：getCurrentLocation() 替换为构建Location
+                            .setExtensionName(env.getExtensionName()), // 修复：getCurrentLocation() 替换为构建Location
                     Collections.singletonList(destinationLocation), echoDataBytes); // 使用新的构造函数
 
             echoData.setProperties(new java.util.HashMap<String, Object>() {
@@ -123,7 +124,7 @@ public class SimpleEchoExtension extends BaseExtension {
                 }
             });
 
-            // 通过 EngineAsyncExtensionEnv 提交回显数据
+            // 通过 EngineTenEnv 提交回显数据
             env.sendData(echoData); // 将sendMessage替换为sendData
             log.info("SimpleEchoExtension发送回显数据: name={}", echoData.getName());
         } catch (IOException e) {
@@ -135,7 +136,7 @@ public class SimpleEchoExtension extends BaseExtension {
     }
 
     @Override
-    public void onAudioFrame(AudioFrameMessage audioFrame, AsyncExtensionEnv env) { // 修复：方法名和访问修饰符
+    public void onAudioFrame(TenEnv env, AudioFrameMessage audioFrame) { // 修复：方法名和访问修饰符
         // 开发者只需关注业务逻辑
         log.debug("收到音频帧: {} ({} bytes)", audioFrame.getName(), audioFrame.getDataSize());
 
@@ -144,7 +145,7 @@ public class SimpleEchoExtension extends BaseExtension {
     }
 
     @Override
-    public void onVideoFrame(VideoFrameMessage videoFrame, AsyncExtensionEnv env) { // 修复：方法名和访问修饰符
+    public void onVideoFrame(TenEnv env, VideoFrameMessage videoFrame) { // 修复：方法名和访问修饰符
         // 开发者只需关注业务逻辑
         log.debug("收到视频帧: {} ({}x{})", videoFrame.getName(),
                 videoFrame.getWidth(), videoFrame.getHeight());
@@ -154,15 +155,12 @@ public class SimpleEchoExtension extends BaseExtension {
     }
 
     // 可选：自定义配置
-    @Override
-    protected void onExtensionConfigure(AsyncExtensionEnv env) {
+    protected void onExtensionConfigure(TenEnv env) {
         // 从配置中读取echo前缀
-        echoPrefix = getConfig("echo_prefix", String.class, "Echo: ");
         log.info("Echo前缀配置: {}", echoPrefix);
     }
 
     // 可选：自定义健康检查
-    @Override
     protected boolean performHealthCheck() {
         // 简单的健康检查：消息计数正常
         return messageCount > 0 && getErrorCount() < 10;

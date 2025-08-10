@@ -37,5 +37,5 @@ public class ExtensionInfo {
     // TODO: ten_list_t msg_conversion_contexts; 这个字段需要更复杂的映射
     // 暂时用 List<Object> 来表示，后续可能需要独立的 DTO
     @JsonProperty("msg_conversion_contexts")
-    private List<Object> msgConversionContexts;
+    private List<MessageConversionContext> msgConversionContexts;
 }

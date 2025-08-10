@@ -1,6 +1,7 @@
 package com.tenframework.core.graph;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.tenframework.core.log.LogLevel;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -15,5 +16,5 @@ import lombok.experimental.Accessors;
 @Accessors(chain = true)
 class LogConfig {
     @JsonProperty("level")
-    private int level;
+    private LogLevel level;
 }

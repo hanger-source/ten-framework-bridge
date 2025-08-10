@@ -1,18 +1,17 @@
 package com.tenframework.core.extension;
 
-import com.tenframework.core.engine.CommandSubmitter;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+
+import com.tenframework.core.extension.ExtensionContext;
+import com.tenframework.core.tenenv.TenEnv;
 import com.tenframework.core.message.AudioFrameMessage;
 import com.tenframework.core.message.CommandResult;
 import com.tenframework.core.message.DataMessage;
 import com.tenframework.core.message.VideoFrameMessage;
 import com.tenframework.core.message.command.Command;
-import com.tenframework.core.util.JsonUtils; // 使用 JsonUtils 替代 MessageUtils
 import lombok.Getter;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 
 /**
  * 抽象AI服务枢纽扩展，用于简化AI服务相关的扩展开发。
@@ -28,45 +27,42 @@ public abstract class AbstractAIServiceHub extends BaseExtension {
      * 异步Extension上下文
      */
     @Getter
-    protected AsyncExtensionEnv asyncExtensionEnv;
+    protected TenEnv asyncExtensionEnv;
 
     @Override
-    public void onConfigure(AsyncExtensionEnv env) {
+    public void onConfigure(TenEnv env) {
         super.onConfigure(env);
-        this.asyncExtensionEnv = env;
-        // asyncExtensionEnv 已经封装了 CommandSubmitter 逻辑，直接通过 env 发送命令
-        // this.commandSubmitter = env.getCommandSubmitter(); // 移除此行，避免直接持有
-        // CommandSubmitter 引用
+        asyncExtensionEnv = env;
     }
 
     @Override
-    public void onCommand(Command command, AsyncExtensionEnv env) {
-        super.onCommand(command, env);
-        handleAIServiceCommand(command, env);
+    public void onCmd(TenEnv env, Command command) {
+        super.onCmd(env, command);
+        handleAIServiceCommand(env, command);
     }
 
     @Override
-    public void onData(DataMessage data, AsyncExtensionEnv env) {
-        super.onData(data, env);
-        handleAIServiceData(data, env);
+    public void onDataMessage(TenEnv env, DataMessage data) { // Renamed from onData
+        super.onDataMessage(env, data); // Changed to onDataMessage
+        handleAIServiceData(env, data);
     }
 
     @Override
-    public void onAudioFrame(AudioFrameMessage audioFrame, AsyncExtensionEnv env) {
-        super.onAudioFrame(audioFrame, env);
-        handleAIServiceAudioFrame(audioFrame, env);
+    public void onAudioFrame(TenEnv env, AudioFrameMessage audioFrame) {
+        super.onAudioFrame(env, audioFrame);
+        handleAIServiceAudioFrame(env, audioFrame);
     }
 
     @Override
-    public void onVideoFrame(VideoFrameMessage videoFrame, AsyncExtensionEnv env) {
-        super.onVideoFrame(videoFrame, env);
-        handleAIServiceVideoFrame(videoFrame, env);
+    public void onVideoFrame(TenEnv env, VideoFrameMessage videoFrame) {
+        super.onVideoFrame(env, videoFrame);
+        handleAIServiceVideoFrame(env, videoFrame);
     }
 
     @Override
-    public void onCommandResult(CommandResult commandResult, AsyncExtensionEnv env) {
-        super.onCommandResult(commandResult, env);
-        handleAIServiceCommandResult(commandResult, env);
+    public void onCmdResult(TenEnv env, CommandResult commandResult) {
+        super.onCmdResult(env, commandResult);
+        handleAIServiceCommandResult(env, commandResult);
     }
 
     /**
@@ -75,7 +71,7 @@ public abstract class AbstractAIServiceHub extends BaseExtension {
      * @param command 命令消息
      * @param context Extension上下文
      */
-    protected abstract void handleAIServiceCommand(Command command, AsyncExtensionEnv context);
+    protected abstract void handleAIServiceCommand(TenEnv context, Command command);
 
     /**
      * AI服务特定的数据处理接口
@@ -83,7 +79,7 @@ public abstract class AbstractAIServiceHub extends BaseExtension {
      * @param data    数据消息
      * @param context Extension上下文
      */
-    protected abstract void handleAIServiceData(DataMessage data, AsyncExtensionEnv context);
+    protected abstract void handleAIServiceData(TenEnv context, DataMessage data);
 
     /**
      * AI服务特定的音频帧处理接口
@@ -91,7 +87,7 @@ public abstract class AbstractAIServiceHub extends BaseExtension {
      * @param audioFrame 音频帧消息
      * @param context    Extension上下文
      */
-    protected abstract void handleAIServiceAudioFrame(AudioFrameMessage audioFrame, AsyncExtensionEnv context);
+    protected abstract void handleAIServiceAudioFrame(TenEnv context, AudioFrameMessage audioFrame);
 
     /**
      * AI服务特定的视频帧处理接口
@@ -99,7 +95,7 @@ public abstract class AbstractAIServiceHub extends BaseExtension {
      * @param videoFrame 视频帧消息
      * @param context    Extension上下文
      */
-    protected abstract void handleAIServiceVideoFrame(VideoFrameMessage videoFrame, AsyncExtensionEnv context);
+    protected abstract void handleAIServiceVideoFrame(TenEnv context, VideoFrameMessage videoFrame);
 
     /**
      * AI服务特定的命令结果处理接口
@@ -107,7 +103,7 @@ public abstract class AbstractAIServiceHub extends BaseExtension {
      * @param commandResult 命令结果消息
      * @param context       Extension上下文
      */
-    protected abstract void handleAIServiceCommandResult(CommandResult commandResult, AsyncExtensionEnv context);
+    protected abstract void handleAIServiceCommandResult(TenEnv context, CommandResult commandResult);
 
     protected void sendCommandResult(String commandId, Object result, String errorMessage) {
         CommandResult commandResult = CommandResult.fail(commandId, errorMessage); // 使用 CommandResult.fail
@@ -124,8 +120,8 @@ public abstract class AbstractAIServiceHub extends BaseExtension {
      * @param command 命令对象
      * @return 包含命令结果的CompletableFuture
      */
-    protected CompletableFuture<Object> submitCommand(Command command) {
-        return asyncExtensionEnv.sendCommand(command); // 通过 asyncExtensionEnv 发送命令
+    protected CompletableFuture<CommandResult> submitCommand(Command command) {
+        return asyncExtensionEnv.sendCmd(command); // 通过 asyncExtensionEnv 发送命令
     }
 
     protected String generateCommandId() {

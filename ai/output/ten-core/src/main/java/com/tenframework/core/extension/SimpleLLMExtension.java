@@ -5,12 +5,13 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 import com.tenframework.core.message.AudioFrameMessage;
-import com.tenframework.core.message.Location;
-import com.tenframework.core.message.command.Command;
 import com.tenframework.core.message.CommandResult;
 import com.tenframework.core.message.DataMessage;
+import com.tenframework.core.message.Location;
 import com.tenframework.core.message.MessageType;
 import com.tenframework.core.message.VideoFrameMessage;
+import com.tenframework.core.message.command.Command;
+import com.tenframework.core.tenenv.TenEnv;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -20,31 +21,31 @@ import lombok.extern.slf4j.Slf4j;
 public class SimpleLLMExtension extends AbstractAIServiceHub {
 
     @Override
-    public void onInit(AsyncExtensionEnv env) {
+    public void onInit(TenEnv env) {
         log.info("SimpleLLMExtension: {} onInit called.", getExtensionName());
         // 可以在这里加载LLM模型或进行其他初始化
     }
 
     @Override
-    public void onStart(AsyncExtensionEnv env) {
+    public void onStart(TenEnv env) {
         log.info("SimpleLLMExtension: {} onStart called.", getExtensionName());
         // 可以在这里启动LLM服务
     }
 
     @Override
-    public void onStop(AsyncExtensionEnv env) {
+    public void onStop(TenEnv env) {
         log.info("SimpleLLMExtension: {} onStop called.", getExtensionName());
         // 可以在这里停止LLM服务
     }
 
     @Override
-    public void onDeinit(AsyncExtensionEnv env) {
+    public void onDeinit(TenEnv env) {
         log.info("SimpleLLMExtension: {} onDeinit called.", getExtensionName());
         // 可以在这里释放LLM模型资源
     }
 
     @Override
-    protected void handleAIServiceCommand(Command command, AsyncExtensionEnv env) {
+    protected void handleAIServiceCommand(TenEnv env, Command command) {
         log.debug("LLM收到命令: {}", command.getName());
         // 模拟处理命令并发送结果
         // env.sendResult(new CommandResult(command.getCommandId(), "LLM Processed: " +
@@ -53,7 +54,7 @@ public class SimpleLLMExtension extends AbstractAIServiceHub {
     }
 
     @Override
-    protected void handleAIServiceData(DataMessage data, AsyncExtensionEnv env) {
+    protected void handleAIServiceData(TenEnv env, DataMessage data) {
         log.debug("LLM收到数据: {}", new String(data.getData()));
         // 模拟处理数据并可能触发其他命令或发送数据
         // env.sendMessage(new Data("llm_processed_data", ("Processed: " + new
@@ -61,7 +62,7 @@ public class SimpleLLMExtension extends AbstractAIServiceHub {
     }
 
     @Override
-    protected void handleAIServiceAudioFrame(AudioFrameMessage audioFrame, AsyncExtensionEnv env) {
+    protected void handleAIServiceAudioFrame(TenEnv env, AudioFrameMessage audioFrame) {
         log.debug("LLM收到音频帧: {} ({}Hz, {}ch)", audioFrame.getName(),
                 audioFrame.getSampleRate(), audioFrame.getNumberOfChannel()); // 修复：getChannels() 改为
                                                                               // getNumberOfChannel()
@@ -69,14 +70,14 @@ public class SimpleLLMExtension extends AbstractAIServiceHub {
     }
 
     @Override
-    protected void handleAIServiceVideoFrame(VideoFrameMessage videoFrame, AsyncExtensionEnv env) {
+    protected void handleAIServiceVideoFrame(TenEnv env, VideoFrameMessage videoFrame) {
         log.debug("LLM收到视频帧: {} ({}x{})", videoFrame.getName(),
                 videoFrame.getWidth(), videoFrame.getHeight());
         // 模拟处理视频帧
     }
 
     @Override
-    protected void handleAIServiceCommandResult(CommandResult commandResult, AsyncExtensionEnv env) {
+    protected void handleAIServiceCommandResult(TenEnv env, CommandResult commandResult) {
         log.debug("LLM收到命令结果: {}", commandResult.getId());
         // 处理上游命令的结果
     }
@@ -87,18 +88,19 @@ public class SimpleLLMExtension extends AbstractAIServiceHub {
     }
 
     // 示例：LLM可以发送一个命令到其他Extension
-    public CompletableFuture<Object> sendLLMCommand(String targetExtension, String commandName,
+    public CompletableFuture<CommandResult> sendLLMCommand(String targetExtension, String commandName,
             Map<String, Object> args) {
         // 使用通用的 Command 构造函数，这里假设我们发送一个 DATA 类型的命令作为示例
         // 实际应用中，这里应该根据具体业务定义 Command 子类
         Command cmd = new Command(
                 com.tenframework.core.util.MessageUtils.generateUniqueId(), // 修复：添加 id
                 new Location().setAppUri(asyncExtensionEnv.getAppUri()).setGraphId(asyncExtensionEnv.getGraphId())
-                        .setNodeId(asyncExtensionEnv.getExtensionName()), // 修复：srcLoc
+                        .setExtensionName(asyncExtensionEnv.getExtensionName()), // 修复：srcLoc
                 MessageType.DATA, // 修复：使用 DATA
                 Collections.singletonList(new Location().setAppUri(asyncExtensionEnv.getAppUri())
-                        .setGraphId(asyncExtensionEnv.getGraphId()).setNodeId(targetExtension)), // 修复：createLocation()
-                                                                                                 // 替换为构建Location
+                        .setGraphId(asyncExtensionEnv.getGraphId()).setExtensionName(targetExtension)),
+                // 修复：createLocation()
+                // 替换为构建Location
                 args, // 修复：传递 properties
                 System.currentTimeMillis(), // 修复：传递 timestamp
                 commandName) {

@@ -5,19 +5,12 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReference;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.tenframework.core.graph.GraphConfig;
 import com.tenframework.core.message.AudioFrameMessage;
 import com.tenframework.core.message.CommandResult;
 import com.tenframework.core.message.DataMessage;
@@ -25,6 +18,7 @@ import com.tenframework.core.message.Location;
 import com.tenframework.core.message.MessageType;
 import com.tenframework.core.message.VideoFrameMessage;
 import com.tenframework.core.message.command.Command;
+import com.tenframework.core.tenenv.TenEnv; // Changed from TenEnvProxy
 import lombok.Builder;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
@@ -34,92 +28,92 @@ import lombok.extern.slf4j.Slf4j;
  * 基于ten-framework AI_BASE的AsyncLLMBaseExtension设计
  *
  * 核心特性：
- * 1. 异步处理队列机制 - 使用BlockingQueue实现生产者-消费者模式
+ * 1. 异步处理队列机制 (现在通过 TenEnv 实现)
  * 2. 工具编排能力 - 支持动态工具注册和管理
  * 3. 流式处理支持 - 支持流式文本输出和中断机制
  * 4. 会话状态管理 - 维护对话历史和上下文
  * 5. 精确的错误处理和监控 (此处为占位符，需实际集成)
  */
 @Slf4j
-public abstract class AbstractLLMExtension implements Extension {
+public abstract class AbstractLLMExtension extends BaseExtension { // Extends BaseExtension
 
-    // 异步处理队列 - 核心组件
-    private final BlockingQueue<LLMInputItem> processingQueue;
-    private final ExecutorService processingExecutor;
-    private final AtomicBoolean processingTaskRunning = new AtomicBoolean(false);
-    private final AtomicReference<Future<?>> currentProcessingTask = new AtomicReference<>();
     // 工具管理
     private final List<ToolMetadata> availableTools = new CopyOnWriteArrayList<>();
     private final Object toolsLock = new Object();
     // 会话状态
     private final Map<String, Object> sessionState = new ConcurrentHashMap<>();
     private final AtomicBoolean interrupted = new AtomicBoolean(false);
-    // 性能监控 (简化或移除，因为 metrics 包不存在)
+    // 性能监控
     private final ObjectMapper objectMapper = new ObjectMapper(); // 用于 JSON 解析
-    protected String extensionName;
+    // protected String extensionName; // Handled by BaseExtension
     protected boolean isRunning = false;
-    protected Map<String, Object> configuration;
-    protected AsyncExtensionEnv context;
+    // protected Map<String, Object> configuration; // Handled by BaseExtension
+    // protected TenEnvProxy<Extension> envProxy; // Replaced by TenEnv env in
+    // BaseExtension
 
     public AbstractLLMExtension() {
-        processingQueue = new LinkedBlockingQueue<>();
-        processingExecutor = Executors.newVirtualThreadPerTaskExecutor();
     }
 
+    // Removed init method, handled by BaseExtension
+    // @Override
+    // public void init(String extensionId, GraphConfig config, TenEnv env) {
+    // super.init(extensionId, config, env);
+    // this.extensionName = extensionId; // Re-assign for consistency if needed
+    // this.env = env;
+    // this.configuration = config.toMap();
+    // log.info("AbstractLLMExtension {} initialized with TenEnv.", extensionId);
+    // }
+
+    // Removed destroy method, handled by BaseExtension
+    // @Override
+    // public void destroy(TenEnv env) {
+    // super.destroy(env);
+    // log.info("AbstractLLMExtension {} destroyed.", extensionName);
+    // }
+
     @Override
-    public void onConfigure(AsyncExtensionEnv env) {
-        extensionName = env.getExtensionName();
-        context = env;
+    public void onConfigure(TenEnv env) { // Changed parameter type
+        super.onConfigure(env); // Call super method
+        // extensionName = env.getExtensionName(); // 从 TenEnv 获取 ExtensionName, but
+        // already set in init
         log.info("LLM扩展配置阶段: extensionName={}", extensionName);
-        onLLMConfigure(env);
+        onLLMConfigure(env); // Changed parameter type
     }
 
     @Override
-    public void onInit(AsyncExtensionEnv env) {
+    public void onInit(TenEnv env) { // Changed parameter type
+        super.onInit(env); // Call super method
         log.info("LLM扩展初始化阶段: extensionName={}", extensionName);
-        onLLMInit(env);
+        onLLMInit(env); // Changed parameter type
     }
 
     @Override
-    public void onStart(AsyncExtensionEnv env) {
+    public void onStart(TenEnv env) { // Changed parameter type
+        super.onStart(env); // Call super method
         log.info("LLM扩展启动阶段: extensionName={}", extensionName);
         isRunning = true;
         interrupted.set(false);
-
-        // 启动处理队列
-        startProcessingQueue(env);
-        onLLMStart(env);
+        onLLMStart(env); // Changed parameter type
     }
 
     @Override
-    public void onStop(AsyncExtensionEnv env) {
+    public void onStop(TenEnv env) { // Changed parameter type
+        super.onStop(env); // Call super method
         log.info("LLM扩展停止阶段: extensionName={}", extensionName);
         isRunning = false;
-
-        // 停止处理队列
-        stopProcessingQueue();
-        onLLMStop(env);
+        onLLMStop(env); // Changed parameter type
     }
 
     @Override
-    public void onDeinit(AsyncExtensionEnv env) {
+    public void onDeinit(TenEnv env) { // Changed parameter type
+        super.onDeinit(env); // Call super method
         log.info("LLM扩展清理阶段: extensionName={}", extensionName);
-        onLLMDeinit(env);
-
-        // 关闭执行器
-        processingExecutor.shutdown();
-        try {
-            if (!processingExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
-                processingExecutor.shutdownNow();
-            }
-        } catch (InterruptedException e) {
-            processingExecutor.shutdownNow();
-            Thread.currentThread().interrupt();
-        }
+        onLLMDeinit(env); // Changed parameter type
     }
 
     @Override
-    public void onCommand(Command command, AsyncExtensionEnv env) {
+    public void onCmd(TenEnv env, Command command) { // Changed parameter type
+        super.onCmd(env, command); // 调用父类的 onCmd
         if (!isRunning) {
             log.warn("LLM扩展未运行，忽略命令: extensionName={}, commandName={}",
                     extensionName, command.getName());
@@ -128,17 +122,18 @@ public abstract class AbstractLLMExtension implements Extension {
 
         long startTime = System.currentTimeMillis();
         try {
-            handleLLMCommand(command, env);
+            handleLLMCommand(env, command); // Changed parameter type
             long duration = System.currentTimeMillis() - startTime;
         } catch (Exception e) {
             log.error("LLM扩展命令处理异常: extensionName={}, commandName={}",
                     extensionName, command.getName(), e);
-            sendErrorResult(command, env, "LLM命令处理异常: " + e.getMessage());
+            sendErrorResult(env, command, "LLM命令处理异常: " + e.getMessage()); // Changed parameter type
         }
     }
 
     @Override
-    public void onData(DataMessage data, AsyncExtensionEnv env) {
+    public void onDataMessage(TenEnv env, DataMessage data) { // Changed parameter type and method name
+        super.onDataMessage(env, data); // 调用父类的 onDataMessage
         if (!isRunning) {
             log.warn("LLM扩展未运行，忽略数据: extensionName={}, dataId={}",
                     extensionName, data.getId());
@@ -147,22 +142,28 @@ public abstract class AbstractLLMExtension implements Extension {
 
         long startTime = System.currentTimeMillis();
         try {
-            // 将数据加入处理队列
-            LLMInputItem inputItem = new LLMInputItem(data, env);
-            boolean queued = processingQueue.offer(inputItem);
-            if (!queued) {
-                log.warn("LLM处理队列已满，丢弃数据: extensionName={}, dataId={}",
-                        extensionName, data.getId());
-            }
+            // 将数据处理封装为任务，并通过 TenEnv 提交到 Runloop
+            env.postTask(() -> {
+                try {
+                    if (interrupted.get()) {
+                        log.debug("LLM处理被中断，跳过当前项目: extensionName={}", extensionName);
+                        return;
+                    }
+                    onDataChatCompletion(env, data); // Changed parameter type
+                } catch (Exception e) {
+                    log.error("LLM数据处理队列任务异常: extensionName={}, dataId={}", extensionName, data.getId(), e);
+                }
+            });
             long duration = System.currentTimeMillis() - startTime;
         } catch (Exception e) {
-            log.error("LLM扩展数据处理异常: extensionName={}, dataId={}",
+            log.error("LLM扩展数据提交异常: extensionName={}, dataId={}",
                     extensionName, data.getId(), e);
         }
     }
 
     @Override
-    public void onAudioFrame(AudioFrameMessage audioFrame, AsyncExtensionEnv env) {
+    public void onAudioFrame(TenEnv env, AudioFrameMessage audioFrame) { // Changed parameter type
+        super.onAudioFrame(env, audioFrame); // 调用父类的 onAudioFrame
         if (!isRunning) {
             log.warn("LLM扩展未运行，忽略音频帧: extensionName={}, frameId={}",
                     extensionName, audioFrame.getId());
@@ -174,7 +175,8 @@ public abstract class AbstractLLMExtension implements Extension {
     }
 
     @Override
-    public void onVideoFrame(VideoFrameMessage videoFrame, AsyncExtensionEnv env) {
+    public void onVideoFrame(TenEnv env, VideoFrameMessage videoFrame) { // Changed parameter type
+        super.onVideoFrame(env, videoFrame); // 调用父类的 onVideoFrame
         if (!isRunning) {
             log.warn("LLM扩展未运行，忽略视频帧: extensionName={}, frameId={}",
                     extensionName, videoFrame.getId());
@@ -186,88 +188,27 @@ public abstract class AbstractLLMExtension implements Extension {
     }
 
     @Override
-    public void onCommandResult(CommandResult commandResult, AsyncExtensionEnv env) {
+    public void onCmdResult(TenEnv env, CommandResult commandResult) { // Changed parameter type
+        super.onCmdResult(env, commandResult); // 调用父类的 onCmdResult
         log.warn("LLM扩展收到未处理的 CommandResult: {}. OriginalCommandId: {}", extensionName,
                 commandResult.getId(), commandResult.getOriginalCommandId());
     }
 
     /**
-     * 启动处理队列
-     */
-    private void startProcessingQueue(AsyncExtensionEnv context) {
-        if (processingTaskRunning.compareAndSet(false, true)) {
-            Future<?> task = processingExecutor.submit(() -> {
-                try {
-                    processQueue(context);
-                } catch (InterruptedException e) {
-                    log.info("LLM处理队列被中断: extensionName={}", extensionName);
-                    Thread.currentThread().interrupt();
-                } catch (Exception e) {
-                    log.error("LLM处理队列异常: extensionName={}", extensionName, e);
-                } finally {
-                    processingTaskRunning.set(false);
-                }
-            });
-            currentProcessingTask.set(task);
-        }
-    }
-
-    /**
-     * 停止处理队列
-     */
-    private void stopProcessingQueue() {
-        if (processingTaskRunning.compareAndSet(true, false)) {
-            // 清空队列
-            processingQueue.clear();
-
-            // 取消当前任务
-            Future<?> task = currentProcessingTask.get();
-            if (task != null && !task.isDone()) {
-                task.cancel(true);
-            }
-        }
-    }
-
-    /**
-     * 处理队列循环
-     */
-    private void processQueue(AsyncExtensionEnv context) throws InterruptedException {
-        while (processingTaskRunning.get() && !Thread.currentThread().isInterrupted()) {
-            LLMInputItem item = processingQueue.take();
-            if (item == null) {
-                break; // 退出信号
-            }
-
-            try {
-                if (interrupted.get()) {
-                    log.debug("LLM处理被中断，跳过当前项目: extensionName={}", extensionName);
-                    continue;
-                }
-
-                long startTime = System.currentTimeMillis();
-                onDataChatCompletion(item.data, context);
-                long duration = System.currentTimeMillis() - startTime;
-            } catch (Exception e) {
-                log.error("LLM数据处理异常: extensionName={}", extensionName, e);
-            }
-        }
-    }
-
-    /**
      * 处理LLM命令
      */
-    private void handleLLMCommand(Command command, AsyncExtensionEnv context) {
+    private void handleLLMCommand(TenEnv env, Command command) { // Changed parameter type
         String commandName = command.getName();
 
         switch (commandName) {
             case "tool_register":
-                handleToolRegister(command, context);
+                handleToolRegister(env, command); // Changed parameter type
                 break;
             case "chat_completion_call":
-                handleChatCompletionCall(command, context);
+                handleChatCompletionCall(env, command); // Changed parameter type
                 break;
             case "flush":
-                handleFlush(context);
+                handleFlush(env);
                 break;
             default:
                 log.warn("未知的LLM命令: extensionName={}, commandName={}",
@@ -278,9 +219,10 @@ public abstract class AbstractLLMExtension implements Extension {
     /**
      * 处理工具注册
      */
-    private void handleToolRegister(Command command, AsyncExtensionEnv context) {
+    private void handleToolRegister(TenEnv env, Command command) { // Changed parameter type
         try {
             // 从 properties 中获取 tool_metadata
+            // TODO: properties 应该通过 TenEnv 获取，这里暂时通过 command.getProperties() 获取
             String toolMetadataJson = (String) command.getProperties().get("tool_metadata");
             if (toolMetadataJson == null) {
                 throw new IllegalArgumentException("缺少工具元数据");
@@ -292,66 +234,55 @@ public abstract class AbstractLLMExtension implements Extension {
                 availableTools.add(toolMetadata);
             }
 
-            onToolsUpdate(context, toolMetadata);
+            onToolsUpdate(env, toolMetadata);
 
             // 发送成功结果
             CommandResult result = CommandResult.success(command.getId(), "Tool registered successfully.");
-            context.sendResult(result);
+            env.sendResult(result);
 
             log.info("工具注册成功: extensionName={}, toolName={}",
                     extensionName, toolMetadata.getName());
         } catch (Exception e) {
             log.error("工具注册失败: extensionName={}", extensionName, e);
-            sendErrorResult(command, context, "工具注册失败: " + e.getMessage());
+            sendErrorResult(env, command, "工具注册失败: " + e.getMessage()); // Changed parameter type
         }
     }
 
     /**
      * 处理聊天完成调用
      */
-    private void handleChatCompletionCall(Command command, AsyncExtensionEnv context) {
+    private void handleChatCompletionCall(TenEnv env, Command command) { // Changed parameter type
         try {
             // 从 properties 中获取 args
+            // TODO: args 应该通过 TenEnv 获取，这里暂时通过 command.getProperties() 获取
             Map<String, Object> args = (Map<String, Object>) command.getProperties().get("args");
             if (args == null) {
                 throw new IllegalArgumentException("缺少聊天完成参数");
             }
 
-            // 使用虚拟线程执行LLM调用
-            CompletableFuture.runAsync(() -> {
-                try {
-                    onCallChatCompletion(args, context);
-                } catch (Exception e) {
-                    log.error("LLM聊天完成调用异常: extensionName={}", extensionName, e);
-                }
-            }, context.getVirtualThreadExecutor());
+            // 直接执行LLM调用，因为此方法已在 Runloop 线程上调用
+            onCallChatCompletion(env, args); // Changed parameter type
 
         } catch (Exception e) {
             log.error("聊天完成调用处理失败: extensionName={}", extensionName, e);
-            sendErrorResult(command, context, "聊天完成调用失败: " + e.getMessage());
+            sendErrorResult(env, command, "聊天完成调用失败: " + e.getMessage()); // Changed parameter type
         }
     }
 
     /**
      * 处理刷新命令
      */
-    private void handleFlush(AsyncExtensionEnv context) {
+    private void handleFlush(TenEnv env) { // Changed parameter type
         log.info("LLM扩展收到刷新命令: extensionName={}", extensionName);
 
-        // 清空处理队列
-        processingQueue.clear();
-
-        // 设置中断标志
-        interrupted.set(true);
-
-        // 取消当前处理任务
-        Future<?> task = currentProcessingTask.get();
-        if (task != null && !task.isDone()) {
-            task.cancel(true);
-        }
-
-        // 重置中断标志
-        interrupted.set(false);
+        // 清空处理队列 (现在通过 TenEnv 的 postTask 清空)
+        // 为了实现清空，可以考虑引入一个专门的 flush 命令或 TenEnv 的 API
+        // 这里暂时通过一个空操作来模拟清空，实际需要根据 TenEnv 的设计来完善
+        env.postTask(() -> {
+            log.debug("LLM处理队列清空任务执行。");
+            interrupted.set(true); // 设置中断标志
+            interrupted.set(false); // 重置中断标志
+        });
 
         log.info("LLM扩展刷新完成: extensionName={}", extensionName);
     }
@@ -359,13 +290,13 @@ public abstract class AbstractLLMExtension implements Extension {
     /**
      * 发送文本输出
      */
-    protected void sendTextOutput(AsyncExtensionEnv context, String text, boolean endOfSegment) {
+    protected void sendTextOutput(TenEnv env, String text, boolean endOfSegment) { // Changed
         try {
             DataMessage outputData = new DataMessage(
                     java.util.UUID.randomUUID().toString(), // id
                     MessageType.DATA, // type
-                    new Location().setAppUri(context.getAppUri()).setGraphId(context.getGraphId())
-                            .setNodeId(extensionName), // srcLoc
+                    new Location().setAppUri(env.getAppUri()).setGraphId(env.getGraphId())
+                            .setExtensionName(extensionName), // srcLoc
                     Collections.emptyList(), // destLocs
                     text.getBytes(StandardCharsets.UTF_8) // data
             );
@@ -374,7 +305,7 @@ public abstract class AbstractLLMExtension implements Extension {
             outputData.getProperties().put("end_of_segment", endOfSegment);
             outputData.getProperties().put("extension_name", extensionName);
 
-            context.sendMessage(outputData);
+            env.sendMessage(outputData);
             log.debug("LLM文本输出发送成功: extensionName={}, text={}, endOfSegment={}",
                     extensionName, text, endOfSegment);
         } catch (Exception e) {
@@ -385,9 +316,9 @@ public abstract class AbstractLLMExtension implements Extension {
     /**
      * 发送错误结果
      */
-    protected void sendErrorResult(Command command, AsyncExtensionEnv context, String errorMessage) {
+    protected void sendErrorResult(TenEnv env, Command command, String errorMessage) { // Changed
         CommandResult errorResult = CommandResult.fail(command.getId(), errorMessage);
-        context.sendResult(errorResult);
+        env.sendResult(errorResult);
     }
 
     /**
@@ -407,42 +338,45 @@ public abstract class AbstractLLMExtension implements Extension {
     /**
      * LLM配置阶段
      */
-    protected abstract void onLLMConfigure(AsyncExtensionEnv context);
+    protected abstract void onLLMConfigure(TenEnv context); // Changed parameter type
 
     /**
      * LLM初始化阶段
      */
-    protected abstract void onLLMInit(AsyncExtensionEnv context);
+    protected abstract void onLLMInit(TenEnv context); // Changed parameter type
 
     /**
      * LLM启动阶段
      */
-    protected abstract void onLLMStart(AsyncExtensionEnv context);
+    protected abstract void onLLMStart(TenEnv context); // Changed parameter type
 
     /**
      * LLM停止阶段
      */
-    protected abstract void onLLMStop(AsyncExtensionEnv context);
+    protected abstract void onLLMStop(TenEnv context); // Changed parameter type
 
     /**
      * LLM清理阶段
      */
-    protected abstract void onLLMDeinit(AsyncExtensionEnv context);
+    protected abstract void onLLMDeinit(TenEnv context); // Changed parameter type
 
     /**
      * 处理数据驱动的聊天完成
      */
-    protected abstract void onDataChatCompletion(DataMessage data, AsyncExtensionEnv context);
+    protected abstract void onDataChatCompletion(TenEnv context, DataMessage data); // Changed parameter
+    // type
 
     /**
      * 处理命令驱动的聊天完成
      */
-    protected abstract void onCallChatCompletion(Map<String, Object> args, AsyncExtensionEnv context);
+    protected abstract void onCallChatCompletion(TenEnv context, Map<String, Object> args); // Changed
+    // parameter
+    // type
 
     /**
      * 处理工具更新
      */
-    protected abstract void onToolsUpdate(AsyncExtensionEnv context, ToolMetadata tool);
+    protected abstract void onToolsUpdate(TenEnv context, ToolMetadata tool); // Changed parameter type
 
     // 辅助方法
 
@@ -462,26 +396,27 @@ public abstract class AbstractLLMExtension implements Extension {
         return sessionState;
     }
 
-    @Override
-    public String getExtensionName() {
-        return extensionName;
-    }
+    // Removed getExtensionName and getAppUri, handled by BaseExtension
+    // @Override
+    // public String getExtensionName() {
+    // return extensionName;
+    // }
 
-    @Override
-    public String getAppUri() {
-        return context != null ? context.getAppUri() : null;
-    }
+    // @Override
+    // public String getAppUri() {
+    // return env.getAppUri(); // Changed to env
+    // }
 
     /**
      * LLM输入项
      */
     private static class LLMInputItem {
         final DataMessage data;
-        final AsyncExtensionEnv context;
+        final TenEnv env; // Changed type
 
-        LLMInputItem(DataMessage data, AsyncExtensionEnv context) {
+        LLMInputItem(DataMessage data, TenEnv env) { // Changed type
             this.data = data;
-            this.context = context;
+            this.env = env;
         }
     }
 

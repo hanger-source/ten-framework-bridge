@@ -4,7 +4,7 @@ import com.tenframework.core.message.Message;
 
 /**
  * 消息提交器接口，定义了向Engine提交消息的方法。
- * 用于解耦EngineAsyncExtensionEnv和Engine的直接依赖。
+ * 用于解耦EngineTenEnv和Engine的直接依赖。
  */
 public interface MessageSubmitter {
 

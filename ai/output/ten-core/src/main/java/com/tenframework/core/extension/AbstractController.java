@@ -1,13 +1,14 @@
 package com.tenframework.core.extension;
 
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 
+import com.tenframework.core.graph.GraphConfig;
 import com.tenframework.core.message.AudioFrameMessage;
 import com.tenframework.core.message.CommandResult;
 import com.tenframework.core.message.DataMessage;
 import com.tenframework.core.message.VideoFrameMessage;
 import com.tenframework.core.message.command.Command;
+import com.tenframework.core.tenenv.TenEnv;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -21,50 +22,79 @@ import lombok.extern.slf4j.Slf4j;
  * 4. 提供Extension生命周期管理
  */
 @Slf4j
-public abstract class AbstractController implements Extension {
+public abstract class AbstractController extends BaseExtension {
+
+    // 移除 @Getter 和 @Setter，因为不再直接持有 CommandSubmitter 引用
+    // protected CommandSubmitter commandSubmitter;
+
+    /**
+     * 异步Extension上下文
+     */
+    // @Getter // 移除Getter，因为已经在BaseExtension中声明
+    // protected TenEnv asyncExtensionEnv; // 移除此字段，使用 BaseExtension 的 env 字段
 
     protected String extensionName;
     protected boolean isRunning = false;
     protected Map<String, Object> configuration;
-    protected AsyncExtensionEnv env; // 新增：保存 AsyncExtensionEnv 引用
+    // protected TenEnvProxy<Extension> envProxy; // 移除此字段，使用 BaseExtension 的 env 字段
+    // 移除 engine 和 extensionContext 字段
 
     @Override
-    public void onConfigure(AsyncExtensionEnv env) {
-        this.env = env; // 保存 env 引用
-        extensionName = env.getExtensionName();
+    public void init(String extensionId, GraphConfig config, TenEnv env) { // 修改签名
+        super.init(extensionId, config, env); // 调用父类方法
+        this.extensionName = extensionId; // 重新赋值，确保一致
+        // this.env = env; // 已经在父类中设置
+        this.configuration = config.toMap(); // 重新赋值，确保一致
+        log.info("AbstractController {} initialized with TenEnv.", extensionId);
+    }
+
+    @Override
+    public void destroy(TenEnv env) {
+        super.destroy(env); // 调用父类方法
+        log.info("AbstractController {} destroyed.", extensionName);
+    }
+
+    @Override
+    public void onConfigure(TenEnv env) {
+        super.onConfigure(env); // 调用父类方法
         // 配置属性将在子类中通过getProperty方法获取
-        log.info("控制器配置阶段: extensionName={}", extensionName);
+        log.info("控制器配置阶段: extensionName={}", extensionName != null ? extensionName : "(未设置)");
         onControllerConfigure(env);
     }
 
     @Override
-    public void onInit(AsyncExtensionEnv env) {
-        log.info("控制器初始化阶段: extensionName={}", extensionName);
+    public void onInit(TenEnv env) {
+        super.onInit(env); // 调用父类方法
+        log.info("控制器初始化阶段: extensionName={}", extensionName != null ? extensionName : "(未设置)");
         onControllerInit(env);
     }
 
     @Override
-    public void onStart(AsyncExtensionEnv env) {
-        log.info("控制器启动阶段: extensionName={}", extensionName);
+    public void onStart(TenEnv env) {
+        super.onStart(env); // 调用父类方法
+        log.info("控制器启动阶段: extensionName={}", extensionName != null ? extensionName : "(未设置)");
         isRunning = true;
         onControllerStart(env);
     }
 
     @Override
-    public void onStop(AsyncExtensionEnv env) {
-        log.info("控制器停止阶段: extensionName={}", extensionName);
+    public void onStop(TenEnv env) {
+        super.onStop(env); // 调用父类方法
+        log.info("控制器停止阶段: extensionName={}", extensionName != null ? extensionName : "(未设置)");
         isRunning = false;
         onControllerStop(env);
     }
 
     @Override
-    public void onDeinit(AsyncExtensionEnv env) {
-        log.info("控制器清理阶段: extensionName={}", extensionName);
+    public void onDeinit(TenEnv env) {
+        super.onDeinit(env); // 调用父类方法
+        log.info("控制器清理阶段: extensionName={}", extensionName != null ? extensionName : "(未设置)");
         onControllerDeinit(env);
     }
 
     @Override
-    public void onCommand(Command command, AsyncExtensionEnv env) {
+    public void onCmd(TenEnv env, Command command) {
+        // super.onCommand(command, env); // 不再调用父类的 onCommand，由子类自行处理或选择性调用
         if (!isRunning) {
             log.warn("控制器未运行，忽略命令: extensionName={}, commandName={}",
                     extensionName, command.getName());
@@ -74,20 +104,19 @@ public abstract class AbstractController implements Extension {
         log.debug("控制器收到命令: extensionName={}, commandName={}",
                 extensionName, command.getName());
 
-        // 使用虚拟线程处理控制器命令
-        CompletableFuture.runAsync(() -> {
-            try {
-                handleControllerCommand(command, env);
-            } catch (Exception e) {
-                log.error("控制器命令处理异常: extensionName={}, commandName={}",
-                        extensionName, command.getName(), e);
-                sendErrorResult(command, env, "控制器处理异常: " + e.getMessage());
-            }
-        }, env.getVirtualThreadExecutor());
+        // 直接处理命令，因为此方法已在 Runloop 线程上调用
+        try {
+            handleControllerCommand(env, command);
+        } catch (Exception e) {
+            log.error("控制器命令处理异常: extensionName={}, commandName={}",
+                    extensionName, command.getName(), e);
+            sendErrorResult(env, command, "控制器处理异常: " + e.getMessage());
+        }
     }
 
     @Override
-    public void onData(DataMessage data, AsyncExtensionEnv env) {
+    public void onDataMessage(TenEnv env, DataMessage data) { // 修正方法名为 onDataMessage
+        // super.onDataMessage(data, env); // 不再调用父类的 onDataMessage，由子类自行处理或选择性调用
         if (!isRunning) {
             log.warn("控制器未运行，忽略数据: extensionName={}, dataId={}",
                     extensionName, data.getId());
@@ -96,11 +125,12 @@ public abstract class AbstractController implements Extension {
 
         log.debug("控制器收到数据: extensionName={}, dataId={}",
                 extensionName, data.getId());
-        handleControllerData(data, env);
+        handleControllerData(env, data);
     }
 
     @Override
-    public void onAudioFrame(AudioFrameMessage audioFrame, AsyncExtensionEnv env) {
+    public void onAudioFrame(TenEnv env, AudioFrameMessage audioFrame) {
+        // super.onAudioFrame(audioFrame, env); // 不再调用父类的 onAudioFrame，由子类自行处理或选择性调用
         if (!isRunning) {
             log.warn("控制器未运行，忽略音频帧: extensionName={}, frameId={}",
                     extensionName, audioFrame.getId());
@@ -109,11 +139,12 @@ public abstract class AbstractController implements Extension {
 
         log.debug("控制器收到音频帧: extensionName={}, frameId={}",
                 extensionName, audioFrame.getId());
-        handleControllerAudioFrame(audioFrame, env);
+        handleControllerAudioFrame(env, audioFrame);
     }
 
     @Override
-    public void onVideoFrame(VideoFrameMessage videoFrame, AsyncExtensionEnv env) {
+    public void onVideoFrame(TenEnv env, VideoFrameMessage videoFrame) { // 修正为 VideoMessage
+        // super.onVideoFrame(videoFrame, env); // 不再调用父类的 onVideoFrame，由子类自行处理或选择性调用
         if (!isRunning) {
             log.warn("控制器未运行，忽略视频帧: extensionName={}, frameId={}",
                     extensionName, videoFrame.getId());
@@ -122,75 +153,78 @@ public abstract class AbstractController implements Extension {
 
         log.debug("控制器收到视频帧: extensionName={}, frameId={}",
                 extensionName, videoFrame.getId());
-        handleControllerVideoFrame(videoFrame, env);
+        handleControllerVideoFrame(env, videoFrame);
     }
 
     /**
      * 控制器配置阶段
      */
-    protected abstract void onControllerConfigure(AsyncExtensionEnv context);
+    protected abstract void onControllerConfigure(TenEnv context);
 
     /**
      * 控制器初始化阶段
      */
-    protected abstract void onControllerInit(AsyncExtensionEnv context);
+    protected abstract void onControllerInit(TenEnv context);
 
     /**
      * 控制器启动阶段
      */
-    protected abstract void onControllerStart(AsyncExtensionEnv context);
+    protected abstract void onControllerStart(TenEnv context);
 
     /**
      * 控制器停止阶段
      */
-    protected abstract void onControllerStop(AsyncExtensionEnv context);
+    protected abstract void onControllerStop(TenEnv context);
 
     /**
      * 控制器清理阶段
      */
-    protected abstract void onControllerDeinit(AsyncExtensionEnv context);
+    protected abstract void onControllerDeinit(TenEnv context);
 
     /**
      * 处理控制器命令
      */
-    protected abstract void handleControllerCommand(Command command, AsyncExtensionEnv context);
+    protected abstract void handleControllerCommand(TenEnv context, Command command);
 
     /**
      * 处理控制器数据
      */
-    protected abstract void handleControllerData(DataMessage data, AsyncExtensionEnv context);
+    protected abstract void handleControllerData(TenEnv context, DataMessage data);
 
     /**
      * 处理控制器音频帧
      */
-    protected abstract void handleControllerAudioFrame(AudioFrameMessage audioFrame,
-            AsyncExtensionEnv context);
+    protected abstract void handleControllerAudioFrame(TenEnv context, AudioFrameMessage audioFrame);
 
     /**
      * 处理控制器视频帧
      */
-    protected abstract void handleControllerVideoFrame(VideoFrameMessage videoFrame,
-            AsyncExtensionEnv context);
+    protected abstract void handleControllerVideoFrame(TenEnv context, VideoFrameMessage videoFrame);
 
     /**
      * 发送错误结果
      */
-    protected void sendErrorResult(Command command, AsyncExtensionEnv context, String errorMessage) {
-        CommandResult errorResult = CommandResult.fail(command.getId(), errorMessage); // 使用 Command.getId()
+    protected void sendErrorResult(TenEnv context, Command command, String errorMessage) {
+        CommandResult errorResult = CommandResult.fail(command.getId(), errorMessage);
         context.sendResult(errorResult);
     }
 
     /**
      * 发送成功结果
      */
-    protected void sendSuccessResult(Command command, AsyncExtensionEnv context, Object result) {
+    protected void sendSuccessResult(TenEnv context, Command command, Object result) {
         CommandResult successResult = CommandResult.success(command.getId(),
-                result != null ? result.toString() : ""); // 将结果转换为String
+                result != null ? result.toString() : "");
         context.sendResult(successResult);
     }
 
     @Override
     public String getAppUri() {
-        return env != null ? env.getAppUri() : "unknown"; // 从 env 获取 appUri
+        return env.getAppUri(); // 从 BaseExtension 的 env 字段获取
+    }
+
+    @Override
+    public String getExtensionName() {
+        return extensionName; // 从 BaseExtension 的 extensionName 字段获取
     }
 }

@@ -6,6 +6,7 @@ import com.tenframework.core.message.CommandResult;
 import com.tenframework.core.message.command.Command;
 import com.tenframework.core.message.command.TimeoutCommand;
 import com.tenframework.core.message.command.TimerCommand;
+import com.tenframework.core.tenenv.TenEnv;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -16,17 +17,17 @@ import lombok.extern.slf4j.Slf4j;
 public class TimerCommandHandler implements EngineCommandHandler {
 
     @Override
-    public Object handle(Engine engine, Command command) {
+    public Object handle(TenEnv engineEnv, Command command) {
         if (!(command instanceof TimerCommand)) {
             log.warn("TimerCommandHandler 收到非 TimerCommand 命令: {}", command.getType());
             // 返回失败结果
             return CommandResult.fail(command.getId(), "Unexpected command type for TimerHandler.");
         }
-        return handleTimerCommand(engine, (TimerCommand) command);
+        return handleTimerCommand(engineEnv, (TimerCommand) command);
     }
 
     @Override
-    public Object handleTimerCommand(Engine engine, TimerCommand command) {
+    public Object handleTimerCommand(TenEnv engineEnv, TimerCommand command) {
         log.debug("TimerCommand received for timerId: {}, timeoutUs: {}, times: {}",
                 command.getTimerId(), command.getTimeoutUs(), command.getTimes());
         // TODO: Implement timer logic
@@ -34,7 +35,7 @@ public class TimerCommandHandler implements EngineCommandHandler {
     }
 
     @Override
-    public Object handleTimeoutCommand(Engine engine, TimeoutCommand command) {
+    public Object handleTimeoutCommand(TenEnv engineEnv, TimeoutCommand command) {
         // TimerCommandHandler 不处理 TimeoutCommand
         log.warn("TimerCommandHandler 不支持 TimeoutCommand: {}", command.getId());
         return CommandResult.fail(command.getId(),

@@ -1,113 +1,136 @@
 package com.tenframework.core.extension;
 
+import com.tenframework.core.graph.GraphConfig;
 import com.tenframework.core.message.AudioFrameMessage;
 import com.tenframework.core.message.CommandResult;
 import com.tenframework.core.message.DataMessage;
 import com.tenframework.core.message.VideoFrameMessage;
 import com.tenframework.core.message.command.Command;
+import com.tenframework.core.tenenv.TenEnv;
 
 /**
  * `Extension` 接口定义了 ten-framework 中 Extension 的生命周期回调和消息处理方法。
- * Extension 是 Engine 内部的业务处理单元，通过 `AsyncExtensionEnv` 与 Engine 交互。
+ * Extension 是 Engine 内部的业务处理单元，通过 `TenEnvProxy` 与 Engine 异步交互。
  * 它对应 C 语言中的 `ten_extension_t`。
  */
 public interface Extension {
 
     String getExtensionName();
+
+    String getAppUri(); // 保持此方法，因为它通过 envProxy 获取 AppUri
+
     /**
-     * Extension 配置回调方法。
+     * Extension 的初始化方法。
      *
-     * @param env Extension 的运行时环境。
+     * @param extensionId Extension 的唯一 ID。
+     * @param config      Extension 的配置。
+     * @param env         此 Extension 的 TenEnv 环境句柄。
      */
-    default void onConfigure(AsyncExtensionEnv env) {
+    default void init(String extensionId, GraphConfig config, TenEnv env) {
+        // Default implementation
     }
 
     /**
-     * Extension 初始化回调方法。
+     * 当 Extension 配置完成时调用。
      *
-     * @param env Extension 的运行时环境。
+     * @param env 此 Extension 的 TenEnv 环境句柄。
      */
-    default void onInit(AsyncExtensionEnv env) {
+    default void onConfigure(TenEnv env) {
+        // Default implementation
     }
 
     /**
-     * Extension 启动回调方法。
+     * 当 Extension 初始化完成时调用。
      *
-     * @param env Extension 的运行时环境。
+     * @param env 此 Extension 的 TenEnv 环境句柄。
      */
-    default void onStart(AsyncExtensionEnv env) {
+    default void onInit(TenEnv env) {
+        // Default implementation
     }
 
     /**
-     * Extension 停止回调方法。
+     * 当 Extension 启动时调用。
      *
-     * @param env Extension 的运行时环境。
+     * @param env 此 Extension 的 TenEnv 环境句柄。
      */
-    default void onStop(AsyncExtensionEnv env) {
+    default void onStart(TenEnv env) {
+        // Default implementation
     }
 
     /**
-     * Extension 去初始化回调方法。
+     * 当 Extension 停止时调用。
      *
-     * @param env Extension 的运行时环境。
+     * @param env 此 Extension 的 TenEnv 环境句柄。
      */
-    default void onDeinit(AsyncExtensionEnv env) {
+    default void onStop(TenEnv env) {
+        // Default implementation
     }
 
     /**
-     * 处理命令消息。
+     * 当 Extension 去初始化时调用。
      *
-     * @param command 命令消息。
-     * @param env     Extension 的运行时环境。
+     * @param env 此 Extension 的 TenEnv 环境句柄。
      */
-    default void onCommand(Command command, AsyncExtensionEnv env) {
-        // Extension 级别的命令处理，通常由具体的 Extension 实现根据 command 的名称或特定属性进行处理。
-        // 这里提供一个默认的“不支持”实现，如果具体 Extension 不覆盖此方法，则表示它不支持该命令。
-        env.getVirtualThreadExecutor()
-                .execute(() -> env
-                        .sendResult(CommandResult.fail(command.getId(), "Extension does not support this command.")));
+    default void onDeinit(TenEnv env) {
+        // Default implementation
     }
 
     /**
-     * 处理数据消息。
+     * 当 Extension 被销毁时调用。
      *
-     * @param data 数据消息。
-     * @param env  Extension 的运行时环境。
+     * @param env 此 Extension 的 TenEnv 环境句柄。
      */
-    default void onData(DataMessage data, AsyncExtensionEnv env) {
+    default void destroy(TenEnv env) {
+        // Default implementation
     }
 
     /**
-     * 处理音频帧消息。
+     * 处理传入的命令。
      *
-     * @param audioFrame 音频帧消息。
-     * @param env        Extension 的运行时环境。
+     * @param command 传入的命令。
+     * @param env     此 Extension 的 TenEnv 环境句柄。
      */
-    default void onAudioFrame(AudioFrameMessage audioFrame, AsyncExtensionEnv env) {
+    default void onCmd(TenEnv env, Command command) {
+        // Default implementation
     }
 
     /**
-     * 处理视频帧消息。
+     * 处理传入的命令结果。
      *
-     * @param videoFrame 视频帧消息。
-     * @param env        Extension 的运行时环境。
+     * @param commandResult 传入的命令结果。
+     * @param env           此 Extension 的 TenEnv 环境句柄。
      */
-    default void onVideoFrame(VideoFrameMessage videoFrame, AsyncExtensionEnv env) {
+    default void onCmdResult(TenEnv env, CommandResult commandResult) {
+        // Default implementation
     }
 
     /**
-     * 处理命令结果消息。
+     * 处理传入的数据消息。
      *
-     * @param commandResult 命令结果消息。
-     * @param env           Extension 的运行时环境。
+     * @param dataMessage 传入的数据消息。
+     * @param env         此 Extension 的 TenEnv 环境句柄。
      */
-    default void onCommandResult(CommandResult commandResult, AsyncExtensionEnv env) {
+    default void onDataMessage(TenEnv env, DataMessage dataMessage) {
+        // Default implementation
     }
 
     /**
-     * 获取 Extension 所属的 App URI。
+     * 处理传入的音频帧消息。
      *
-     * @return App URI。
+     * @param audioFrame 传入的音频帧消息。
+     * @param env        此 Extension 的 TenEnv 环境句柄。
      */
-    String getAppUri();
+    default void onAudioFrame(TenEnv env, AudioFrameMessage audioFrame) {
+        // Default implementation
+    }
+
+    /**
+     * 处理传入的视频帧消息。
+     *
+     * @param videoFrame 传入的视频帧消息。
+     * @param env        此 Extension 的 TenEnv 环境句柄。
+     */
+    default void onVideoFrame(TenEnv env, VideoFrameMessage videoFrame) {
+        // Default implementation
+    }
 }

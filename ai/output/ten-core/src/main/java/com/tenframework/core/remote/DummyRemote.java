@@ -1,15 +1,12 @@
 package com.tenframework.core.remote;
 
-import com.tenframework.core.engine.Engine;
-import com.tenframework.core.message.Message;
-import com.tenframework.core.message.Location;
-import com.tenframework.core.connection.Connection;
-
-import lombok.extern.slf4j.Slf4j;
-
-import java.util.UUID;
 import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
+
+import com.tenframework.core.connection.Connection;
+import com.tenframework.core.engine.Engine;
+import com.tenframework.core.message.Location;
+import com.tenframework.core.message.Message;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * DummyRemote 是 Remote 抽象类的一个简化实现，用于测试和占位。
@@ -24,9 +21,9 @@ public class DummyRemote extends Remote {
     public DummyRemote(String remoteId, Location remoteEngineLocation, Engine localEngine,
             Optional<Connection> initialConnection) {
         super(remoteId, remoteEngineLocation, localEngine);
-        this.associatedConnection = initialConnection;
+        associatedConnection = initialConnection;
         log.info("DummyRemote: 创建了 Remote 实例: remoteId={}, remoteEngineLocation={}, localEngineId={}",
-                remoteId, remoteEngineLocation, localEngine.getEngineId());
+            remoteId, remoteEngineLocation, localEngine.getGraphId());
     }
 
     @Override
@@ -62,6 +59,6 @@ public class DummyRemote extends Remote {
     }
 
     public void setAssociatedConnection(Connection connection) {
-        this.associatedConnection = Optional.ofNullable(connection);
+        associatedConnection = Optional.ofNullable(connection);
     }
 }

@@ -1,5 +1,7 @@
 package com.tenframework.core.graph;
 
+import com.fasterxml.jackson.annotation.JsonAnyGetter;
+import com.fasterxml.jackson.annotation.JsonAnySetter;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -12,8 +14,10 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static java.util.Collections.emptyList;
 
@@ -52,45 +56,27 @@ public class GraphDefinition {
     // 新增字段用于存储原始 JSON 内容
     private String jsonContent;
 
+    // 用于存储其他未显式映射的属性
+    private Map<String, Object> properties = new ConcurrentHashMap<>();
+
     public GraphDefinition(String appUri, String graphJsonDefinition) {
         this.appUri = appUri;
         this.jsonContent = graphJsonDefinition; // 保存原始 JSON
+        // Initialize properties map
+        this.properties = new ConcurrentHashMap<>();
 
         try {
-            JsonNode rootNode = OBJECT_MAPPER.readTree(graphJsonDefinition);
-
-            this.graphId = Optional.ofNullable(rootNode.get("graph_id"))
-                    .map(JsonNode::asText)
-                    .orElse(UUID.randomUUID().toString()); // 如果 JSON 中没有，则生成 UUID
-
-            this.graphName = Optional.ofNullable(rootNode.get("graph_name"))
-                    .map(JsonNode::asText)
-                    .orElse("" + graphId); // 如果 JSON 中没有，则使用 graphId 作为名称
-
-            // 解析 extension_groups_info
-            JsonNode extGroupsNode = rootNode.get("extension_groups_info");
-            if (extGroupsNode != null && extGroupsNode.isArray()) {
-                this.extensionGroupsInfo = OBJECT_MAPPER.readerForListOf(ExtensionGroupInfo.class)
-                        .readValue(extGroupsNode);
-            } else {
-                this.extensionGroupsInfo = new ArrayList<>();
-            }
-
-            // 解析 extensions_info
-            JsonNode extsNode = rootNode.get("extensions_info");
-            if (extsNode != null && extsNode.isArray()) {
-                this.extensionsInfo = OBJECT_MAPPER.readerForListOf(ExtensionInfo.class).readValue(extsNode);
-            } else {
-                this.extensionsInfo = new ArrayList<>();
-            }
-
-            // 解析 connections
-            JsonNode connectionsNode = rootNode.get("connections");
-            if (connectionsNode != null && connectionsNode.isArray()) {
-                this.connections = OBJECT_MAPPER.readerForListOf(ConnectionConfig.class).readValue(connectionsNode);
-            } else {
-                this.connections = new ArrayList<>();
-            }
+            // 使用 ObjectMapper 直接解析到自身，并通过 @JsonAnySetter 自动填充 properties
+            GraphDefinition temp = OBJECT_MAPPER.readValue(graphJsonDefinition, GraphDefinition.class);
+            this.graphId = Optional.ofNullable(temp.graphId)
+                    .orElse(UUID.randomUUID().toString());
+            this.graphName = Optional.ofNullable(temp.graphName)
+                    .orElse("" + graphId);
+            this.extensionGroupsInfo = Optional.ofNullable(temp.extensionGroupsInfo).orElse(new ArrayList<>());
+            this.extensionsInfo = Optional.ofNullable(temp.extensionsInfo).orElse(new ArrayList<>());
+            this.connections = Optional.ofNullable(temp.connections).orElse(new ArrayList<>());
+            // Directly copy properties, @JsonAnySetter handles initial parsing
+            this.properties.putAll(temp.properties);
 
         } catch (JsonProcessingException e) {
             log.error("解析 Graph JSON 定义失败: {}", e.getMessage(), e);
@@ -100,6 +86,7 @@ public class GraphDefinition {
             this.extensionGroupsInfo = new ArrayList<>();
             this.extensionsInfo = new ArrayList<>();
             this.connections = new ArrayList<>();
+            this.properties = new ConcurrentHashMap<>();
         } catch (Exception e) {
             log.error("处理 Graph JSON 定义时发生未知错误: {}", e.getMessage(), e);
             this.graphId = UUID.randomUUID().toString();
@@ -107,6 +94,36 @@ public class GraphDefinition {
             this.extensionGroupsInfo = new ArrayList<>();
             this.extensionsInfo = new ArrayList<>();
             this.connections = new ArrayList<>();
+            this.properties = new ConcurrentHashMap<>();
         }
+    }
+
+    @JsonAnyGetter
+    public Map<String, Object> any() {
+        return properties;
+    }
+
+    @JsonAnySetter
+    public void set(String name, Object value) {
+        // Only put if it's not one of the explicitly mapped fields
+        if (!"graph_id".equals(name) &&
+                !"app_uri".equals(name) &&
+                !"graph_name".equals(name) &&
+                !"extension_groups_info".equals(name) &&
+                !"extensions_info".equals(name) &&
+                !"connections".equals(name) &&
+                !"jsonContent".equals(name)) {
+            properties.put(name, value);
+        }
+    }
+
+    // Add getter for extensionsInfo (renamed for consistency with error)
+    public List<ExtensionInfo> getExtensions() {
+        return extensionsInfo;
+    }
+
+    // Add getter for properties, returning a GraphConfig instance
+    public GraphConfig getProperties() {
+        return new GraphConfig(properties);
     }
 }
