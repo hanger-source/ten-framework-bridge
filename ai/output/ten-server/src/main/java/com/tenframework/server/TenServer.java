@@ -3,11 +3,11 @@ package com.tenframework.server;
 import java.net.BindException;
 import java.net.InetSocketAddress;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
 import java.util.concurrent.TimeUnit;
 
 import com.tenframework.core.app.App;
-import com.tenframework.core.message.TenMessagePackMapperProvider;
+import com.tenframework.server.handler.MessagePackDecoder;
+import com.tenframework.server.handler.MessagePackEncoder;
 import com.tenframework.server.handler.NettyConnectionHandler;
 import com.tenframework.server.handler.WebSocketMessageDispatcher;
 import io.netty.bootstrap.ServerBootstrap;
@@ -25,8 +25,6 @@ import io.netty.handler.codec.http.websocketx.WebSocketServerProtocolHandler;
 import io.netty.handler.logging.LogLevel;
 import io.netty.handler.logging.LoggingHandler;
 import io.netty.handler.stream.ChunkedWriteHandler;
-import com.tenframework.server.handler.MessagePackDecoder;
-import com.tenframework.server.handler.MessagePackEncoder;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -58,7 +56,7 @@ public class TenServer {
             socket.setReuseAddress(true);
             return socket.getLocalPort();
         } catch (java.io.IOException e) {
-            throw new IllegalStateException("无法找到可用端口: " + e.getMessage(), e);
+            throw new IllegalStateException("无法找到可用端口: %s".formatted(e.getMessage()), e);
         }
     }
 
@@ -128,7 +126,7 @@ public class TenServer {
 
     public CompletableFuture<Void> shutdown() {
         log.info("TenServer shutting down.");
-        final CompletableFuture<Void> shutdownFuture = new CompletableFuture<>();
+        CompletableFuture<Void> shutdownFuture = new CompletableFuture<>();
         if (channelFuture != null) {
             channelFuture.channel().closeFuture().addListener(f -> {
                 if (f.isSuccess()) {

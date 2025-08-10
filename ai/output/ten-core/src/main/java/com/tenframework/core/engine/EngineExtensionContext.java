@@ -6,19 +6,19 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.Optional;
 
 import com.tenframework.core.app.App;
 import com.tenframework.core.extension.Extension;
 import com.tenframework.core.extension.ExtensionEnvImpl;
-import com.tenframework.core.extension.ExtensionThread;
 import com.tenframework.core.extension.ExtensionGroup;
+import com.tenframework.core.extension.ExtensionThread;
 import com.tenframework.core.extension.submitter.ExtensionCommandSubmitter;
 import com.tenframework.core.extension.submitter.ExtensionMessageSubmitter;
-import com.tenframework.core.graph.ExtensionInfo;
 import com.tenframework.core.graph.ExtensionGroupInfo;
+import com.tenframework.core.graph.ExtensionInfo;
 import com.tenframework.core.graph.GraphConfig;
 import com.tenframework.core.graph.MessageConversionContext;
 import com.tenframework.core.message.CommandResult;
@@ -31,14 +31,13 @@ import com.tenframework.core.util.MessageConverter;
 import com.tenframework.core.util.ReflectionUtils;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.agrona.concurrent.Agent;
 
 /**
  * 管理 Engine 中 Extension 的生命周期和交互。
  * 这是 Engine 与其加载的 Extension 之间交互的主要接口。
  */
 @Slf4j
-public class EngineExtensionContext implements Agent, ExtensionCommandSubmitter, ExtensionMessageSubmitter {
+public class EngineExtensionContext implements ExtensionCommandSubmitter, ExtensionMessageSubmitter {
 
     @Getter
     private final Engine engine; // 引擎引用
@@ -91,12 +90,12 @@ public class EngineExtensionContext implements Agent, ExtensionCommandSubmitter,
             Runloop engineRunloop, ExtensionInfo extInfo) {
 
         // 从 ExtensionInfo 中获取 ExtensionGroup 名称，如果未指定，则默认使用 Graph ID
-        final String extensionGroupName = Optional.ofNullable(extInfo.getExtensionGroupName())
+        String extensionGroupName = Optional.ofNullable(extInfo.getExtensionGroupName())
                 .filter(name -> !name.isEmpty())
                 .orElse(extInfo.getLoc().getGraphId());
 
         // 获取或创建 ExtensionThread。每个 ExtensionGroup 将对应一个 ExtensionThread。
-        final ExtensionThread extensionThread = extensionThreads.computeIfAbsent(extensionGroupName, k -> {
+        ExtensionThread extensionThread = extensionThreads.computeIfAbsent(extensionGroupName, k -> {
             ExtensionThread newThread = new ExtensionThread("ExtensionThread-%s".formatted(k));
             newThread.start(); // 启动线程，以便其 Runloop 可用
             return newThread;
@@ -313,20 +312,6 @@ public class EngineExtensionContext implements Agent, ExtensionCommandSubmitter,
         // 将处理后的命令委托给 ExtensionThread 进行分发
         Command finalProcessedCommand = (Command) processedCommand;
         extensionThread.dispatchCommand(finalProcessedCommand, targetExtensionId);
-    }
-
-    @Override
-    public int doWork() {
-        int workDone = 0;
-        // ExtensionContext 本身不直接处理任务队列，其主要职责是管理 ExtensionThread
-        // ExtensionThread 内部的 Runloop 会处理消息和任务
-        // Note: 如果 ExtensionContext 需要周期性任务，可在此处添加。
-        return workDone;
-    }
-
-    @Override
-    public String roleName() {
-        return roleName;
     }
 
     // 辅助方法：根据 ExtensionId 查找其所属的 ExtensionThread

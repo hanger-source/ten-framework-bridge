@@ -1,25 +1,16 @@
 package com.tenframework.server.connection;
 
+import java.net.SocketAddress;
+import java.util.concurrent.CompletableFuture;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tenframework.core.connection.AbstractConnection;
 import com.tenframework.core.message.Message;
-import com.tenframework.core.message.MessageConstants;
-import com.tenframework.core.message.MessageType;
 import com.tenframework.core.runloop.Runloop;
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelPromise;
-import io.netty.handler.codec.http.websocketx.BinaryWebSocketFrame;
 import io.netty.util.AttributeKey;
 import lombok.extern.slf4j.Slf4j;
-
-import java.io.IOException;
-import java.net.SocketAddress;
-import java.nio.charset.StandardCharsets;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
 
 /**
  * NettyConnection 是 Connection 接口的实现，用于封装 Netty Channel。
@@ -38,7 +29,7 @@ public class NettyConnection extends AbstractConnection {
     public NettyConnection(String connectionId, SocketAddress remoteAddress, Channel channel, Runloop initialRunloop) {
         super(connectionId, remoteAddress, initialRunloop); // 调用父类构造函数
         this.channel = channel;
-        this.objectMapper = new ObjectMapper(); // 或从一个共享的 MapperProvider 获取
+        objectMapper = new ObjectMapper(); // 或从一个共享的 MapperProvider 获取
         log.info("NettyConnection: {} 实例创建，绑定到 Channel {}", connectionId, channel.id().asShortText());
     }
 
@@ -51,24 +42,18 @@ public class NettyConnection extends AbstractConnection {
     protected CompletableFuture<Void> sendOutboundMessageInternal(Message message) {
         CompletableFuture<Void> future = new CompletableFuture<>();
         if (channel.isActive()) {
-            try {
-                ChannelFuture writeFuture = channel.writeAndFlush(message);
-                writeFuture.addListener(f -> {
-                    if (f.isSuccess()) {
-                        log.debug("NettyConnection {}: 消息 {} (类型: {}) 发送成功。", getConnectionId(), message.getId(),
-                                message.getType());
-                        future.complete(null);
-                    } else {
-                        log.error("NettyConnection {}: 消息 {} (类型: {}) 发送失败: {}", getConnectionId(), message.getId(),
-                                message.getType(), f.cause().getMessage());
-                        future.completeExceptionally(f.cause());
-                    }
-                });
-            } catch (IOException e) {
-                log.error("NettyConnection {}: 消息 {} (类型: {}) 序列化失败: {}", getConnectionId(), message.getId(),
-                        message.getType(), e.getMessage());
-                future.completeExceptionally(e);
-            }
+            ChannelFuture writeFuture = channel.writeAndFlush(message);
+            writeFuture.addListener(f -> {
+                if (f.isSuccess()) {
+                    log.debug("NettyConnection {}: 消息 {} (类型: {}) 发送成功。", getConnectionId(), message.getId(),
+                        message.getType());
+                    future.complete(null);
+                } else {
+                    log.error("NettyConnection {}: 消息 {} (类型: {}) 发送失败: {}", getConnectionId(), message.getId(),
+                        message.getType(), f.cause().getMessage());
+                    future.completeExceptionally(f.cause());
+                }
+            });
         } else {
             log.warn("NettyConnection {}: Channel 不活跃，消息 {} (类型: {}) 无法发送。", getConnectionId(), message.getId(),
                     message.getType());

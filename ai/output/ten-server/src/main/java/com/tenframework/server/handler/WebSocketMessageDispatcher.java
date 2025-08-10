@@ -39,7 +39,7 @@ public class WebSocketMessageDispatcher extends SimpleChannelInboundHandler<Mess
         msg.setSrcLoc(connection.getRemoteLocation());
 
         // 将消息分发给 App 处理
-        app.handleInboundMessage(msg, connection);
+        app.submitInboundMessage(msg, connection);
     }
 
     @Override
