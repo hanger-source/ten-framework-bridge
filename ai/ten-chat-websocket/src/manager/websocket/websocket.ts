@@ -1,11 +1,13 @@
-import { Message, Data, Command, CommandResult } from '@/types/websocket';
+import { Message, Data, Command, CommandResult, Location, MessageType, StartGraphCommand, StopGraphCommand, CommandType } from '@/types/websocket';
 import { encode, decode, ExtensionCodec, ExtData } from '@msgpack/msgpack';
+// import { v4 as uuidv4 } from 'uuid'; // Import uuid to generate unique ids
+import { MESSAGE_CONSTANTS } from '@/common/constant'; // Import MESSAGE_CONSTANTS
 
 // TEN框架自定义MsgPack扩展类型码
-const TEN_MSGPACK_EXT_TYPE_MSG = -1;
+const TEN_MSGPACK_EXT_TYPE_MSG = -1; // 恢复自定义扩展类型码
 
 // 创建扩展编解码器
-const extensionCodec = new ExtensionCodec();
+const extensionCodec = new ExtensionCodec(); // 恢复扩展编解码器实例
 
 // 注册自定义扩展类型
 extensionCodec.register({
@@ -23,7 +25,7 @@ extensionCodec.register({
         // 解码内部MsgPack数据为Message对象
         return decode(data) as Message;
     }
-});
+}); // 恢复扩展编解码器注册逻辑
 
 export enum WebSocketConnectionState {
     CONNECTING = 'connecting',
@@ -63,6 +65,7 @@ export class WebSocketManager {
 
             try {
                 this.ws = new WebSocket(this.url);
+                this.ws.binaryType = "arraybuffer"; // 告诉浏览器，接收到的二进制数据请以 ArrayBuffer 形式提供
 
                 this.ws.onopen = () => {
                     console.log('WebSocket 连接已建立');
@@ -122,11 +125,14 @@ export class WebSocketManager {
     }
 
     // 发送文本数据
-    public sendTextData(name: string, text: string): void {
+    public sendTextData(name: string, text: string, srcLoc: Location, destLocs: Location[] = []): void {
         const dataMessage: Data = {
-            type: 'data',
-            name,
-            data: text,
+            id: this.generateMessageId(),
+            type: MessageType.DATA,
+            name: name, // name 字段直接放在这里
+            src_loc: srcLoc,
+            dest_locs: destLocs,
+            data: new TextEncoder().encode(text),
             content_type: 'text/plain',
             encoding: 'UTF-8',
             timestamp: Date.now(),
@@ -135,11 +141,14 @@ export class WebSocketManager {
     }
 
     // 发送 JSON 数据
-    public sendJsonData(name: string, jsonData: any): void {
+    public sendJsonData(name: string, jsonData: any, srcLoc: Location, destLocs: Location[] = []): void {
         const dataMessage: Data = {
-            type: 'data',
-            name,
-            data: JSON.stringify(jsonData),
+            id: this.generateMessageId(),
+            type: MessageType.DATA,
+            name: name, // name 字段直接放在这里
+            src_loc: srcLoc,
+            dest_locs: destLocs,
+            data: new TextEncoder().encode(JSON.stringify(jsonData)),
             content_type: 'application/json',
             encoding: 'UTF-8',
             timestamp: Date.now(),
@@ -148,16 +157,50 @@ export class WebSocketManager {
     }
 
     // 发送命令
-    public sendCommand(name: string, args: Record<string, any> = {}): void {
-        const commandMessage: Command = {
-            type: 'cmd',
-            name,
+    public sendCommand(
+        commandName: CommandType,
+        srcLoc: Location,
+        destLocs: Location[] = [],
+        properties: Record<string, any> = {}
+    ): void {
+        const baseCommand: Command = {
+            id: this.generateMessageId(),
+            type: MessageType.CMD, // 初始设置为 CMD
+            name: commandName, // 命令名称
+            src_loc: srcLoc,
+            dest_locs: destLocs,
             cmd_id: this.generateCommandId(),
-            args,
-            properties: args.properties || {}, // 确保 properties 字段被正确设置
+            properties: properties,
             timestamp: Date.now(),
         };
-        this.sendMessage(commandMessage);
+
+        let finalCommand: Message;
+
+        switch (commandName) {
+            case CommandType.START_GRAPH:
+                finalCommand = {
+                    ...baseCommand,
+                    type: MessageType.CMD_START_GRAPH, // 覆盖为 CMD_START_GRAPH
+                    long_running_mode: properties.long_running_mode,
+                    predefined_graph_name: properties.predefined_graph_name || properties[MESSAGE_CONSTANTS.PROPERTY_CLIENT_GRAPH_NAME],
+                    extension_groups_info: properties.extension_groups_info,
+                    extensions_info: properties.extensions_info,
+                    graph_json: properties.graph_json,
+                } as StartGraphCommand; // 转换为 StartGraphCommand
+                break;
+            case CommandType.STOP_GRAPH:
+                finalCommand = {
+                    ...baseCommand,
+                    type: MessageType.CMD_STOP_GRAPH, // 覆盖为 CMD_STOP_GRAPH
+                    location_uri: properties.location_uri || properties[MESSAGE_CONSTANTS.PROPERTY_CLIENT_LOCATION_URI],
+                } as StopGraphCommand; // 转换为 StopGraphCommand
+                break;
+            default:
+                finalCommand = baseCommand;
+                break;
+        }
+
+        this.sendMessage(finalCommand);
     }
 
     // 注册消息处理器
@@ -176,10 +219,17 @@ export class WebSocketManager {
     }
 
     // 处理接收到的消息
-    private handleMessage(event: MessageEvent): void {
+    private handleMessage(event: MessageEvent): void { // 改回同步方法
+        console.log('Received raw message event:', event);
+        console.log('Received raw message data type:', typeof event.data);
+        
+        // 确保 data 是 ArrayBuffer 类型，因为 binaryType 已设置为 "arraybuffer"
+        const arrayBufferData: ArrayBuffer = event.data as ArrayBuffer; 
+        console.log('Received ArrayBuffer size:', arrayBufferData.byteLength);
+
         try {
-            const message = this.decodeMessage(event.data);
-            console.log('收到消息:', message);
+            const message = this.decodeMessage(arrayBufferData);
+            console.log('收到消息 (解码后):', message);
 
             const handler = this.messageHandlers.get(message.type);
             if (handler) {
@@ -189,6 +239,11 @@ export class WebSocketManager {
             }
         } catch (error) {
             console.error('处理消息失败:', error);
+            console.error('错误发生时尝试解码的数据 (前20字节):', new Uint8Array(arrayBufferData).slice(0, 20));
+            if (error instanceof RangeError) {
+                console.error('RangeError: 数据可能被截断或格式不正确。');
+            }
+            // 确保错误被捕获和打印
         }
     }
 
@@ -219,6 +274,11 @@ export class WebSocketManager {
         return Date.now() + Math.random();
     }
 
+    // 生成消息 ID (使用 Date.now() + Math.random())
+    private generateMessageId(): string {
+        return Date.now().toString() + Math.random().toString().substring(2, 8);
+    }
+
     // 编码消息为 TEN 自定义 MsgPack 格式
     private encodeMessage(message: Message): ArrayBuffer {
         // 使用扩展编解码器尝试编码
@@ -236,9 +296,19 @@ export class WebSocketManager {
 
     // 解码消息
     private decodeMessage(data: ArrayBuffer): Message {
-        // 使用扩展编解码器解码
-        const decoded = decode(new Uint8Array(data), { extensionCodec });
-        return decoded as Message;
+        console.log('Attempting to decode MsgPack data.');
+        console.log('Data to decode (Uint8Array length):', new Uint8Array(data).length);
+        console.log('Data to decode (first 20 bytes):', new Uint8Array(data).slice(0, 20)); // 打印前20个字节
+        try {
+            const decoded = decode(new Uint8Array(data), { extensionCodec });
+            return decoded as Message;
+        } catch (error) {
+            console.error('MsgPack 解码错误:', error);
+            if (error instanceof RangeError) {
+                console.error('RangeError: 数据可能被截断或格式不正确。');
+            }
+            throw error; // 重新抛出，以便上层捕获
+        }
     }
 }
 

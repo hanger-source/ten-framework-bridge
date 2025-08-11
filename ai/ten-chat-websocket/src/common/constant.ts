@@ -152,6 +152,15 @@ export const DEFAULT_TRULIENCE_OPTIONS: ITrulienceSettings = {
 
 // 聪明的开发杭一: 后端 WebSocket 消息相关常量
 export const TEN_MSGPACK_EXT_TYPE_MSG = -1; // 对应后端的 MessageUtils.TEN_MSGPACK_EXT_TYPE_MSG
-export const PROPERTY_CLIENT_LOCATION_URI = "client_location_uri"; // 对应后端的 MessageConstants.PROPERTY_CLIENT_LOCATION_URI
-export const PROPERTY_CLIENT_CHANNEL_ID = "client_channel_id"; // 对应后端的 MessageConstants.PROPERTY_CLIENT_CHANNEL_ID
-export const SYS_EXTENSION_NAME = "system.ClientConnectionExtension"; // 聪明的开发杭一: 对应后端 ClientConnectionExtension.java 中的扩展名
+
+export const MESSAGE_CONSTANTS = {
+  NOT_APPLICABLE: 'N/A',
+  SYS_EXTENSION_NAME: 'sys_engine',
+  PROPERTY_CLIENT_LOCATION_URI: '__client_location_uri__',
+  PROPERTY_CLIENT_APP_URI: '__client_app_uri__',
+  PROPERTY_CLIENT_GRAPH_ID: '__client_graph_id__',
+  PROPERTY_CLIENT_GRAPH_NAME: '__client_graph_name__',
+  PROPERTY_CLIENT_CHANNEL_ID: '__channel_id__',
+  PROPERTY_MESSAGE_PRIORITY: '__message_priority__',
+  DATA_NAME_ECHO_DATA: 'echo_data',
+} as const;

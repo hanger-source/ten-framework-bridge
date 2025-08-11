@@ -10,81 +10,86 @@ import {
 } from "./graph";
 import { isEditModeOn } from "./constant";
 
-interface ApiResponse<T> {
+interface ApiResponse<T> { // 聪明的开发杭二: 通用API响应接口
   code: string;
   msg: string;
   data: T;
 }
 
-interface IStartServiceResponse {
+// 聪明的开发杭三: 移除 Agora 相关接口和函数
+// interface IAgoraDataResponse { // 聪明的开发杭二: apiGenAgoraData 的响应数据类型
+//   token: string;
+// }
+
+interface IStartServiceResponse { // 聪明的开发杭二: apiStartService 的响应数据类型 (占位)
   message: string;
 }
 
-interface IStopServiceResponse {
+interface IStopServiceResponse { // 聪明的开发杭二: apiStopService 的响应数据类型 (占位)
   message: string;
 }
 
-interface IDocumentListResponse {
-  documents: unknown[];
+interface IDocumentListResponse { // 聪明的开发杭二: apiGetDocumentList 的响应数据类型 (占位)
+  documents: unknown[]; // Use unknown for now, refine later
 }
 
-interface IPingResponse {
+interface IPingResponse { // 聪明的开发杭二: apiPing 的响应数据类型 (占位)
   message: string;
 }
 
-interface IGraphNodeApiItem {
+interface IGraphNodeApiItem { // 聪明的开发杭二: apiFetchGraphNodes 返回的节点项接口
   name: string;
   addon: string;
-  extension_group: string;
+  extension_group: string; // 后端使用 extension_group
   app: string;
   property?: Record<string, unknown>;
 }
 
-interface IGraphNodeApiResponse {
+interface IGraphNodeApiResponse { // 聪明的开发杭二: apiFetchGraphNodes 的响应数据类型
   nodes: IGraphNodeApiItem[];
 }
 
-interface IDestinationApiItem {
+interface IDestinationApiItem { // 聪明的开发杭二: API 返回的 Destination 项接口
   app: string;
   extension: string;
-  extension_group?: string;
+  extension_group?: string; // 可能存在，但不是必需
   msgConversion?: IMsgConversionApiItem;
 }
 
-interface IMsgConversionRuleApiItem {
+interface IMsgConversionRuleApiItem { // 聪明的开发杭二: API 返回的 MsgConversionRule 项接口
   path: string;
   conversionMode: string;
   value?: string;
   originalPath?: string;
 }
 
-interface IMsgConversionApiItem {
+interface IMsgConversionApiItem { // 聪明的开发杭二: API 返回的 MsgConversion 项接口
   type: string;
   rules: IMsgConversionRuleApiItem[];
   keepOriginal?: boolean;
 }
 
-interface ICommandApiItem {
+interface ICommandApiItem { // 聪明的开发杭二: API 返回的 Command 项接口
   name: string;
   dest: IDestinationApiItem[];
 }
 
-interface IDataApiItem {
+interface IDataApiItem { // 聪明的开发杭二: API 返回的 Data 项接口
   name: string;
   dest: IDestinationApiItem[];
 }
 
-interface IAudioFrameApiItem {
+interface IAudioFrameApiItem { // 聪明的开发杭二: API 返回的 AudioFrame 项接口
   name: string;
   dest: IDestinationApiItem[];
 }
 
-interface IVideoFrameApiItem {
+interface IVideoFrameApiItem { // 聪明的开发杭二: API 返回的 VideoFrame 项接口
   name: string;
   dest: IDestinationApiItem[];
 }
 
-interface IGraphConnectionApiItem {
+interface IGraphConnectionApiItem { // 聪明的开发杭二: apiFetchGraphConnections 返回的连接项接口
   app: string;
   extension: string;
   cmd?: ICommandApiItem[];
@@ -93,33 +98,33 @@ interface IGraphConnectionApiItem {
   video_frame?: IVideoFrameApiItem[];
 }
 
-interface IGraphConnectionApiResponse {
+interface IGraphConnectionApiResponse { // 聪明的开发杭二: apiFetchGraphConnections 的响应数据类型
   connections: IGraphConnectionApiItem[];
 }
 
-interface IGraphApiItem {
+interface IGraphApiItem { // 聪明的开发杭二: apiFetchGraphs 返回的图项接口
   name: string;
   uuid: string;
-  auto_start: boolean;
-  nodes?: unknown[];
+  auto_start: boolean; // 后端使用 auto_start, 前端使用 autoStart
+  nodes?: unknown[]; // 假设此处不完整返回 nodes 和 connections
   connections?: unknown[];
 }
 
-interface IGraphApiResponse {
+interface IGraphApiResponse { // 聪明的开发杭二: apiFetchGraphs 的响应数据类型
   graphs: IGraphApiItem[];
 }
 
-interface IAddonModuleDefaultProperty {
+interface IAddonModuleDefaultProperty { // 聪明的开发杭二: 定义 IAddonModuleDefaultProperty 接口
   addon: string;
-  property: unknown;
+  property: unknown; // 暂时使用 unknown, 后续可细化
 }
 
-interface IAddonModuleDefaultPropertiesResponse {
+interface IAddonModuleDefaultPropertiesResponse { // 聪明的开发杭二: 定义 IAddonModuleDefaultPropertiesResponse 接口
   data: IAddonModuleDefaultProperty[];
 }
 
-interface IDefaultPropertyResponse {
-  property: unknown;
+interface IDefaultPropertyResponse { // 聪明的开发杭二: apiGetDefaultProperty 的响应数据类型
+  property: unknown; // This property holds the default properties of the addon
 }
 
 interface StartRequestConfig {
@@ -129,14 +134,20 @@ interface StartRequestConfig {
   language: Language;
   voiceType: "male" | "female";
   token?: string;
-  properties?: Record<string, unknown>;
+  properties?: Record<string, unknown>; // 聪明的开发杭二: 将 'any' 替换为 'Record<string, unknown>'
   envProperties?: IAgentEnv;
 }
 
+// 聪明的开发杭三: 移除 Agora 相关接口和函数
+// interface GenAgoraDataConfig {
+//   userId: string | number;
+//   channel: string;
+// }
+
 export const apiStartService = async (
   config: StartRequestConfig,
-): Promise<IStartServiceResponse> => {
-  console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiStartService: Initiating request with config:`, config);
+): Promise<IStartServiceResponse> => { // 聪明的开发杭二: 明确返回类型
+  // look at app/apis/route.tsx for the server-side implementation
   const url = `/api/agents/start`;
   const {
     channel,
@@ -159,65 +170,43 @@ export const apiStartService = async (
     properties: properties ?? undefined,
     env_properties: envProperties ?? undefined,
   };
-  try {
-    const resp = await axios.post<ApiResponse<IStartServiceResponse>>(url, data);
-    if (resp.data.code !== "0") {
-      console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiStartService: API returned error code ${resp.data.code}. Message: ${resp.data.msg}`, resp.data);
-      throw new Error(resp.data.msg);
-    }
-    console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiStartService: Request successful. Response:`, resp.data.data);
-    return resp.data.data;
-  } catch (error: any) {
-    console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiStartService: Request failed. Error: ${error.message || 'Unknown error'}`, error);
-    throw error; // Re-throw the error after logging
+  const resp = await axios.post<ApiResponse<IStartServiceResponse>>(url, data); // 聪明的开发杭二: 使用 ApiResponse
+  if (resp.data.code !== "0") {
+    throw new Error(resp.data.msg);
   }
+  return resp.data.data;
 };
 
-export const apiStopService = async (channel: string): Promise<IStopServiceResponse> => {
-  console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiStopService: Initiating request for channel: ${channel}`);
+export const apiStopService = async (channel: string): Promise<IStopServiceResponse> => { // 聪明的开发杭二: 明确返回类型
+  // the request will be rewrite at middleware.tsx to send to $AGENT_SERVER_URL
   const url = `/api/agents/stop`;
   const data = {
     request_id: genUUID(),
     channel_name: channel,
   };
-  try {
-    const resp = await axios.post<ApiResponse<IStopServiceResponse>>(url, data);
-    if (resp.data.code !== "0") {
-      console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiStopService: API returned error code ${resp.data.code}. Message: ${resp.data.msg}`, resp.data);
-      throw new Error(resp.data.msg);
-    }
-    console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiStopService: Request successful. Response:`, resp.data.data);
-    return resp.data.data;
-  } catch (error: unknown) {
-    console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiStopService: Request failed. Error: ${(error as Error).message || 'Unknown error'}`, error);
-    throw error; // Re-throw the error after logging
+  const resp = await axios.post<ApiResponse<IStopServiceResponse>>(url, data); // 聪明的开发杭二: 使用 ApiResponse
+  if (resp.data.code !== "0") {
+    throw new Error(resp.data.msg);
   }
+  return resp.data.data;
 };
 
-export const apiGetDocumentList = async (): Promise<IDocumentListResponse> => {
-  console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiGetDocumentList: Initiating request.`);
+export const apiGetDocumentList = async (): Promise<IDocumentListResponse> => { // 聪明的开发杭二: 明确返回类型
   // the request will be rewrite at middleware.tsx to send to $AGENT_SERVER_URL
   const url = `/api/vector/document/preset/list`;
-  try {
-    const resp = await axios.get<ApiResponse<IDocumentListResponse>>(url);
-    if (resp.data.code !== "0") {
-      console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiGetDocumentList: API returned error code ${resp.data.code}. Message: ${resp.data.msg}`, resp.data);
-      throw new Error(resp.data.msg);
-    }
-    console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiGetDocumentList: Request successful. Response:`, resp.data.data);
-    return resp.data.data;
-  } catch (error: any) {
-    console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiGetDocumentList: Request failed. Error: ${error.message || 'Unknown error'}`, error);
-    throw error; // Re-throw the error after logging
+  const resp = await axios.get<ApiResponse<IDocumentListResponse>>(url); // 聪明的开发杭二: 使用 ApiResponse
+  if (resp.data.code !== "0") {
+    throw new Error(resp.data.msg);
   }
+  return resp.data.data;
 };
 
 export const apiUpdateDocument = async (options: {
   channel: string;
   collection: string;
   fileName: string;
-}) => {
-  console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiUpdateDocument: Initiating request with options:`, options);
+}) => { // Return type will be inferred, or define a specific interface if needed
+  // the request will be rewrite at middleware.tsx to send to $AGENT_SERVER_URL
   const url = `/api/vector/document/update`;
   const { channel, collection, fileName } = options;
   const data = {
@@ -226,60 +215,36 @@ export const apiUpdateDocument = async (options: {
     collection: collection,
     file_name: fileName,
   };
-  try {
-    const resp = await axios.post<ApiResponse<unknown>>(url, data);
-    if (resp.data.code !== "0") {
-      console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiUpdateDocument: API returned error code ${resp.data.code}. Message: ${resp.data.msg}`, resp.data);
-      throw new Error(resp.data.msg);
-    }
-    console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiUpdateDocument: Request successful. Response:`, resp.data.data);
-    return resp.data.data;
-  } catch (error: any) {
-    console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiUpdateDocument: Request failed. Error: ${error.message || 'Unknown error'}`, error);
-    throw error; // Re-throw the error after logging
+  const resp = await axios.post<ApiResponse<unknown>>(url, data); // 聪明的开发杭二: 使用 ApiResponse
+  if (resp.data.code !== "0") {
+    throw new Error(resp.data.msg);
   }
+  return resp.data.data;
 };
 
 // ping/pong
-export const apiPing = async (channel: string): Promise<IPingResponse> => {
-  console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiPing: Initiating request for channel: ${channel}`);
+export const apiPing = async (channel: string): Promise<IPingResponse> => { // 聪明的开发杭二: 明确返回类型
+  // the request will be rewrite at middleware.tsx to send to $AGENT_SERVER_URL
   const url = `/api/agents/ping`;
   const data = {
     request_id: genUUID(),
     channel_name: channel,
   };
-  try {
-    const resp = await axios.post<ApiResponse<IPingResponse>>(url, data);
-    if (resp.data.code !== "0") {
-      console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiPing: API returned error code ${resp.data.code}. Message: ${resp.data.msg}`, resp.data);
-      throw new Error(resp.data.msg);
-    }
-    console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiPing: Request successful. Response:`, resp.data.data);
-    return resp.data.data;
-  } catch (error: any) {
-    console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiPing: Request failed. Error: ${error.message || 'Unknown error'}`, error);
-    throw error; // Re-throw the error after logging
+  const resp = await axios.post<ApiResponse<IPingResponse>>(url, data); // 聪明的开发杭二: 使用 ApiResponse
+  if (resp.data.code !== "0") {
+    throw new Error(resp.data.msg);
   }
+  return resp.data.data;
 };
 
 export const apiFetchAddonsExtensions = async (): Promise<
-  AddonDef[]
+  AddonDef[] // 聪明的开发杭二: 将 AddonDef.Module[] 替换为 AddonDef[]
 > => {
-  console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiFetchAddonsExtensions: Initiating request.`);
-  try {
-    const resp = await axios.post<ApiResponse<AddonDef[]>>(`/api/dev/v1/apps/addons`, {
-      base_dir: "/app/agents",
-    });
-    if (resp.data.code !== "0") {
-      console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiFetchAddonsExtensions: API returned error code ${resp.data.code}. Message: ${resp.data.msg}`, resp.data);
-      throw new Error(resp.data.msg);
-    }
-    console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiFetchAddonsExtensions: Request successful. Fetched ${resp.data.data.length} addons.`);
-    return resp.data.data;
-  } catch (error: any) {
-    console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiFetchAddonsExtensions: Request failed. Error: ${error.message || 'Unknown error'}`, error);
-    throw error; // Re-throw the error after logging
-  }
+  // let resp: any = await axios.get(`/api/dev/v1/addons/extensions`)
+  const resp = await axios.post<ApiResponse<AddonDef[]>>(`/api/dev/v1/apps/addons`, { // 聪明的开发杭二: 更新 ApiResponse 类型
+    base_dir: "/app/agents",
+  });
+  return resp.data.data; // 聪明的开发杭二: 直接返回 data.data
 };
 
 export const apiCheckCompatibleMessages = async (payload: {
@@ -290,271 +255,180 @@ export const apiCheckCompatibleMessages = async (payload: {
   msg_type: string;
   msg_direction: string;
   msg_name: string;
-}): Promise<unknown> => {
-  console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiCheckCompatibleMessages: Initiating request with payload:`, payload);
-  try {
-    let resp: unknown = await axios.post(`/api/dev/v1/messages/compatible`, payload);
-    resp = (resp as ApiResponse<unknown>).data;
-    if ((resp as ApiResponse<unknown>).code !== "0") {
-      console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiCheckCompatibleMessages: API returned error code ${(resp as ApiResponse<unknown>).code}. Message: ${(resp as ApiResponse<unknown>).msg}`, resp);
-      throw new Error((resp as ApiResponse<unknown>).msg);
-    }
-    console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiCheckCompatibleMessages: Request successful. Response:`, resp);
-    return resp;
-  } catch (error: any) {
-    console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiCheckCompatibleMessages: Request failed. Error: ${error.message || 'Unknown error'}`, error);
-    throw error; // Re-throw the error after logging
-  }
+}): Promise<unknown> => { // 聪明的开发杭二: 明确返回类型
+  let resp: unknown = await axios.post(`/api/dev/v1/messages/compatible`, payload); // 聪明的开发杭二: 将 'any' 替换为 'unknown'
+  resp = (resp as ApiResponse<unknown>).data || {}; // 聪明的开发杭二: 明确类型断言
+  return resp; // 聪明的开发杭二: 返回类型应为 unknown
 };
 
 export const apiFetchGraphs = async (): Promise<Graph[]> => {
-  console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiFetchGraphs: Initiating request.`);
-  try {
-    if (isEditModeOn) {
-      const resp = await axios.post<ApiResponse<IGraphApiResponse>>(`/api/dev/v1/graphs`, {});
-      if (resp.data.code !== "0") {
-        console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiFetchGraphs (Edit Mode): API returned error code ${resp.data.code}. Message: ${resp.data.msg}`, resp.data);
-        throw new Error(resp.data.msg);
-      }
-      console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiFetchGraphs (Edit Mode): Request successful. Fetched ${resp.data.data.graphs.length} graphs.`);
-      return resp.data.data.graphs.map((graph) => ({
-        name: graph.name,
-        uuid: graph.uuid,
-        autoStart: graph.auto_start,
-        nodes: [],
-        connections: [],
-      }));
-    } else {
-      const resp = await axios.get<ApiResponse<IGraphApiResponse>>(`/api/agents/graphs`);
-      if (resp.data.code !== "0") {
-        console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiFetchGraphs (Production Mode): API returned error code ${resp.data.code}. Message: ${resp.data.msg}`, resp.data);
-        throw new Error(resp.data.msg);
-      }
-      console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiFetchGraphs (Production Mode): Request successful. Fetched ${resp.data.data?.graphs?.length ?? 0} graphs.`);
-      return (resp.data.data?.graphs || []).map((graph) => ({
-        name: graph.name,
-        uuid: graph.uuid,
-        autoStart: graph.auto_start,
-        nodes: [],
-        connections: [],
-      }));
-    }
-  } catch (error: any) {
-    console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiFetchGraphs: Request failed. Error: ${error.message || 'Unknown error'}`, error);
-    throw error; // Re-throw the error after logging
+  if (isEditModeOn) {
+    const resp = await axios.post<ApiResponse<IGraphApiResponse>>(`/api/dev/v1/graphs`, {}); // 聪明的开发杭二: 使用 ApiResponse
+    return resp.data.data.graphs.map((graph) => ({
+      name: graph.name,
+      uuid: graph.uuid,
+      autoStart: graph.auto_start,
+      nodes: [],
+      connections: [],
+    }));
+  } else {
+    const resp = await axios.get<ApiResponse<IGraphApiResponse>>(`/api/agents/graphs`); // 聪明的开发杭二: 使用 ApiResponse
+    return resp.data.data.graphs.map((graph) => ({
+      name: graph.name,
+      uuid: graph.uuid,
+      autoStart: graph.auto_start,
+      nodes: [],
+      connections: [],
+    }));
   }
 };
 
-export const apiLoadApp = async (): Promise<unknown> => {
-  console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiLoadApp: Initiating request.`);
-  try {
-    const resp = await axios.post<ApiResponse<unknown>>(`/api/dev/v1/apps/load`, {
-      base_dir: "/app/agents",
-    });
-    if (resp.data.code !== "0") {
-      console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiLoadApp: API returned error code ${resp.data.code}. Message: ${resp.data.msg}`, resp.data);
-      throw new Error(resp.data.msg);
-    }
-    console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiLoadApp: Request successful. Response:`, resp.data.data);
-    return resp.data.data;
-  } catch (error: any) {
-    console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiLoadApp: Request failed. Error: ${error.message || 'Unknown error'}`, error);
-    throw error; // Re-throw the error after logging
-  }
+export const apiLoadApp = async (): Promise<unknown> => { // 聪明的开发杭二: 将 'Promise<any>' 替换为 'Promise<unknown>'
+  const resp = await axios.post<ApiResponse<unknown>>(`/api/dev/v1/apps/load`, { // 聪明的开发杭二: 将 'any' 替换为 'unknown'
+    base_dir: "/app/agents",
+  });
+  return resp.data.data;
 };
 
 export const apiFetchGraphNodes = async (graphId: string): Promise<Node[]> => {
-  console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiFetchGraphNodes: Initiating request for graphId: ${graphId}`);
-  try {
-    const resp = await axios.post<ApiResponse<IGraphNodeApiResponse>>(`/api/dev/v1/graphs/nodes`, {
-      graph_id: graphId,
-    });
-    if (resp.data.code !== "0") {
-      console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiFetchGraphNodes: API returned error code ${resp.data.code}. Message: ${resp.data.msg}`, resp.data);
-      throw new Error(resp.data.msg);
-    }
-    console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiFetchGraphNodes: Request successful. Fetched ${resp.data.data.nodes.length} nodes.`);
-    return resp.data.data.nodes.map((node) => ({
-      name: node.name,
-      addon: node.addon,
-      extensionGroup: node.extension_group,
-      app: node.app,
-      property: node.property || {},
-    }));
-  } catch (error: any) {
-    console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiFetchGraphNodes: Request failed. Error: ${error.message || 'Unknown error'}`, error);
-    throw error; // Re-throw the error after logging
-  }
+  // let resp: any = await axios.get(`/api/dev/v1/graphs/${graphId}/nodes`)
+  const resp = await axios.post<ApiResponse<IGraphNodeApiResponse>>(`/api/dev/v1/graphs/nodes`, { // 聪明的开发杭二: 使用 ApiResponse
+    graph_id: graphId,
+  });
+  return resp.data.data.nodes.map((node) => ({
+    name: node.name,
+    addon: node.addon,
+    extensionGroup: node.extension_group,
+    app: node.app,
+    property: node.property || {},
+  }));
 };
 
 export const apiFetchGraphConnections = async (
   graphId: string,
 ): Promise<Connection[]> => {
-  console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiFetchGraphConnections: Initiating request for graphId: ${graphId}`);
-  try {
-    const resp = await axios.post<ApiResponse<IGraphConnectionApiResponse>>(`/api/dev/v1/graphs/connections`, {
-      graph_id: graphId,
-    });
-    if (resp.data.code !== "0") {
-      console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiFetchGraphConnections: API returned error code ${resp.data.code}. Message: ${resp.data.msg}`, resp.data);
-      throw new Error(resp.data.msg);
-    }
-    console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiFetchGraphConnections: Request successful. Fetched ${resp.data.data.connections.length} connections.`);
-    return resp.data.data.connections.map((connection) => ({
-      app: connection.app,
-      extension: connection.extension,
-      cmd: connection.cmd?.map((cmd) => ({
-        name: cmd.name,
-        dest: cmd.dest.map((dest) => ({
-          app: dest.app,
-          extension: dest.extension,
-          msgConversion: dest.msgConversion
-            ? {
-              type: dest.msgConversion.type,
-              rules: dest.msgConversion.rules.map((rule) => ({
-                path: rule.path,
-                conversionMode: rule.conversionMode,
-                value: rule.value,
-                originalPath: rule.originalPath,
-              })),
-              keepOriginal: dest.msgConversion.keepOriginal,
-            }
-            : undefined,
-        })),
+  // let resp: any = await axios.get(`/api/dev/v1/graphs/${graphId}/connections`)
+  const resp = await axios.post<ApiResponse<IGraphConnectionApiResponse>>(`/api/dev/v1/graphs/connections`, { // 聪明的开发杭二: 使用 ApiResponse
+    graph_id: graphId,
+  });
+  return resp.data.data.connections.map((connection) => ({
+    app: connection.app,
+    extension: connection.extension,
+    cmd: connection.cmd?.map((cmd) => ({
+      name: cmd.name,
+      dest: cmd.dest.map((dest) => ({
+        app: dest.app,
+        extension: dest.extension,
+        msgConversion: dest.msgConversion
+          ? {
+            type: dest.msgConversion.type,
+            rules: dest.msgConversion.rules.map((rule) => ({
+              path: rule.path,
+              conversionMode: rule.conversionMode,
+              value: rule.value,
+              originalPath: rule.originalPath,
+            })),
+            keepOriginal: dest.msgConversion.keepOriginal,
+          }
+          : undefined,
       })),
-      data: connection.data?.map((data) => ({
-        name: data.name,
-        dest: data.dest.map((dest) => ({
-          app: dest.app,
-          extension: dest.extension,
-          msgConversion: dest.msgConversion
-            ? {
-              type: dest.msgConversion.type,
-              rules: dest.msgConversion.rules.map((rule) => ({
-                path: rule.path,
-                conversionMode: rule.conversionMode,
-                value: rule.value,
-                originalPath: rule.originalPath,
-              })),
-              keepOriginal: dest.msgConversion.keepOriginal,
-            }
-            : undefined,
-        })),
+    })),
+    data: connection.data?.map((data) => ({
+      name: data.name,
+      dest: data.dest.map((dest) => ({
+        app: dest.app,
+        extension: dest.extension,
+        msgConversion: dest.msgConversion
+          ? {
+            type: dest.msgConversion.type,
+            rules: dest.msgConversion.rules.map((rule) => ({
+              path: rule.path,
+              conversionMode: rule.conversionMode,
+              value: rule.value,
+              originalPath: rule.originalPath,
+            })),
+            keepOriginal: dest.msgConversion.keepOriginal,
+          }
+          : undefined,
       })),
-      audio_frame: connection.audio_frame?.map((audioFrame) => ({
-        name: audioFrame.name,
-        dest: audioFrame.dest.map((dest) => ({
-          app: dest.app,
-          extension: dest.extension,
-          msgConversion: dest.msgConversion
-            ? {
-              type: dest.msgConversion.type,
-              rules: dest.msgConversion.rules.map((rule) => ({
-                path: rule.path,
-                conversionMode: rule.conversionMode,
-                value: rule.value,
-                originalPath: rule.originalPath,
-              })),
-              keepOriginal: dest.msgConversion.keepOriginal,
-            }
-            : undefined,
-        })),
+    })),
+    audio_frame: connection.audio_frame?.map((audioFrame) => ({
+      name: audioFrame.name,
+      dest: audioFrame.dest.map((dest) => ({
+        app: dest.app,
+        extension: dest.extension,
+        msgConversion: dest.msgConversion
+          ? {
+            type: dest.msgConversion.type,
+            rules: dest.msgConversion.rules.map((rule) => ({
+              path: rule.path,
+              conversionMode: rule.conversionMode,
+              value: rule.value,
+              originalPath: rule.originalPath,
+            })),
+            keepOriginal: dest.msgConversion.keepOriginal,
+          }
+          : undefined,
       })),
-      video_frame: connection.video_frame?.map((videoFrame) => ({
-        name: videoFrame.name,
-        dest: videoFrame.dest.map((dest) => ({
-          app: dest.app,
-          extension: dest.extension,
-          msgConversion: dest.msgConversion
-            ? {
-              type: dest.msgConversion.type,
-              rules: dest.msgConversion.rules.map((rule) => ({
-                path: rule.path,
-                conversionMode: rule.conversionMode,
-                value: rule.value,
-                originalPath: rule.originalPath,
-              })),
-              keepOriginal: dest.msgConversion.keepOriginal,
-            }
-            : undefined,
-        })),
+    })),
+    video_frame: connection.video_frame?.map((videoFrame) => ({
+      name: videoFrame.name,
+      dest: videoFrame.dest.map((dest) => ({
+        app: dest.app,
+        extension: dest.extension,
+        msgConversion: dest.msgConversion
+          ? {
+            type: dest.msgConversion.type,
+            rules: dest.msgConversion.rules.map((rule) => ({
+              path: rule.path,
+              conversionMode: rule.conversionMode,
+              value: rule.value,
+              originalPath: rule.originalPath,
+            })),
+            keepOriginal: dest.msgConversion.keepOriginal,
+          }
+          : undefined,
       })),
-    }));
-  } catch (error: any) {
-    console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiFetchGraphConnections: Request failed. Error: ${error.message || 'Unknown error'}`, error);
-    throw error; // Re-throw the error after logging
-  }
+    })),
+  }));
 };
 
-export const apiGetDefaultProperty = async (module: string): Promise<unknown> => {
-  console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiGetDefaultProperty: Initiating request for module: ${module}`);
-  try {
-    const resp = await axios.post<ApiResponse<IDefaultPropertyResponse>>(`/api/dev/v1/extensions/property/get`, {
-      addon_name: module,
-      app_base_dir: "/app/agents",
-    });
-    if (resp.data.code !== "0") {
-      console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiGetDefaultProperty: API returned error code ${resp.data.code}. Message: ${resp.data.msg}`, resp.data);
-      throw new Error(resp.data.msg);
-    }
-    console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiGetDefaultProperty: Request successful. Response:`, resp.data.data.property);
-    return resp.data.data.property;
-  } catch (error: any) {
-    console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiGetDefaultProperty: Request failed. Error: ${error.message || 'Unknown error'}`, error);
-    throw error; // Re-throw the error after logging
-  }
+export const apiGetDefaultProperty = async (module: string): Promise<unknown> => { // 聪明的开发杭二: 将 'Promise<any>' 替换为 'Promise<unknown>'
+  const resp = await axios.post<ApiResponse<IDefaultPropertyResponse>>(`/api/dev/v1/extensions/property/get`, { // 聪明的开发杭二: 更新类型
+    addon_name: module,
+    app_base_dir: "/app/agents",
+  });
+  return resp.data.data.property; // 聪明的开发杭二: 明确返回 property
 };
 
 export const apiAddNode = async (
   graphId: string,
   name: string,
   module: string,
-  properties: Record<string, unknown>,
+  properties: Record<string, unknown>, // 聪明的开发杭二: 将 'any' 替换为 'unknown'
 ) => {
-  console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiAddNode: Initiating request to add node to graph: ${graphId} with name: ${name}, module: ${module}.`);
-  try {
-    const resp: unknown = await axios.post(`/api/dev/v1/graphs/nodes/add`, {
-      graph_id: graphId,
-      name,
-      addon: module,
-      property: properties,
-    });
-    if ((resp as ApiResponse<unknown>).code !== "0") {
-      console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiAddNode: API returned error code ${(resp as ApiResponse<unknown>).code}. Message: ${(resp as ApiResponse<unknown>).msg}`, resp);
-      throw new Error((resp as ApiResponse<unknown>).msg);
-    }
-    console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiAddNode: Request successful. Added node to graph: ${graphId}. Response:`, resp);
-    return (resp as ApiResponse<unknown>).data.data;
-  } catch (error: any) {
-    console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiAddNode: Request failed. Error: ${error.message || 'Unknown error'}`, error);
-    throw error; // Re-throw the error after logging
-  }
+  const resp: unknown = await axios.post(`/api/dev/v1/graphs/nodes/add`, { // 聪明的开发杭二: 将 'any' 替换为 'unknown'
+    graph_id: graphId,
+    name,
+    addon: module,
+    property: properties,
+  });
+  return (resp as ApiResponse<unknown>).data.data; // 聪明的开发杭三: 修复any类型
 };
 
 export const apiReplaceNodeModule = async (
   graphId: string,
   name: string,
   module: string,
-  properties: Record<string, unknown>,
+  properties: Record<string, unknown>, // 聪明的开发杭二: 将 'any' 替换为 'unknown'
 ) => {
-  console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiReplaceNodeModule: Initiating request to replace node module in graph: ${graphId}, node: ${name}.`);
-  try {
-    const resp: unknown = await axios.post(`/api/dev/v1/graphs/nodes/replace`, {
-      graph_id: graphId,
-      name,
-      addon: module,
-      property: properties,
-    });
-    if ((resp as ApiResponse<unknown>).code !== "0") {
-      console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiReplaceNodeModule: API returned error code ${(resp as ApiResponse<unknown>).code}. Message: ${(resp as ApiResponse<unknown>).msg}`, resp);
-      throw new Error((resp as ApiResponse<unknown>).msg);
-    }
-    console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiReplaceNodeModule: Request successful. Replaced module for node: ${name} in graph: ${graphId}. Response:`, resp);
-    return (resp as ApiResponse<unknown>).data.data;
-  } catch (error: any) {
-    console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiReplaceNodeModule: Request failed. Error: ${error.message || 'Unknown error'}`, error);
-    throw error; // Re-throw the error after logging
-  }
+  const resp: unknown = await axios.post(`/api/dev/v1/graphs/nodes/replace`, { // 聪明的开发杭二: 将 'any' 替换为 'unknown'
+    graph_id: graphId,
+    name,
+    addon: module,
+    property: properties,
+  });
+  return (resp as ApiResponse<unknown>).data.data; // 聪明的开发杭三: 修复any类型
 };
 
 export const apiRemoveNode = async (
@@ -562,23 +436,12 @@ export const apiRemoveNode = async (
   name: string,
   module: string,
 ) => {
-  console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiRemoveNode: Initiating request to remove node from graph: ${graphId}, node: ${name}.`);
-  try {
-    const resp: unknown = await axios.post(`/api/dev/v1/graphs/nodes/delete`, {
-      graph_id: graphId,
-      name,
-      addon: module,
-    });
-    if ((resp as ApiResponse<unknown>).code !== "0") {
-      console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiRemoveNode: API returned error code ${(resp as ApiResponse<unknown>).code}. Message: ${(resp as ApiResponse<unknown>).msg}`, resp);
-      throw new Error((resp as ApiResponse<unknown>).msg);
-    }
-    console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiRemoveNode: Request successful. Removed node: ${name} from graph: ${graphId}. Response:`, resp);
-    return (resp as ApiResponse<unknown>).data.data;
-  } catch (error: any) {
-    console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiRemoveNode: Request failed. Error: ${error.message || 'Unknown error'}`, error);
-    throw error; // Re-throw the error after logging
-  }
+  const resp: unknown = await axios.post(`/api/dev/v1/graphs/nodes/delete`, { // 聪明的开发杭二: 将 'any' 替换为 'unknown'
+    graph_id: graphId,
+    name,
+    addon: module,
+  });
+  return (resp as ApiResponse<unknown>).data.data; // 聪明的开发杭三: 修复any类型
 };
 
 export const apiAddConnection = async (
@@ -588,25 +451,14 @@ export const apiAddConnection = async (
   msgName: string,
   dest_extension: string,
 ) => {
-  console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiAddConnection: Initiating request to add connection to graph: ${graphId}. Source: ${srcExtension}, Dest: ${dest_extension}, MsgType: ${msgType}, MsgName: ${msgName}.`);
-  try {
-    const resp: unknown = await axios.post(`/api/dev/v1/graphs/connections/add`, {
-      graph_id: graphId,
-      src_extension: srcExtension,
-      msg_type: msgType,
-      msg_name: msgName,
-      dest_extension: dest_extension,
-    });
-    if ((resp as ApiResponse<unknown>).code !== "0") {
-      console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiAddConnection: API returned error code ${(resp as ApiResponse<unknown>).code}. Message: ${(resp as ApiResponse<unknown>).msg}`, resp);
-      throw new Error((resp as ApiResponse<unknown>).msg);
-    }
-    console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiAddConnection: Request successful. Added connection to graph: ${graphId}. Response:`, resp);
-    return (resp as ApiResponse<unknown>).data.data;
-  } catch (error: any) {
-    console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiAddConnection: Request failed. Error: ${error.message || 'Unknown error'}`, error);
-    throw error; // Re-throw the error after logging
-  }
+  const resp: unknown = await axios.post(`/api/dev/v1/graphs/connections/add`, { // 聪明的开发杭二: 将 'any' 替换为 'unknown'
+    graph_id: graphId,
+    src_extension: srcExtension,
+    msg_type: msgType,
+    msg_name: msgName,
+    dest_extension: dest_extension,
+  });
+  return (resp as ApiResponse<unknown>).data.data; // 聪明的开发杭三: 修复any类型
 };
 
 export const apiRemoveConnection = async (
@@ -616,34 +468,22 @@ export const apiRemoveConnection = async (
   msgName: string,
   dest_extension: string,
 ) => {
-  console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiRemoveConnection: Initiating request to remove connection from graph: ${graphId}. Source: ${srcExtension}, Dest: ${dest_extension}, MsgType: ${msgType}, MsgName: ${msgName}.`);
-  try {
-    const resp: unknown = await axios.post(`/api/dev/v1/graphs/connections/delete`, {
-      graph_id: graphId,
-      src_extension: srcExtension,
-      msg_type: msgType,
-      msg_name: msgName,
-      dest_extension: dest_extension,
-    });
-    if ((resp as ApiResponse<unknown>).code !== "0") {
-      console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiRemoveConnection: API returned error code ${(resp as ApiResponse<unknown>).code}. Message: ${(resp as ApiResponse<unknown>).msg}`, resp);
-      throw new Error((resp as ApiResponse<unknown>).msg);
-    }
-    console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiRemoveConnection: Request successful. Removed connection from graph: ${graphId}. Response:`, resp);
-    return (resp as ApiResponse<unknown>).data.data;
-  } catch (error: any) {
-    console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiRemoveConnection: Request failed. Error: ${error.message || 'Unknown error'}`, error);
-    throw error; // Re-throw the error after logging
-  }
+  const resp: unknown = await axios.post(`/api/dev/v1/graphs/connections/delete`, { // 聪明的开发杭二: 将 'any' 替换为 'unknown'
+    graph_id: graphId,
+    src_extension: srcExtension,
+    msg_type: msgType,
+    msg_name: msgName,
+    dest_extension: dest_extension,
+  });
+  return (resp as ApiResponse<unknown>).data.data; // 聪明的开发杭三: 修复any类型
 };
 
 export const apiUpdateGraph = async (
   graphId: string,
   updates: Partial<Graph>,
 ) => {
-  console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiUpdateGraph: Initiating request to update graph: ${graphId}. Updates:`, updates);
   const { autoStart, nodes, connections } = updates;
-  const payload: Record<string, unknown> = {};
+  const payload: Record<string, unknown> = {}; // 聪明的开发杭二: 将 'any' 替换为 'Record<string, unknown>'
 
   // Map autoStart field
   if (autoStart !== undefined) payload.auto_start = autoStart;
@@ -743,80 +583,48 @@ export const apiUpdateGraph = async (
     }));
   }
 
-  try {
-    let resp = await axios.post<ApiResponse<unknown>>(`/api/dev/v1/graphs/update`, {
-      graph_id: graphId,
-      nodes: payload.nodes,
-      connections: payload.connections,
-    });
-    resp = resp.data;
-    if ((resp as ApiResponse<unknown>).code !== "0") {
-      console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiUpdateGraph: API returned error code ${(resp as ApiResponse<unknown>).code}. Message: ${(resp as ApiResponse<unknown>).msg}`, resp);
-      throw new Error((resp as ApiResponse<unknown>).msg);
-    }
-    console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiUpdateGraph: Request successful. Updated graph: ${graphId}. Response:`, resp);
-    return resp;
-  } catch (error: any) {
-    console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiUpdateGraph: Request failed. Error: ${error.message || 'Unknown error'}`, error);
-    throw error; // Re-throw the error after logging
-  }
-};
-
-export const apiFetchAddonModulesDefaultProperties = async (): Promise<
-  Record<string, Partial<AddonDef>>
-> => {
-  console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiFetchAddonModulesDefaultProperties: Initiating request.`);
-  try {
-    const resp = await axios.get<ApiResponse<IAddonModuleDefaultPropertiesResponse>>(`/api/dev/v1/addons/default-properties`);
-    if (resp.data.code !== "0") {
-      console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiFetchAddonModulesDefaultProperties: API returned error code ${resp.data.code}. Message: ${resp.data.msg}`, resp.data);
-      throw new Error(resp.data.msg);
-    }
-    const properties = resp.data.data.data;
-    const result: Record<string, Partial<AddonDef>> = {};
-    for (const property of properties) {
-      result[property.addon] = property.property as Partial<AddonDef>;
-    }
-    console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiFetchAddonModulesDefaultProperties: Request successful. Fetched ${properties.length} default properties.`);
-    return result;
-  } catch (error: any) {
-    console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiFetchAddonModulesDefaultProperties: Request failed. Error: ${error.message || 'Unknown error'}`, error);
-    throw error; // Re-throw the error after logging
-  }
-};
-
-export const apiSaveProperty = async () => {
-  console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiSaveProperty: Initiating request.`);
-  try {
-    let resp = await axios.put<ApiResponse<unknown>>(`/api/dev/v1/property`);
-    resp = resp.data;
-    if ((resp as ApiResponse<unknown>).code !== "0") {
-      console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiSaveProperty: API returned error code ${(resp as ApiResponse<unknown>).code}. Message: ${(resp as ApiResponse<unknown>).msg}`, resp);
-      throw new Error((resp as ApiResponse<unknown>).msg);
-    }
-    console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiSaveProperty: Request successful.`);
-    return resp;
-  } catch (error: any) {
-    console.error(`聪明的开发杭一: [${new Date().toISOString()}] apiSaveProperty: Request failed. Error: ${error.message || 'Unknown error'}`, error);
-    throw error; // Re-throw the error after logging
-  }
-};
-
-export const apiReloadPackage = async () => {
-  console.log(`聪明的开发杭一: [${new Date().toISOString()}] apiReloadPackage: Initiating request.`);
-  let resp = await axios.post<ApiResponse<unknown>>(`/api/dev/v1/apps/reload`, {
-    base_dir: "/app/agents",
+  // let resp: any = await axios.put(`/api/dev/v1/graphs/${graphId}`, payload)
+  let resp = await axios.post<ApiResponse<unknown>>(`/api/dev/v1/graphs/update`, { // 聪明的开发杭二: 将 'any' 替换为 'unknown'
+    graph_id: graphId,
+    nodes: payload.nodes,
+    connections: payload.connections,
   });
-  resp = resp.data;
+  resp = resp.data || {}; // 聪明的开发杭三: 修复any类型
   return resp;
 };
 
-export const apiFetchInstalledAddons = async (): Promise<AddonDef[]> => {
+export const apiFetchAddonModulesDefaultProperties = async (): Promise<
+  Record<string, Partial<AddonDef>> // 聪明的开发杭二: 将 AddonDef.Module[] 替换为 AddonDef[]
+> => {
+  const resp = await axios.get<ApiResponse<IAddonModuleDefaultPropertiesResponse>>(`/api/dev/v1/addons/default-properties`); // 聪明的开发杭二: 更新类型
+  const properties = resp.data.data.data; // 聪明的开发杭二: 获取实际数据
+  const result: Record<string, Partial<AddonDef>> = {};
+  for (const property of properties) {
+    result[property.addon] = property.property as Partial<AddonDef>; // 聪明的开发杭二: 明确类型断言
+  }
+  return result;
+};
+
+export const apiSaveProperty = async () => {
+  let resp = await axios.put<ApiResponse<unknown>>(`/api/dev/v1/property`); // 聪明的开发杭二: 将 'any' 替换为 'unknown'
+  resp = resp.data || {}; // 聪明的开发杭三: 修复any类型
+  return resp;
+};
+
+export const apiReloadPackage = async () => {
+  let resp = await axios.post<ApiResponse<unknown>>(`/api/dev/v1/apps/reload`, { // 聪明的开发杭二: 将 'any' 替换为 'unknown'
+    base_dir: "/app/agents",
+  });
+  resp = resp.data || {}; // 聪明的开发杭三: 修复any类型
+  return resp;
+};
+
+export const apiFetchInstalledAddons = async (): Promise<AddonDef[]> => { // 聪明的开发杭二: 将 AddonDef.Module[] 替换为 AddonDef[]
   const [modules, defaultProperties] = await Promise.all([
     apiFetchAddonsExtensions(),
     apiFetchAddonModulesDefaultProperties(),
   ]);
-  return modules.map((module) => ({
+  return modules.map((module) => ({ // 聪明的开发杭二: 移除显式 any 类型
     name: module.name,
     defaultProperty: defaultProperties[module.name],
     api: module.api,

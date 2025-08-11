@@ -1,7 +1,7 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import { webSocketManager, WebSocketConnectionState } from '@/manager/websocket/websocket';
-import { CommandType, MESSAGE_CONSTANTS } from '@/types/websocket';
+import { CommandType, MESSAGE_CONSTANTS, Location } from '@/types/websocket';
 
 export default function ConnectionTest() {
   const [connectionState, setConnectionState] = React.useState<WebSocketConnectionState>(WebSocketConnectionState.CLOSED);
@@ -55,19 +55,31 @@ export default function ConnectionTest() {
 
   const handleSendTestMessage = () => {
     if (connectionState === WebSocketConnectionState.OPEN) {
-      webSocketManager.sendTextData('test_message', testMessage);
+      const srcLoc: Location = {
+        app_uri: appUri,
+        graph_id: graphName,
+        extension_name: MESSAGE_CONSTANTS.SYS_EXTENSION_NAME,
+      };
+      webSocketManager.sendTextData('test_message', testMessage, srcLoc);
       setTestMessage('');
     }
   };
 
   const handleTestStartGraph = () => {
     if (connectionState === WebSocketConnectionState.OPEN) {
-      // 发送 start_graph 命令，只保留必要的 properties
-      webSocketManager.sendCommand(CommandType.START_GRAPH, {
-        properties: {
-          [MESSAGE_CONSTANTS.PROPERTY_CLIENT_APP_URI]: 'mock_front://test_app',
-          [MESSAGE_CONSTANTS.PROPERTY_CLIENT_GRAPH_NAME]: 'test_graph'
-        }
+      const srcLoc: Location = {
+        app_uri: appUri,
+        graph_id: graphName,
+        extension_name: MESSAGE_CONSTANTS.SYS_EXTENSION_NAME,
+      };
+      const destLocs: Location[] = [{
+        app_uri: appUri,
+        graph_id: graphName,
+        extension_name: MESSAGE_CONSTANTS.SYS_EXTENSION_NAME,
+      }];
+      webSocketManager.sendCommand(CommandType.START_GRAPH, srcLoc, destLocs, {
+        predefined_graph_name: graphName, // 使用 predefined_graph_name
+        // 其他 StartGraphCommand 相关的参数可以在这里添加
       });
       console.log('发送 start_graph 命令');
     }
@@ -75,11 +87,18 @@ export default function ConnectionTest() {
 
   const handleTestStopGraph = () => {
     if (connectionState === WebSocketConnectionState.OPEN) {
-      // 发送 stop_graph 命令，所有属性都放在 properties 中
-      webSocketManager.sendCommand(CommandType.STOP_GRAPH, {
-        properties: {
-          [MESSAGE_CONSTANTS.PROPERTY_CLIENT_LOCATION_URI]: `${appUri}/${graphName}`
-        }
+      const srcLoc: Location = {
+        app_uri: appUri,
+        graph_id: graphName,
+        extension_name: MESSAGE_CONSTANTS.SYS_EXTENSION_NAME,
+      };
+      const destLocs: Location[] = [{
+        app_uri: appUri,
+        graph_id: graphName,
+        extension_name: MESSAGE_CONSTANTS.SYS_EXTENSION_NAME,
+      }];
+      webSocketManager.sendCommand(CommandType.STOP_GRAPH, srcLoc, destLocs, {
+        location_uri: `${appUri}/${graphName}`, // 使用 location_uri
       });
       console.log('发送 stop_graph 命令');
     }
