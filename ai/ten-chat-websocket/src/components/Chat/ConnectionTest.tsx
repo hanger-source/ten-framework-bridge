@@ -9,7 +9,6 @@ import { MESSAGE_CONSTANTS } from '@/common/constant';
 export default function ConnectionTest() {
   const [connectionState, setConnectionState] = React.useState<WebSocketConnectionState>(WebSocketConnectionState.CLOSED);
   const [testMessage, setTestMessage] = React.useState('');
-  const [lastResponse, setLastResponse] = React.useState<string>('');
   const [graphName, setGraphName] = React.useState(() => {
     return localStorage.getItem('websocket_graph_name') || 'test-websocket-echo-graph';
   });
@@ -24,14 +23,13 @@ export default function ConnectionTest() {
   };
 
   React.useEffect(() => {
-    webSocketManager.onConnectionStateChange((state: WebSocketConnectionState) => {
+    const unsubscribeConnectionState = webSocketManager.onConnectionStateChange((state: WebSocketConnectionState) => {
       setConnectionState(state);
     });
 
-    webSocketManager.onMessage(MessageType.CMD_RESULT, (message: Message) => {
+    const unsubscribeCmdResult = webSocketManager.onMessage(MessageType.CMD_RESULT, (message: Message) => {
       const commandResult = message as CommandResult;
       console.log('收到命令结果:', commandResult);
-      setLastResponse(JSON.stringify(commandResult, null, 2));
 
       if (!commandResult.success && commandResult.errorMessage) {
         toast.error(commandResult.errorMessage, { duration: 5 });
@@ -44,19 +42,26 @@ export default function ConnectionTest() {
       }
     });
 
-    webSocketManager.onMessage(MessageType.DATA, (message: Message) => {
+    const unsubscribeData = webSocketManager.onMessage(MessageType.DATA, (message: Message) => {
       console.log('收到数据消息:', message);
-      setLastResponse(JSON.stringify(message, null, 2));
       toast.info("Data received!");
     });
 
     // Initial connection attempt
-    webSocketManager.connect().catch(error => console.error("Failed to connect on mount:", error));
+    const initiateConnection = async () => {
+      try {
+        await webSocketManager.connect();
+      } catch (error) {
+        console.error("Failed to connect on mount:", error);
+      }
+    };
+    initiateConnection();
 
     return () => {
-      webSocketManager.onMessage(MessageType.CMD_RESULT, () => {});
-      webSocketManager.onMessage(MessageType.DATA, () => {});
-      webSocketManager.onConnectionStateChange(() => {});
+      unsubscribeConnectionState();
+      unsubscribeCmdResult();
+      unsubscribeData();
+      // webSocketManager.disconnect(); // Disconnect only if necessary, manage global connection in App.tsx
     };
   }, [appUri, graphName]);
 
@@ -238,14 +243,6 @@ export default function ConnectionTest() {
           </Button>
         </div>
 
-        {lastResponse && (
-          <div className="mt-4">
-            <h4 className="text-sm font-medium mb-2">最后收到的响应:</h4>
-            <div className="bg-gray-100 p-3 rounded-md text-xs font-mono overflow-auto max-h-64">
-              <pre>{lastResponse}</pre>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

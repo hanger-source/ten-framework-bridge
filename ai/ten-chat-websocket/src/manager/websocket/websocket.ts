@@ -48,7 +48,7 @@ export class WebSocketManager {
     private reconnectAttempts = 0;
     private maxReconnectAttempts = 5;
     private reconnectDelay = 1000;
-    private messageHandlers: Map<string, (message: Message) => void> = new Map();
+    private messageHandlers: Map<string, Array<(message: Message) => void>> = new Map();
     private connectionStateHandlers: ((state: WebSocketConnectionState) => void)[] = [];
 
     constructor(private url: string) { }
@@ -205,13 +205,36 @@ export class WebSocketManager {
     }
 
     // 注册消息处理器
-    public onMessage(type: string, handler: (message: Message) => void): void {
-        this.messageHandlers.set(type, handler);
+    public onMessage(type: string, handler: (message: Message) => void): () => void {
+        if (!this.messageHandlers.has(type)) {
+            this.messageHandlers.set(type, []);
+        }
+        this.messageHandlers.get(type)?.push(handler);
+        console.log(`Registered handler for type: ${type}. Total handlers: ${this.messageHandlers.get(type)?.length}`);
+
+        // 返回一个取消订阅函数
+        return () => {
+            const handlers = this.messageHandlers.get(type);
+            if (handlers) {
+                const index = handlers.indexOf(handler);
+                if (index > -1) {
+                    handlers.splice(index, 1);
+                    console.log(`Unregistered handler for type: ${type}. Remaining handlers: ${handlers.length}`);
+                }
+            }
+        };
     }
 
     // 注册连接状态处理器
-    public onConnectionStateChange(handler: (state: WebSocketConnectionState) => void): void {
+    public onConnectionStateChange(handler: (state: WebSocketConnectionState) => void): () => void {
         this.connectionStateHandlers.push(handler);
+        return () => {
+            const index = this.connectionStateHandlers.indexOf(handler);
+            if (index > -1) {
+                this.connectionStateHandlers.splice(index, 1);
+                console.log(`Unregistered connection state handler. Remaining handlers: ${this.connectionStateHandlers.length}`);
+            }
+        };
     }
 
     // 获取连接状态
@@ -232,21 +255,11 @@ export class WebSocketManager {
             const message = this.decodeMessage(arrayBufferData);
             console.log('收到消息 (解码后):', message);
 
-            const handler = this.messageHandlers.get(message.type);
-            if (handler) {
-                // 在这里处理 DATA 消息的 data 字段转换
-                if (message.type === MessageType.DATA) {
-                    const dataMessage = message as Data;
-                    if (dataMessage.data) { // 添加空值检查
-                        const decodedData = new TextDecoder(dataMessage.encoding || 'UTF-8').decode(dataMessage.data.buffer);
-                        console.log('Data message decoded data:', decodedData);
-                    } else {
-                        console.log('Data message data is null or undefined, skipping decoding.');
-                    }
-                }
-                handler(message);
+            const handlers = this.messageHandlers.get(message.type);
+            if (handlers && handlers.length > 0) {
+                handlers.forEach(handler => handler(message)); // 遍历所有处理器
             } else {
-                console.warn('未找到消息处理器:', message.type);
+                console.warn('未找到消息处理器或处理程序列表为空:', message.type);
             }
         } catch (error) {
             console.error('处理消息失败:', error);
