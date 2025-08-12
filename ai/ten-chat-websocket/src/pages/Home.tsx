@@ -361,7 +361,7 @@ function Home() {
       <div className="relative mx-auto flex flex-1 min-h-screen flex-col md:h-screen bg-gray-50">
         <Header className="h-[60px]" />
         <Action />
-        <div className="mx-2 mb-2 flex h-full max-h-[calc(100vh-108px-24px)] flex-col md:flex-row md:gap-2 flex-1">
+        <div className="mx-2 mb-2 flex flex-col md:flex-row md:gap-2 flex-1">
           {/* RTC 区域 - 使用固定宽度，移除 flex-1 限制 */}
           <div className={cn(
             "m-0 w-full rounded-b-lg bg-white shadow-lg border border-gray-200 md:w-[400px] md:rounded-lg",

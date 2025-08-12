@@ -35,9 +35,9 @@ export default function ChatCard(props: { className?: string }) {
       // 根据返回数据 的 property 里面的属性 text 和 role 来渲染 已经的 对话框
       if (message.type === MessageType.DATA && message.properties) {
         const { text, role, end_of_segment } = message.properties; // Destructure end_of_segment
-        console.log('ChatCard: extracted text', text, 'type', typeof text);
-        console.log('ChatCard: extracted role', role, 'type', typeof role);
-        console.log('ChatCard: extracted end_of_segment', end_of_segment, 'type', typeof end_of_segment);
+        console.log('ChatCard: extracted text', text);
+        // console.log('ChatCard: extracted role', role, 'type', typeof role);
+        // console.log('ChatCard: extracted end_of_segment', end_of_segment, 'type', typeof end_of_segment);
         if (typeof text === 'string' && (role === 'user' || role === 'agent' || role === 'assistant')) {
           setChatMessages((prevMessages) => {
             const lastMessage = prevMessages[prevMessages.length - 1];

@@ -13,7 +13,7 @@ export default function MessageList(props: {
 }) {
   const { className, messages } = props;
 
-  console.log('MessageList: received messages', messages);
+  // console.log('MessageList: received messages', messages);
   const containerRef = React.useRef<HTMLDivElement>(null);
 
   // 自动滚动到底部
