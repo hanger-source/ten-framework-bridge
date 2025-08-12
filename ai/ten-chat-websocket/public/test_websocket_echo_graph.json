@@ -16,6 +16,16 @@
         "addon": "source.hanger.core.extension.system.EchoExtension",
         "extension_group": "default",
         "property": {}
+      },
+      {
+        "type": "extension",
+        "name": "llm",
+        "addon": "source.hanger.core.extension.llm.qwen.QwenLLMExtension",
+        "extension_group": "llm_group",
+        "property": {
+          "api_key": "sk-679adb8eb9cc479fa879bc2f62c8d9a5",
+          "model": "qwen-turbo"
+        }
       }
     ],
     "connections": [
@@ -26,14 +36,14 @@
             "name": "text_data",
             "dest": [
               {
-                "extension": "echo_handler"
+                "extension": "llm"
               }
             ]
           }
         ]
       },
       {
-        "extension": "echo_handler",
+        "extension": "llm",
         "data": [
           {
             "name": "text_data",

@@ -34,14 +34,29 @@ export default function ChatCard(props: { className?: string }) {
       console.log('ChatCard: received message properties', message.properties);
       // 根据返回数据 的 property 里面的属性 text 和 role 来渲染 已经的 对话框
       if (message.type === MessageType.DATA && message.properties) {
-        const { text, role } = message.properties;
+        const { text, role, end_of_segment } = message.properties; // Destructure end_of_segment
         console.log('ChatCard: extracted text', text, 'type', typeof text);
         console.log('ChatCard: extracted role', role, 'type', typeof role);
+        console.log('ChatCard: extracted end_of_segment', end_of_segment, 'type', typeof end_of_segment);
         if (typeof text === 'string' && (role === 'user' || role === 'agent' || role === 'assistant')) {
           setChatMessages((prevMessages) => {
-            const newMessages = [...prevMessages, { text, role }];
-            console.log('ChatCard: chatMessages updated with agent/assistant message', newMessages);
-            return newMessages;
+            const lastMessage = prevMessages[prevMessages.length - 1];
+            // If it's a streaming message (end_of_segment === false) and the role is the same as the last message
+            if (lastMessage && lastMessage.role === role && end_of_segment === false) {
+              // Append text to the last message
+              const updatedMessages = [...prevMessages];
+              updatedMessages[updatedMessages.length - 1] = {
+                ...lastMessage,
+                text: lastMessage.text + text,
+              };
+              console.log('ChatCard: chatMessages updated (appended)', updatedMessages);
+              return updatedMessages;
+            } else {
+              // Add a new message (either a new segment starts, or it's the end of a segment, or initial message)
+              const newMessages = [...prevMessages, { text, role }];
+              console.log('ChatCard: chatMessages updated (new message)', newMessages);
+              return newMessages;
+            }
           });
         }
       }
@@ -114,13 +129,13 @@ export default function ChatCard(props: { className?: string }) {
     <>
       {/* Chat Card */}
       <div className={cn("h-full overflow-hidden min-h-0 flex", className)}>
-        <div className="flex w-full flex-col p-4 flex-1">
+        <div className="flex w-full flex-col flex-1"> {/* Removed p-4 */}
           {/* Scrollable messages container */}
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto px-4 pt-4"> {/* Added px-4 pt-4 */}
             <MessageList messages={chatMessages} />
           </div>
           {/* Input area */}
-          <div className="border-t pt-4">
+          <div className="border-t pt-4 px-4 pb-4"> {/* Added px-4 pb-4 */}
             <form onSubmit={handleInputSubmit} className="flex items-center space-x-2">
               <input
                 type="text"
