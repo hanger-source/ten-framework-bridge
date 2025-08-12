@@ -121,9 +121,6 @@ export default function ChatCard(props: { className?: string }) {
           </div>
           {/* Input area */}
           <div className="border-t pt-4">
-            <div className="mb-2 text-xs text-gray-500">
-              连接状态: {connectionState} {isConnected ? '✅' : '❌'}
-            </div>
             <form onSubmit={handleInputSubmit} className="flex items-center space-x-2">
               <input
                 type="text"

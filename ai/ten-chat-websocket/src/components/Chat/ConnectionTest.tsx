@@ -8,13 +8,22 @@ import { MESSAGE_CONSTANTS } from '@/common/constant';
 
 export default function ConnectionTest() {
   const [connectionState, setConnectionState] = React.useState<WebSocketConnectionState>(WebSocketConnectionState.CLOSED);
-  const [testMessage, setTestMessage] = React.useState('');
+  // const [testMessage, setTestMessage] = React.useState(''); // Removed
   const [graphName, setGraphName] = React.useState(() => {
     return localStorage.getItem('websocket_graph_name') || 'test-websocket-echo-graph';
   });
   const [appUri, setAppUri] = React.useState(() => {
     return localStorage.getItem('websocket_app_uri') || 'mock_front://test_app';
   });
+
+  const connectionStateMap: Record<WebSocketConnectionState, string> = {
+    [WebSocketConnectionState.CONNECTING]: '连接中',
+    [WebSocketConnectionState.OPEN]: '已连接',
+    [WebSocketConnectionState.CLOSING]: '断开中',
+    [WebSocketConnectionState.CLOSED]: '已断开',
+  };
+
+  const [showSettings, setShowSettings] = React.useState(false); // New state for toggling settings visibility
 
   const srcLoc: Location = {
     app_uri: appUri,
@@ -84,19 +93,20 @@ export default function ConnectionTest() {
     console.log('WebSocket 连接已断开');
   };
 
-  const handleSendTestMessage = () => {
-    if (connectionState === WebSocketConnectionState.OPEN) {
-      const destLocs: Location[] = [
-        {
-          app_uri: appUri,
-          graph_id: graphName,
-          extension_name: MESSAGE_CONSTANTS.SYS_EXTENSION_NAME,
-        },
-      ];
-      webSocketManager.sendTextData('text_data', testMessage, srcLoc, destLocs);
-      setTestMessage('');
-    }
-  };
+  // Removed handleSendTestMessage function
+  // const handleSendTestMessage = () => {
+  //   if (connectionState === WebSocketConnectionState.OPEN) {
+  //     const destLocs: Location[] = [
+  //       {
+  //         app_uri: appUri,
+  //         graph_id: graphName,
+  //         extension_name: MESSAGE_CONSTANTS.SYS_EXTENSION_NAME,
+  //       },
+  //     ];
+  //     webSocketManager.sendTextData('text_data', testMessage, srcLoc, destLocs);
+  //     setTestMessage('');
+  //   }
+  // };
 
   const handleTestStartGraph = () => {
     if (connectionState === WebSocketConnectionState.OPEN) {
@@ -144,62 +154,66 @@ export default function ConnectionTest() {
       <div className="space-y-4">
         {/* 设置区域 */}
         <div className="space-y-3 p-3 bg-white rounded border">
-          <h4 className="text-sm font-medium">设置</h4>
-          <div className="grid grid-cols-1 gap-3">
-            <div>
-              <label className="block text-xs text-gray-600 mb-1">App URI:</label>
-              <input
-                type="text"
-                value={appUri}
-                onChange={(e) => setAppUri(e.target.value)}
-                className="w-full px-3 py-2 border rounded-md text-sm"
-                placeholder="mock_front://test_app"
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-gray-600 mb-1">Graph Name:</label>
-              <input
-                type="text"
-                value={graphName}
-                onChange={(e) => setGraphName(e.target.value)}
-                className="w-full px-3 py-2 border rounded-md text-sm"
-                placeholder="test-websocket-echo-graph"
-              />
-            </div>
-            <Button
-              onClick={saveSettings}
-              size="sm"
-              variant="outline"
-              className="w-full"
-            >
-              保存设置
-            </Button>
+          <div className="flex justify-between items-center cursor-pointer" onClick={() => setShowSettings(!showSettings)}>
+            <h4 className="text-sm font-medium">设置</h4>
+            <span className="text-gray-500 text-lg">
+              {showSettings ? '▲' : '▼'} {/* Arrow icon for toggle */}
+            </span>
           </div>
+          {showSettings && ( // Conditionally render settings content
+            <div className="grid grid-cols-1 gap-3">
+              <div>
+                <label className="block text-xs text-gray-600 mb-1">App URI:</label>
+                <input
+                  type="text"
+                  value={appUri}
+                  onChange={(e) => setAppUri(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-md text-sm"
+                  placeholder="mock_front://test_app"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-600 mb-1">Graph Name:</label>
+                <input
+                  type="text"
+                  value={graphName}
+                  onChange={(e) => setGraphName(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-md text-sm"
+                  placeholder="test-websocket-echo-graph"
+                />
+              </div>
+              <Button
+                onClick={saveSettings}
+                size="sm"
+                variant="outline"
+                className="w-full"
+              >
+                保存设置
+              </Button>
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-4">
-          <span className="text-sm">连接状态:</span>
+          <span className="text-sm">WebSocket :</span>
           <span className={`px-2 py-1 rounded text-xs ${
             connectionState === WebSocketConnectionState.OPEN
               ? 'bg-green-100 text-green-800'
               : 'bg-red-100 text-red-800'
           }`}>
-            {connectionState}
+            {connectionStateMap[connectionState]}
           </span>
-        </div>
-
-        <div className="flex gap-2">
           <Button
             onClick={handleConnect}
             disabled={connectionState === WebSocketConnectionState.OPEN}
-            size="sm"
+            size="sm" // Reverted to sm
           >
             连接
           </Button>
           <Button
             onClick={handleDisconnect}
             disabled={connectionState === WebSocketConnectionState.CLOSED}
-            size="sm"
+            size="sm" // Reverted to sm
             variant="outline"
           >
             断开
@@ -225,7 +239,8 @@ export default function ConnectionTest() {
           </Button>
         </div>
 
-        <div className="space-y-2">
+        {/* Removed Test Message Input and Button */}
+        {/* <div className="space-y-2">
           <input
             type="text"
             placeholder="输入测试消息"
@@ -241,7 +256,7 @@ export default function ConnectionTest() {
           >
             发送测试消息
           </Button>
-        </div>
+        </div> */}
 
       </div>
     </div>
