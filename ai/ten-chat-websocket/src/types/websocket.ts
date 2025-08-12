@@ -50,6 +50,8 @@ export interface CommandResult extends Message {
     cmd_id: number;
     success: boolean;
     error?: string;
+    errorMessage?: string; // 添加 errorMessage 属性
+    detail?: string;      // 添加 detail 属性
     data?: any; // 命令结果可能包含数据
 }
 

@@ -1,14 +1,15 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import { webSocketManager, WebSocketConnectionState } from '@/manager/websocket/websocket';
-import { CommandType, MESSAGE_CONSTANTS, Location } from '@/types/websocket';
+import { CommandType, Location, MessageType, CommandResult, Message, Data } from '@/types/websocket';
+import { toast } from 'sonner';
+import testWebsocketEchoGraph from "../../../public/test_websocket_echo_graph.json";
+import { MESSAGE_CONSTANTS } from '@/common/constant';
 
 export default function ConnectionTest() {
   const [connectionState, setConnectionState] = React.useState<WebSocketConnectionState>(WebSocketConnectionState.CLOSED);
   const [testMessage, setTestMessage] = React.useState('');
   const [lastResponse, setLastResponse] = React.useState<string>('');
-
-  // 从 localStorage 读取设置，如果没有则使用默认值
   const [graphName, setGraphName] = React.useState(() => {
     return localStorage.getItem('websocket_graph_name') || 'test-websocket-echo-graph';
   });
@@ -16,24 +17,49 @@ export default function ConnectionTest() {
     return localStorage.getItem('websocket_app_uri') || 'mock_front://test_app';
   });
 
+  const srcLoc: Location = {
+    app_uri: appUri,
+    graph_id: graphName,
+    extension_name: MESSAGE_CONSTANTS.SYS_EXTENSION_NAME,
+  };
+
   React.useEffect(() => {
-    webSocketManager.onConnectionStateChange((state) => {
+    webSocketManager.onConnectionStateChange((state: WebSocketConnectionState) => {
       setConnectionState(state);
     });
 
-    // 注册消息处理器
-    webSocketManager.onMessage('cmd_result', (message) => {
-      console.log('收到命令结果:', message);
-      setLastResponse(JSON.stringify(message, null, 2));
+    webSocketManager.onMessage(MessageType.CMD_RESULT, (message: Message) => {
+      const commandResult = message as CommandResult;
+      console.log('收到命令结果:', commandResult);
+      setLastResponse(JSON.stringify(commandResult, null, 2));
+
+      if (!commandResult.success && commandResult.errorMessage) {
+        toast.error(commandResult.errorMessage, { duration: 5 });
+      } else if (commandResult.success && commandResult.detail) {
+        toast.success(commandResult.detail, { duration: 5 });
+      } else if (commandResult.success) {
+        toast.success('命令执行成功！', { duration: 5 });
+      } else {
+        toast.error('命令执行失败！', { duration: 5 });
+      }
     });
 
-    webSocketManager.onMessage('data', (message) => {
+    webSocketManager.onMessage(MessageType.DATA, (message: Message) => {
       console.log('收到数据消息:', message);
       setLastResponse(JSON.stringify(message, null, 2));
+      toast.info("Data received!");
     });
-  }, []);
 
-  // 保存设置到 localStorage
+    // Initial connection attempt
+    webSocketManager.connect().catch(error => console.error("Failed to connect on mount:", error));
+
+    return () => {
+      webSocketManager.onMessage(MessageType.CMD_RESULT, () => {});
+      webSocketManager.onMessage(MessageType.DATA, () => {});
+      webSocketManager.onConnectionStateChange(() => {});
+    };
+  }, [appUri, graphName]);
+
   const saveSettings = () => {
     localStorage.setItem('websocket_graph_name', graphName);
     localStorage.setItem('websocket_app_uri', appUri);
@@ -55,31 +81,36 @@ export default function ConnectionTest() {
 
   const handleSendTestMessage = () => {
     if (connectionState === WebSocketConnectionState.OPEN) {
-      const srcLoc: Location = {
-        app_uri: appUri,
-        graph_id: graphName,
-        extension_name: MESSAGE_CONSTANTS.SYS_EXTENSION_NAME,
-      };
-      webSocketManager.sendTextData('test_message', testMessage, srcLoc);
+      const destLocs: Location[] = [
+        {
+          app_uri: appUri,
+          graph_id: graphName,
+          extension_name: MESSAGE_CONSTANTS.SYS_EXTENSION_NAME,
+        },
+      ];
+      webSocketManager.sendTextData('test_message', testMessage, srcLoc, destLocs);
       setTestMessage('');
     }
   };
 
   const handleTestStartGraph = () => {
     if (connectionState === WebSocketConnectionState.OPEN) {
-      const srcLoc: Location = {
-        app_uri: appUri,
+      const destLocs: Location[] = [
+        {
+          app_uri: appUri,
+          graph_id: graphName,
+          extension_name: MESSAGE_CONSTANTS.SYS_EXTENSION_NAME,
+        },
+      ];
+      const graphDefinition = {
+        graph_name: graphName,
         graph_id: graphName,
-        extension_name: MESSAGE_CONSTANTS.SYS_EXTENSION_NAME,
+        app_uri: appUri,
+        nodes: testWebsocketEchoGraph.graph.nodes,
+        connections: testWebsocketEchoGraph.graph.connections,
       };
-      const destLocs: Location[] = [{
-        app_uri: appUri,
-        graph_id: graphName,
-        extension_name: MESSAGE_CONSTANTS.SYS_EXTENSION_NAME,
-      }];
       webSocketManager.sendCommand(CommandType.START_GRAPH, srcLoc, destLocs, {
-        predefined_graph_name: graphName, // 使用 predefined_graph_name
-        // 其他 StartGraphCommand 相关的参数可以在这里添加
+        graph_json: JSON.stringify(graphDefinition),
       });
       console.log('发送 start_graph 命令');
     }
@@ -87,18 +118,15 @@ export default function ConnectionTest() {
 
   const handleTestStopGraph = () => {
     if (connectionState === WebSocketConnectionState.OPEN) {
-      const srcLoc: Location = {
-        app_uri: appUri,
-        graph_id: graphName,
-        extension_name: MESSAGE_CONSTANTS.SYS_EXTENSION_NAME,
-      };
-      const destLocs: Location[] = [{
-        app_uri: appUri,
-        graph_id: graphName,
-        extension_name: MESSAGE_CONSTANTS.SYS_EXTENSION_NAME,
-      }];
+      const destLocs: Location[] = [
+        {
+          app_uri: appUri,
+          graph_id: graphName,
+          extension_name: MESSAGE_CONSTANTS.SYS_EXTENSION_NAME,
+        },
+      ];
       webSocketManager.sendCommand(CommandType.STOP_GRAPH, srcLoc, destLocs, {
-        location_uri: `${appUri}/${graphName}`, // 使用 location_uri
+        location_uri: `${appUri}/${graphName}`,
       });
       console.log('发送 stop_graph 命令');
     }
@@ -210,11 +238,10 @@ export default function ConnectionTest() {
           </Button>
         </div>
 
-        {/* 响应显示区域 */}
         {lastResponse && (
           <div className="mt-4">
             <h4 className="text-sm font-medium mb-2">最后收到的响应:</h4>
-            <div className="bg-gray-100 p-3 rounded-md text-xs font-mono overflow-auto max-h-32">
+            <div className="bg-gray-100 p-3 rounded-md text-xs font-mono overflow-auto max-h-64">
               <pre>{lastResponse}</pre>
             </div>
           </div>
