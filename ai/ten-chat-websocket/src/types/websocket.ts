@@ -58,9 +58,9 @@ export interface CommandResult extends Message {
 // 音频帧消息
 export interface AudioFrame extends Message {
     type: MessageType.AUDIO_FRAME;
-    data: Uint8Array; // 对应 buf
+    buf: Uint8Array; // 对应 buf
     sample_rate: number;
-    channels: number; // 对应 numberOfChannel
+    number_of_channel: number; // 对应 numberOfChannel
     bits_per_sample: number; // 对应 bytesPerSample
     format: string; // 对应 dataFormat
     is_eof?: boolean;

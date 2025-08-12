@@ -9,6 +9,7 @@ import { webSocketManager, WebSocketConnectionState } from "@/manager/websocket/
 import { Data, Command, CommandResult, Location } from "@/types/websocket"; // Added Location
 import { MESSAGE_CONSTANTS } from '@/common/constant'; // Added MESSAGE_CONSTANTS
 import { MessageType } from "@/types/websocket"; // Added MessageType
+import AudioStreamPlayer from "@/components/Agent/AudioStreamPlayer"; // Import AudioStreamPlayer
 
 export default function ChatCard(props: { className?: string }) {
   const { className } = props;
@@ -134,6 +135,7 @@ export default function ChatCard(props: { className?: string }) {
           </div>
           {/* Input area */}
           <div className="border-t pt-4 px-4 pb-4"> {/* Added px-4 pb-4 */}
+            <AudioStreamPlayer /> {/* Render AudioStreamPlayer */}
             <form onSubmit={handleInputSubmit} className="flex items-center space-x-2">
               <input
                 type="text"

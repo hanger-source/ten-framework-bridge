@@ -20,11 +20,21 @@
       {
         "type": "extension",
         "name": "llm",
-        "addon": "source.hanger.core.extension.llm.qwen.QwenLLMExtension",
+        "addon": "source.hanger.core.extension.qwen.llm.QwenLLMExtension",
         "extension_group": "llm_group",
         "property": {
           "api_key": "sk-679adb8eb9cc479fa879bc2f62c8d9a5",
           "model": "qwen-turbo"
+        }
+      },
+      {
+        "type": "extension",
+        "name": "tts",
+        "addon": "source.hanger.core.extension.qwen.tts.QwenTtsExtension",
+        "extension_group": "tts_group",
+        "property": {
+          "api_key": "sk-679adb8eb9cc479fa879bc2f62c8d9a5",
+          "voice_name": "Cherry"
         }
       }
     ],
@@ -47,6 +57,20 @@
         "data": [
           {
             "name": "text_data",
+            "dest": [
+              {
+                "extension": "client_connection"
+              },{
+                "extension": "tts"
+              }
+            ]
+          }
+        ]
+      },{
+        "extension": "tts",
+        "audio_frame": [
+          {
+            "name": "audio_frame",
             "dest": [
               {
                 "extension": "client_connection"
