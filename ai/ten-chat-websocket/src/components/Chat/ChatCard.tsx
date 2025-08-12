@@ -96,8 +96,6 @@ export default function ChatCard(props: { className?: string }) {
     }
 
     // 发送文本消息
-    webSocketManager.sendTextData('chat_message', inputValue, srcLoc, destLocs);
-    // 同时发送 text_data 测试消息
     webSocketManager.sendTextData('text_data', inputValue, srcLoc, destLocs);
 
     // 添加用户消息到聊天列表
