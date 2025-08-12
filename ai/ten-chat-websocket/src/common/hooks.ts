@@ -103,10 +103,6 @@ export function useMultibandTrackVolume(
           return Math.sqrt(sum / bandFrequencies.length);
         });
         setFrequencyBands(summedChunks);
-        // console.log('useMultibandTrackVolume: frequencyBands updated', summedChunks);
-      // } else {
-      //   console.log('useMultibandTrackVolume: no significant change, not updating frequencies');
-      // }
     }, 8);
 
     const interval = setInterval(updateVolume, 16);

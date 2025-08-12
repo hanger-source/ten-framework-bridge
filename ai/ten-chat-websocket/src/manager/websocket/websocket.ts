@@ -129,13 +129,14 @@ export class WebSocketManager {
         const dataMessage: Data = {
             id: this.generateMessageId(),
             type: MessageType.DATA,
-            name: name, // name 字段直接放在这里
+            name: name,
             src_loc: srcLoc,
             dest_locs: destLocs,
-            data: new TextEncoder().encode(text),
+            data: new Uint8Array(0), // data 字段为空的 Uint8Array
             content_type: 'text/plain',
             encoding: 'UTF-8',
             timestamp: Date.now(),
+            properties: { text: text }, // 文本内容放在 properties 中
         };
         this.sendMessage(dataMessage);
     }
@@ -233,6 +234,16 @@ export class WebSocketManager {
 
             const handler = this.messageHandlers.get(message.type);
             if (handler) {
+                // 在这里处理 DATA 消息的 data 字段转换
+                if (message.type === MessageType.DATA) {
+                    const dataMessage = message as Data;
+                    if (dataMessage.data) { // 添加空值检查
+                        const decodedData = new TextDecoder(dataMessage.encoding || 'UTF-8').decode(dataMessage.data.buffer);
+                        console.log('Data message decoded data:', decodedData);
+                    } else {
+                        console.log('Data message data is null or undefined, skipping decoding.');
+                    }
+                }
                 handler(message);
             } else {
                 console.warn('未找到消息处理器:', message.type);

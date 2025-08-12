@@ -12,7 +12,7 @@ export interface Message {
 // 数据消息
 export interface Data extends Message {
     type: MessageType.DATA;
-    data: Uint8Array; // 实际数据内容，对应Java的byte[] data
+    data?: Uint8Array; // 实际数据内容，对应Java的byte[] data
     content_type?: string;
     encoding?: string;
     is_eof?: boolean;
@@ -114,7 +114,7 @@ export enum CommandType {
 // 消息常量 - 匹配后端的 MessageConstants
 export const MESSAGE_CONSTANTS = {
     NOT_APPLICABLE: 'N/A',
-    SYS_EXTENSION_NAME: 'sys_engine',
+    SYS_EXTENSION_NAME: 'client_connection',
     PROPERTY_CLIENT_LOCATION_URI: '__client_location_uri__',
     PROPERTY_CLIENT_APP_URI: '__client_app_uri__',
     PROPERTY_CLIENT_GRAPH_ID: '__client_graph_id__',

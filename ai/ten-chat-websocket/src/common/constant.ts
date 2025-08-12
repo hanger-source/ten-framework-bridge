@@ -155,7 +155,7 @@ export const TEN_MSGPACK_EXT_TYPE_MSG = -1; // 对应后端的 MessageUtils.TEN_
 
 export const MESSAGE_CONSTANTS = {
   NOT_APPLICABLE: 'N/A',
-  SYS_EXTENSION_NAME: 'sys_engine',
+  SYS_EXTENSION_NAME: 'client_connection',
   PROPERTY_CLIENT_LOCATION_URI: '__client_location_uri__',
   PROPERTY_CLIENT_APP_URI: '__client_app_uri__',
   PROPERTY_CLIENT_GRAPH_ID: '__client_graph_id__',
@@ -164,3 +164,10 @@ export const MESSAGE_CONSTANTS = {
   PROPERTY_MESSAGE_PRIORITY: '__message_priority__',
   DATA_NAME_ECHO_DATA: 'echo_data',
 } as const;
+
+export const WEBSOCKET_CONFIG = {
+  MAX_RECONNECT_ATTEMPTS: 5,
+  RECONNECT_INTERVAL_MS: 3000,
+  MESSAGE_TIMEOUT_MS: 10000,
+  SYS_EXTENSION_NAME: 'client_connection', // Updated from 'sys_engine'
+};

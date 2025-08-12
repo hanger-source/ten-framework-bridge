@@ -291,6 +291,7 @@ function Home() {
     const [mediaStreamTrack, setMediaStreamTrack] = React.useState<MediaStreamTrack | null>(null);
     const [micPermission, setMicPermission] = React.useState<'granted' | 'denied' | 'pending'>('pending');
     const [audioMute, setAudioMute] = React.useState(false);
+    const [showLive2D, setShowLive2D] = React.useState(false); // Default hidden
     // console.log('Home component: audioMute', audioMute);
 
     // 自动获取麦克风 - 优化音频质量设置
@@ -371,12 +372,14 @@ function Home() {
             <div className="flex h-full flex-col min-h-0 bg-gray-50 w-full">
               {/* TalkingHead 区域 - 占据大部分空间 */}
               <div className="flex-1 min-h-0 z-10">
-                <div
-                  style={{ height: '100%', minHeight: 500 }}
-                  className="bg-white rounded-lg shadow-lg border border-gray-200"
-                >
-                  <TalkingHead audioTrack={audioMute ? undefined : undefined} />
-                </div>
+                {showLive2D && (
+                  <div
+                    style={{ height: '100%', minHeight: 500 }}
+                    className="bg-white rounded-lg shadow-lg border border-gray-200"
+                  >
+                    <TalkingHead audioTrack={audioMute ? undefined : undefined} />
+                  </div>
+                )}
               </div>
 
               {/* 麦克风控制区域 - 放在 TalkingHead 下面，固定高度 */}
@@ -391,11 +394,17 @@ function Home() {
                     <div className="flex items-center gap-2">
                       <Button
                         variant="outline"
-                        size="icon"
                         className="border-secondary bg-transparent"
                         onClick={() => setAudioMute(!audioMute)}
                       >
                         <MicIconByStatus className="h-5 w-5" active={!audioMute} />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="border-secondary bg-transparent"
+                        onClick={() => setShowLive2D(!showLive2D)}
+                      >
+                        {showLive2D ? '隐藏 Live2D' : '显示 Live2D'}
                       </Button>
                     </div>
                   </div>

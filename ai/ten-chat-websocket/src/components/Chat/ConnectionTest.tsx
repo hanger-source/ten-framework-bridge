@@ -88,7 +88,7 @@ export default function ConnectionTest() {
           extension_name: MESSAGE_CONSTANTS.SYS_EXTENSION_NAME,
         },
       ];
-      webSocketManager.sendTextData('test_message', testMessage, srcLoc, destLocs);
+      webSocketManager.sendTextData('text_data', testMessage, srcLoc, destLocs);
       setTestMessage('');
     }
   };
