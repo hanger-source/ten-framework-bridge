@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { MicIconByStatus } from "@/components/Icon";
 import ChatCard from "@/components/Chat/ChatCard";
 import ConnectionTest from "@/components/Chat/ConnectionTest";
+import AudioVisualizer from "@/components/Agent/AudioVisualizer";
 import {
   Select,
   SelectContent,
@@ -234,141 +235,6 @@ function TalkingHead({ audioTrack }: { audioTrack?: Uint8Array }) {
   );
 }
 
-// 音频可视化组件 - 参考 playground 实现
-function AudioVisualizer(props: {
-  type: "agent" | "user"
-  frequencies: Float32Array[]
-  gap: number
-  barWidth: number
-  minBarHeight: number
-  maxBarHeight: number
-  borderRadius: number
-}) {
-  const {
-    frequencies,
-    gap,
-    barWidth,
-    minBarHeight,
-    maxBarHeight,
-    borderRadius,
-    type,
-  } = props
-
-  const summedFrequencies = frequencies.map((bandFrequencies) => {
-    const sum = bandFrequencies.reduce((a, b) => a + b, 0)
-    if (sum <= 0) {
-      return 0
-    }
-    return Math.sqrt(sum / bandFrequencies.length)
-  })
-
-  return (
-    <div
-      className={`flex items-center justify-center`}
-      style={{ gap: `${gap}px` }}
-    >
-      {summedFrequencies.map((frequency, index) => {
-        const style = {
-          height:
-            minBarHeight + frequency * (maxBarHeight - minBarHeight) + "px",
-          borderRadius: borderRadius + "px",
-          width: barWidth + "px",
-          transition:
-            "background-color 0.35s ease-out, transform 0.25s ease-out",
-          backgroundColor: type === "agent" ? "#0888FF" : "#3B82F6",
-          boxShadow: type === "agent" ? "0 0 10px #EAECF0" : "0 0 5px #3B82F6",
-        }
-
-        return <span key={index} style={style} />
-      })}
-    </div>
-  )
-}
-
-// 多频段音量 hook - 优化性能
-function useMultibandTrackVolume(
-  track?: MediaStreamTrack,
-  bands: number = 20,
-  loPass: number = 100,
-  hiPass: number = 600
-) {
-  const [frequencyBands, setFrequencyBands] = React.useState<Float32Array[]>([]);
-  const lastBandsRef = React.useRef<Float32Array[]>([]);
-
-  React.useEffect(() => {
-    if (!track) {
-      return setFrequencyBands(new Array(bands).fill(new Float32Array(0)));
-    }
-
-    // 使用优化的音频设置
-    const ctx = new AudioContext({
-      sampleRate: 48000, // 降低采样率
-      latencyHint: 'interactive',
-    });
-
-    const mediaStream = new MediaStream([track]);
-    const source = ctx.createMediaStreamSource(mediaStream);
-    const analyser = ctx.createAnalyser();
-
-    // 使用更小的 FFT 大小以减少计算量
-    analyser.fftSize = 2048; // 从 8192 降低到 2048
-    analyser.smoothingTimeConstant = 0.3; // 增加平滑系数
-    analyser.minDecibels = -90;
-    analyser.maxDecibels = -10;
-
-    source.connect(analyser);
-
-    const bufferLength = analyser.frequencyBinCount;
-    const dataArray = new Float32Array(bufferLength);
-
-    const updateVolume = debounce(() => {
-      analyser.getFloatFrequencyData(dataArray);
-      let frequencies: Float32Array = new Float32Array(dataArray.length);
-      for (let i = 0; i < dataArray.length; i++) {
-        frequencies[i] = dataArray[i];
-      }
-      frequencies = frequencies.slice(loPass, hiPass);
-
-      // 简化的频率标准化算法
-      const normalizedFrequencies = frequencies.map(f => {
-        const normalized = Math.max(0, (f + 90) / 80);
-        return Math.pow(normalized, 1.2);
-      });
-
-      const chunkSize = Math.ceil(normalizedFrequencies.length / bands);
-      const chunks: Float32Array[] = [];
-      for (let i = 0; i < bands; i++) {
-        chunks.push(
-          normalizedFrequencies.slice(i * chunkSize, (i + 1) * chunkSize)
-        );
-      }
-
-      // 只有当变化足够大时才更新状态
-      const hasSignificantChange = chunks.some((chunk, index) => {
-        const lastChunk = lastBandsRef.current[index];
-        if (!lastChunk || chunk.length !== lastChunk.length) return true;
-        return chunk.some((value, i) => Math.abs(value - lastChunk[i]) > 0.1);
-      });
-
-      if (hasSignificantChange) {
-        lastBandsRef.current = chunks;
-        setFrequencyBands(chunks);
-      }
-    }, 8); // 8ms 防抖
-
-    // 降低更新频率以减少CPU使用
-    const interval = setInterval(updateVolume, 16); // 从 4ms 提升到 16ms (62.5Hz)
-
-    return () => {
-      source.disconnect();
-      clearInterval(interval);
-      ctx.close().catch(console.warn);
-    };
-  }, [track, loPass, hiPass, bands]);
-
-  return frequencyBands;
-}
-
 // 设备选择组件
 function MicrophoneDeviceSelect() {
   const [devices, setDevices] = React.useState<Array<{label: string, value: string, deviceId: string}>>([]);
@@ -425,6 +291,7 @@ function Home() {
     const [mediaStreamTrack, setMediaStreamTrack] = React.useState<MediaStreamTrack | null>(null);
     const [micPermission, setMicPermission] = React.useState<'granted' | 'denied' | 'pending'>('pending');
     const [audioMute, setAudioMute] = React.useState(false);
+    // console.log('Home component: audioMute', audioMute);
 
     // 自动获取麦克风 - 优化音频质量设置
     React.useEffect(() => {
@@ -473,6 +340,8 @@ function Home() {
           }
 
           setMediaStreamTrack(audioTrack);
+          // console.log('麦克风权限已授予，track:', audioTrack);
+          // console.log('Home component: mediaStreamTrack after set', mediaStreamTrack);
           setMicPermission('granted');
         } catch (error) {
           console.error('无法访问麦克风:', error);
@@ -484,8 +353,8 @@ function Home() {
     }, []);
 
     // 根据静音状态决定是否传递 track
-    const activeTrack = audioMute ? undefined : (mediaStreamTrack || undefined);
-    const subscribedVolumes = useMultibandTrackVolume(activeTrack, 20);
+    // const activeTrack = audioMute ? undefined : (mediaStreamTrack || undefined);
+    // console.log('Home component: activeTrack', activeTrack);
 
     return (
       <div className="relative mx-auto flex flex-1 min-h-screen flex-col md:h-screen bg-gray-50">
@@ -537,15 +406,17 @@ function Home() {
                       音频可视化 {audioMute ? '(已静音)' : '(录音中)'}
                     </div>
                     <div className="flex h-10 flex-col items-center justify-center gap-2 self-stretch rounded-md border border-gray-200 bg-gray-50 p-2">
+                      {/* {console.log('AudioVisualizer render condition:', micPermission === 'granted' && !audioMute)} */}
                       {micPermission === 'granted' && !audioMute ? (
                         <AudioVisualizer
                           type="user"
                           barWidth={3}
                           minBarHeight={2}
                           maxBarHeight={16}
-                          frequencies={subscribedVolumes}
+                          // frequencies={[]} // Removed subscribedVolumes
                           borderRadius={2}
                           gap={3}
+                          track={audioMute ? undefined : mediaStreamTrack}
                         />
                       ) : micPermission === 'denied' ? (
                         <div className="text-center text-gray-500">

@@ -1,6 +1,8 @@
+import { useMultibandTrackVolume } from "@/common/hooks";
+
 export interface AudioVisualizerProps {
   type: "agent" | "user";
-  frequencies: Float32Array[];
+  track?: MediaStreamTrack | null;
   gap: number;
   barWidth: number;
   minBarHeight: number;
@@ -10,7 +12,8 @@ export interface AudioVisualizerProps {
 
 export default function AudioVisualizer(props: AudioVisualizerProps) {
   const {
-    frequencies,
+    // frequencies,
+    track,
     gap,
     barWidth,
     minBarHeight,
@@ -19,27 +22,21 @@ export default function AudioVisualizer(props: AudioVisualizerProps) {
     type,
   } = props;
 
-  const summedFrequencies = frequencies.map((bandFrequencies) => {
-    const sum = bandFrequencies.reduce((a, b) => a + b, 0);
-    if (sum <= 0) {
-      return 0;
-    }
-    return Math.sqrt(sum / bandFrequencies.length);
-  });
+  const frequencies = useMultibandTrackVolume(track, 20);
 
   return (
     <div
       className={`flex items-center justify-center`}
       style={{ gap: `${gap}px` }}
     >
-      {summedFrequencies.map((frequency, index) => {
+      {frequencies.map((frequency, index) => {
         const style = {
           height:
             minBarHeight + frequency * (maxBarHeight - minBarHeight) + "px",
           borderRadius: borderRadius + "px",
           width: barWidth + "px",
           transition:
-            "background-color 0.35s ease-out, transform 0.25s ease-out",
+            "background-color 0.35s ease-out, transform 0.25s ease-out, height 0.1s ease-out", // 添加 height 过渡
           // transform: transform,
           backgroundColor: type === "agent" ? "#0888FF" : "#3B82F6",
           boxShadow: type === "agent" ? "0 0 10px #EAECF0" : "0 0 5px #3B82F6",
