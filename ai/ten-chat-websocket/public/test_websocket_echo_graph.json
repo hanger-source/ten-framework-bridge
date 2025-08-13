@@ -36,11 +36,44 @@
           "api_key": "sk-679adb8eb9cc479fa879bc2f62c8d9a5",
           "voice_name": "Cherry"
         }
+      },
+      {
+        "type": "extension",
+        "name": "interrupt_detector",
+        "addon": "source.hanger.core.extension.system.InterruptDetectorExtension",
+        "extension_group": "default",
+        "property": {
+          "api_key": "sk-679adb8eb9cc479fa879bc2f62c8d9a5",
+          "voice_name": "Cherry"
+        }
       }
     ],
     "connections": [
       {
         "extension": "client_connection",
+        "data": [
+          {
+            "name": "text_data",
+            "dest": [
+              {
+                "extension": "interrupt_detector"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "extension": "interrupt_detector",
+        "cmd": [
+          {
+            "name": "flush",
+            "dest": [
+              {
+                "extension": "llm"
+              }
+            ]
+          }
+        ],
         "data": [
           {
             "name": "text_data",
@@ -54,6 +87,16 @@
       },
       {
         "extension": "llm",
+        "cmd": [
+          {
+            "name": "flush",
+            "dest": [
+              {
+                "extension": "tts"
+              }
+            ]
+          }
+        ],
         "data": [
           {
             "name": "text_data",
