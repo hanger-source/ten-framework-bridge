@@ -8,10 +8,12 @@ interface AudioStreamPlayerProps {
 
 const AudioStreamPlayer: React.FC<AudioStreamPlayerProps> = () => {
   const audioContextRef = useRef<AudioContext | null>(null);
-  const audioQueueRef = useRef<AudioBuffer[]>([]);
+  const audioQueueRef = useRef<{ buffer: AudioBuffer; groupTimestamp: number | undefined }[]>([]);
   const isPlayingRef = useRef<boolean>(false);
-  const nextStartTimeRef = useRef<number>(0);
+  const nextPlaybackTimeRef = useRef<number>(0); // Changed name from nextStartTimeRef to nextPlaybackTimeRef for clarity
   const [isPlaying, setIsPlaying] = useState(false);
+  const activeGroupTimestampRef = useRef<number | undefined>(undefined); // New ref to track the currently active group timestamp
+  const currentSourceNodeRef = useRef<AudioBufferSourceNode | null>(null);
 
   const initAudioContext = useCallback(() => {
     if (!audioContextRef.current) {
@@ -22,7 +24,27 @@ const AudioStreamPlayer: React.FC<AudioStreamPlayerProps> = () => {
     return audioContextRef.current;
   }, []);
 
-  const processAudioBuffer = useCallback(async (audioData: Uint8Array, sampleRate: number, numberOfChannels: number) => {
+  const stopAndClearPlayback = useCallback(() => {
+    if (audioContextRef.current) {
+      // 停止当前正在播放的 AudioBufferSourceNode
+      if (currentSourceNodeRef.current) {
+        currentSourceNodeRef.current.stop();
+        currentSourceNodeRef.current.disconnect(); // 断开连接
+        currentSourceNodeRef.current = null;
+        console.log('AudioStreamPlayer: Current source node explicitly stopped.');
+      }
+
+      // 清空所有待处理的音频源（如果有）
+      audioQueueRef.current = [];
+      isPlayingRef.current = false;
+      setIsPlaying(false);
+      nextPlaybackTimeRef.current = 0; // 重置起始时间
+      activeGroupTimestampRef.current = undefined; // Reset active group timestamp
+      console.log('AudioStreamPlayer: Playback stopped and queue cleared. New queue length:', audioQueueRef.current.length);
+    }
+  }, []);
+
+  const processAudioBuffer = useCallback(async (audioData: Uint8Array, sampleRate: number, numberOfChannels: number, groupTimestamp: number | undefined) => {
     const audioContext = initAudioContext();
     if (!audioContext) return;
 
@@ -50,7 +72,7 @@ const AudioStreamPlayer: React.FC<AudioStreamPlayerProps> = () => {
       }
     }
 
-    audioQueueRef.current.push(audioBuffer);
+    audioQueueRef.current.push({ buffer: audioBuffer, groupTimestamp }); // Push object with buffer and groupTimestamp
     if (!isPlayingRef.current) {
       playNextBuffer();
     }
@@ -67,18 +89,23 @@ const AudioStreamPlayer: React.FC<AudioStreamPlayerProps> = () => {
     if (!audioContext) return;
 
     const audioBuffer = audioQueueRef.current.shift();
+    console.log('AudioStreamPlayer: Shifting buffer from queue. Remaining queue length:', audioQueueRef.current.length);
     if (audioBuffer) {
       const source = audioContext.createBufferSource();
-      source.buffer = audioBuffer;
+      source.buffer = audioBuffer.buffer; // Corrected: should be audioBuffer.buffer from the object
       source.connect(audioContext.destination);
 
-      const currentTime = audioContext.currentTime;
-      if (nextStartTimeRef.current < currentTime) {
-        nextStartTimeRef.current = currentTime;
-      }
+      currentSourceNodeRef.current = source; // Store the current source node
 
-      source.start(nextStartTimeRef.current);
-      nextStartTimeRef.current += audioBuffer.duration;
+      const currentTime = audioContext.currentTime;
+      let startTime = nextPlaybackTimeRef.current;
+
+      // Ensure startTime is not in the past relative to current audio context time
+      startTime = Math.max(startTime, currentTime); 
+
+      source.start(startTime); // Start with the adjusted time
+      console.log('AudioStreamPlayer: Starting audio source at:', startTime, 'duration:', audioBuffer.buffer.duration); // Corrected duration
+      nextPlaybackTimeRef.current = startTime + audioBuffer.buffer.duration; // Corrected duration
       isPlayingRef.current = true;
       setIsPlaying(true);
 
@@ -93,16 +120,40 @@ const AudioStreamPlayer: React.FC<AudioStreamPlayerProps> = () => {
     const handleAudioFrame = (rawMessage: Message) => {
       const message = rawMessage as AudioFrame; // Explicitly cast to AudioFrame
       console.log('AudioStreamPlayer: Received audio frame (full message)', message);
-      if (message.buf && typeof message.sample_rate === 'number' && typeof message.number_of_channel === 'number') { // Check number_of_channel
+
+      const currentGroupTimestamp = message.properties?.group_timestamp; // Get group_timestamp from properties (corrected)
+      const lastTs = activeGroupTimestampRef.current;
+      console.log(`AudioStreamPlayer: handleAudioFrame - currentGroupTimestamp: ${currentGroupTimestamp}, lastGroupTimestampRef.current: ${lastTs}`);
+
+      // If this is the *first* frame we've ever received, or if a new group has started
+      if (lastTs === undefined || (typeof currentGroupTimestamp === 'number' && currentGroupTimestamp > lastTs)) {
+        console.log(`AudioStreamPlayer: New group (timestamp: ${currentGroupTimestamp}) detected. Calling stopPlayback() and updating lastGroupTimestampRef.`);
+        stopAndClearPlayback(); // Stop current playback and clear queue
+        activeGroupTimestampRef.current = currentGroupTimestamp; // Set the new active group timestamp
+      } else if (typeof currentGroupTimestamp === 'number' && currentGroupTimestamp < lastTs) {
+        // This frame belongs to an old group, discard it.
+        console.log(`AudioStreamPlayer: Discarding audio frame from old group (${currentGroupTimestamp} < active ${lastTs}).`);
+        return; // Important: discard old frames
+      }
+
+      // Process the current frame ONLY if it belongs to the *active* group.
+      // If currentGroupTimestamp is undefined (e.g., first frame and lastTs is undefined, or missing group_timestamp in message),
+      // we still process it, assuming it's part of the implicit first group.
+      // If group_timestamp exists and matches lastTs, then process.
+      if (message.buf && typeof message.sample_rate === 'number' && typeof message.number_of_channel === 'number' && (
+        (typeof currentGroupTimestamp === 'undefined' && typeof lastTs === 'undefined') || // First frame ever, no group timestamp yet
+        (typeof currentGroupTimestamp === 'number' && currentGroupTimestamp === lastTs) // Belongs to current active group
+      )) {
         // 假设 bits_per_sample 总是 16
         // 过滤掉空的音频帧
         if (message.buf.byteLength > 0) {
-          processAudioBuffer(message.buf, message.sample_rate, message.number_of_channel); // Pass number_of_channel
+          console.log('AudioStreamPlayer: Calling processAudioBuffer with new audio data for current group.');
+          processAudioBuffer(message.buf, message.sample_rate, message.number_of_channel, currentGroupTimestamp); // Pass number_of_channel
         } else {
-          console.log('AudioStreamPlayer: Received empty audio frame, skipping playback.');
+          console.log('AudioStreamPlayer: Received empty audio frame for current group, skipping playback.');
         }
       } else {
-        console.warn('AudioStreamPlayer: Incomplete audio frame received', message);
+        console.warn('AudioStreamPlayer: Incomplete or mismatched group audio frame received, skipping.', message);
       }
     };
 
@@ -112,11 +163,13 @@ const AudioStreamPlayer: React.FC<AudioStreamPlayerProps> = () => {
       unsubscribe();
       // 清理音频上下文
       if (audioContextRef.current) {
+        // 在组件卸载时确保停止播放并清理
+        stopAndClearPlayback();
         audioContextRef.current.close().catch(console.error);
         audioContextRef.current = null;
       }
     };
-  }, [processAudioBuffer]);
+  }, [processAudioBuffer, stopAndClearPlayback]); // Add stopPlayback to dependency array
 
   return (
     <div className="audio-stream-player">
