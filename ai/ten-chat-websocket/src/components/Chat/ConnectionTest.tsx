@@ -54,7 +54,7 @@ export default function ConnectionTest() {
 
     const unsubscribeData = webSocketManager.onMessage(MessageType.DATA, (message: Message) => {
       console.log('收到数据消息:', message);
-      toast.info("Data received!");
+      // toast.info("Data received!");
     });
 
     // Initial connection attempt

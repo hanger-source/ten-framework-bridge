@@ -14,8 +14,9 @@ export default function MicrophoneBlock(props: {
   onMuteChange?: (muted: boolean) => void;
   isConnected: boolean; // Add isConnected prop
   sessionState: SessionConnectionState; // Add sessionState prop
+  onAudioDataCaptured?: (audioData: Uint8Array) => void; // New: Callback to pass captured audio data
 }) {
-  const { sendAudioFrame, onMuteChange, isConnected, sessionState } = props;
+  const { sendAudioFrame, onMuteChange, isConnected, sessionState, onAudioDataCaptured } = props;
   const [audioMute, setAudioMute] = React.useState(true);
   const audioMuteRef = React.useRef(audioMute); // Add a ref for audioMute
   const isConnectedRef = useRef(isConnected); // New: Ref for isConnected
@@ -29,6 +30,10 @@ export default function MicrophoneBlock(props: {
     React.useState<MediaStreamAudioSourceNode | null>(null);
   const [scriptProcessor, setScriptProcessor] =
     React.useState<ScriptProcessorNode | null>(null);
+
+  // Removed: New: State for recorded audio chunks
+  // const recordedAudioChunksRef = React.useRef<Uint8Array[]>([]);
+  // const [recordedChunksCount, setRecordedChunksCount] = React.useState(0);
 
   // 音频处理控制
   const [disableAGC, setDisableAGC] = React.useState(true);
@@ -62,6 +67,9 @@ export default function MicrophoneBlock(props: {
     return () => {
       console.log('MicrophoneBlock: Cleanup useEffect');
       stopMicrophone();
+      // Removed: On cleanup, clear recorded audio as well
+      // recordedAudioChunksRef.current = [];
+      // setRecordedChunksCount(0);
     };
   }, [audioMute, isConnected, sessionState, disableAGC, disableNS, disableAEC, onMuteChange]); // Add isConnected to dependencies
 
@@ -74,7 +82,7 @@ export default function MicrophoneBlock(props: {
         noiseSuppression: !disableNS,
         autoGainControl: !disableAGC,
         // 设置较高的采样率以获得更好的音质
-        sampleRate: 48000,
+        sampleRate: 16000,
         channelCount: 1,
       };
 
@@ -96,7 +104,7 @@ export default function MicrophoneBlock(props: {
       });
 
       const context = new (window.AudioContext ||
-        (window as any).webkitAudioContext)(); // 聪明的开发杭二: 修正 window.webkitAudioContext 的类型转换错误
+        (window as any).webkitAudioContext)({ sampleRate: 16000 }); // 聪明的开发杭二: 修正 window.webkitAudioContext 的类型转换错误, 并指定采样率
       setAudioContext(context);
 
       const source = context.createMediaStreamSource(stream);
@@ -116,7 +124,11 @@ export default function MicrophoneBlock(props: {
             // Convert float to 16-bit PCM
             pcmData[i] = Math.max(-1, Math.min(1, inputBuffer[i])) * 0x7fff;
           }
-          sendAudioFrame(new Uint8Array(pcmData.buffer));
+          const pcmUint8 = new Uint8Array(pcmData.buffer);
+          sendAudioFrame(pcmUint8);
+
+          // New: Pass captured audio data to parent via callback
+          onAudioDataCaptured?.(pcmUint8);
         }
       };
 
@@ -160,6 +172,9 @@ export default function MicrophoneBlock(props: {
     setAudioMute(!audioMute);
   };
 
+  // Removed: downloadRecordedAudio function
+  // const downloadRecordedAudio = () => { ... };
+
   return (
     <div className="flex flex-col space-y-3">
       <div className="flex items-center justify-between">
@@ -173,6 +188,15 @@ export default function MicrophoneBlock(props: {
           >
             <MicIconByStatus className="h-5 w-5" active={!audioMute} />
           </Button>
+          {/* Removed: Download Button */}
+          {/* <Button
+            variant="outline"
+            size="sm"
+            onClick={downloadRecordedAudio}
+            disabled={recordedChunksCount === 0}
+          >
+            下载录音 ({recordedChunksCount})
+          </Button> */}
         </div>
       </div>
 

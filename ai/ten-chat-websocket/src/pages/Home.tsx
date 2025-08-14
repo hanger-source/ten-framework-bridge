@@ -15,6 +15,7 @@ import { useWebSocketSession } from "@/hooks/useWebSocketSession";
 import { useMicrophoneStream } from "@/hooks/useMicrophoneStream";
 import { performanceMonitor } from "@/common/utils";
 import { SessionConnectionState } from "@/types/websocket";
+import { useAudioRecorder } from "@/hooks/useAudioRecorder"; // Import useAudioRecorder
 
 function Home() {
   try {
@@ -26,6 +27,8 @@ function Home() {
     const { isConnected, sessionState, defaultLocation, startSession } = useWebSocketSession();
     const { mediaStreamTrack, micPermission, sendAudioFrame } = useMicrophoneStream({ isConnected, sessionState, defaultLocation });
     const [audioMute, setAudioMute] = React.useState(false); // Managed by MicrophoneBlock now
+
+    const { recordedChunksCount, onAudioDataCaptured, downloadRecordedAudio } = useAudioRecorder(); // Use the audio recorder hook
 
     const getSessionStateText = () => {
       if (!isConnected) {
@@ -62,15 +65,25 @@ function Home() {
           )}>
             <div className="flex h-full flex-col min-h-0 bg-gray-50 w-full">
               {/* TalkingHead 区域 - 占据大部分空间 */}
-              <div className="flex-1 min-h-0 z-10">
+              <div className="relative flex-1 min-h-[500px] z-10 bg-white rounded-lg shadow-lg border border-gray-200">
                 {showLive2D && (
                   <div
-                    style={{ height: '100%', minHeight: 500 }}
-                    className="bg-white rounded-lg shadow-lg border border-gray-200"
+                    style={{ height: '100%', width: '100%' }}
+                    className="absolute inset-0"
                   >
                     <TalkingHead audioTrack={audioMute ? undefined : undefined} />
                   </div>
                 )}
+                {/* Live2D Control Button - fixed to bottom right of this container */}
+                <div className="absolute bottom-3 right-3 z-20">
+                  <Button
+                    variant="outline"
+                    className="border-secondary bg-transparent"
+                    onClick={() => setShowLive2D(!showLive2D)}
+                  >
+                    {showLive2D ? '隐藏 Live2D' : '显示 Live2D'}
+                  </Button>
+                </div>
               </div>
 
               {/* 麦克风控制区域 - 放在 TalkingHead 下面，固定高度 */}
@@ -113,18 +126,18 @@ function Home() {
                       </Button>
                     </div>
                     */}
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        className="border-secondary bg-transparent"
-                        onClick={() => setShowLive2D(!showLive2D)}
-                      >
-                        {showLive2D ? '隐藏 Live2D' : '显示 Live2D'}
-                      </Button>
-                    </div>
+                    {/* Download Recorded Audio Button */}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={downloadRecordedAudio}
+                      disabled={recordedChunksCount === 0}
+                    >
+                      下载录音 ({recordedChunksCount})
+                    </Button>
                   </div>
                   {/* Move MicrophoneBlock here to prevent overlap */}
-                  <MicrophoneBlock sendAudioFrame={sendAudioFrame} onMuteChange={setAudioMute} isConnected={isConnected} sessionState={sessionState} />
+                  <MicrophoneBlock sendAudioFrame={sendAudioFrame} onMuteChange={setAudioMute} isConnected={isConnected} sessionState={sessionState} onAudioDataCaptured={onAudioDataCaptured} />
 
                   {/* 音频可视化区域 */}
                   <div>
