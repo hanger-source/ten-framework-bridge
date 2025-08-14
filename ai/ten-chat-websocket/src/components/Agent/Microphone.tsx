@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { MicIcon } from "@/components/icons/mic";
+import MicrophoneDeviceSelect from "@/components/Agent/MicrophoneDeviceSelect"; // Import MicrophoneDeviceSelect
 import { SessionConnectionState, Location } from "@/types/websocket";
 import { useMicrophoneStream } from "@/hooks/useMicrophoneStream";
 import { Switch } from "@/components/ui/switch";
@@ -169,17 +170,17 @@ export const Microphone: React.FC<MicrophoneProps> = ({
 
   return (
     <div className="flex flex-col space-y-3">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center gap-3"> {/* Use gap for spacing */} 
         <div className="text-sm font-medium">麦克风</div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="icon"
-            className="border-secondary bg-transparent"
-            onClick={onClickMute}
-          >
-            <MicIcon className="h-5 w-5" active={!audioMute} />
-          </Button>
+        <MicrophoneDeviceSelect />
+        <Button
+          variant="outline"
+          size="icon"
+          className="border-secondary bg-transparent"
+          onClick={onClickMute}
+        >
+          <MicIcon className="h-5 w-5" active={!audioMute} />
+        </Button>
           {/* Removed: Download Button */}
           {/* <Button
             variant="outline"
@@ -190,8 +191,6 @@ export const Microphone: React.FC<MicrophoneProps> = ({
             下载录音 ({recordedChunksCount})
           </Button> */}
         </div>
-      </div>
-
       {/* 高级音频设置 */}
       <div className="space-y-2">
         <Button

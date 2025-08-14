@@ -10,7 +10,7 @@ import ChatCard from "@/components/Chat/ChatCard";
 // import ConnectionTest from "@/components/Chat/ConnectionTest";
 import AudioVisualizer from "@/components/Agent/AudioVisualizer";
 import TalkingHead from "@/components/Agent/TalkingHead";
-import MicrophoneDeviceSelect from "@/components/Agent/MicrophoneDeviceSelect";
+// import MicrophoneDeviceSelect from "@/components/Agent/MicrophoneDeviceSelect";
 import { useWebSocketSession } from "@/hooks/useWebSocketSession";
 import { useMicrophoneStream } from "@/hooks/useMicrophoneStream";
 import { useAgentSettings } from "@/hooks/useAgentSettings"; // Import useAgentSettings
@@ -115,11 +115,6 @@ function Home() {
                   </div>
 
                   {/* 麦克风控制 - 一行显示所有元素 */}
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="text-sm font-medium">麦克风</div>
-                      <MicrophoneDeviceSelect />
-                    </div>
                     {/* Removed: Mute Button from Home, now handled by Microphone component */}
                     {/* Download Recorded Audio Button */}
                     {/*
@@ -132,7 +127,7 @@ function Home() {
                       下载录音 ({recordedChunksCount})
                     </Button>
                     */}
-                  </div>
+                  {/* </div> */}
                   {/* Move MicrophoneBlock here to prevent overlap */}
                   <Microphone onMuteChange={setAudioMute} isConnected={isConnected} sessionState={sessionState} defaultLocation={defaultLocation} onAudioDataCaptured={onAudioDataCaptured} />
 
