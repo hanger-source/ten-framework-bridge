@@ -22,7 +22,7 @@ export interface Data extends Message {
 export interface Command extends Message {
     type: MessageType; // 将类型改为 MessageType，允许子类精确指定
     name: string; // 命令名称，用于 Jackson 多态识别
-    cmd_id: number;
+    cmd_id: string; // Change type to string
     parent_cmd_id?: string;
 }
 
@@ -47,12 +47,14 @@ export interface StopGraphCommand extends Command {
 // 命令结果消息
 export interface CommandResult extends Message {
     type: MessageType.CMD_RESULT;
-    cmd_id: number;
+    cmd_id: string; // Change type to string
     success: boolean;
     error?: string;
     errorMessage?: string; // 添加 errorMessage 属性
     detail?: string;      // 添加 detail 属性
     data?: any; // 命令结果可能包含数据
+    original_cmd_id?: string; // Add original_cmd_id
+    original_cmd_name?: string; // Add original_cmd_name
 }
 
 // 音频帧消息
@@ -79,6 +81,22 @@ export interface VideoFrame extends Message {
     format: string; // 对应 pixelFormat
     is_eof?: boolean;
     frame_timestamp: number; // 对应 frameTimestamp
+}
+
+// 会话连接状态枚举
+export enum SessionConnectionState {
+    IDLE = 'idle',
+    CONNECTING_SESSION = 'connecting_session',
+    SESSION_ACTIVE = 'session_active',
+    SESSION_FAILED = 'session_failed',
+}
+
+// WebSocket 连接状态枚举
+export enum WebSocketConnectionState {
+    CONNECTING = 'connecting',
+    OPEN = 'open',
+    CLOSING = 'closing',
+    CLOSED = 'closed',
 }
 
 // 位置信息

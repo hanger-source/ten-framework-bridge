@@ -20,7 +20,7 @@
       {
         "type": "extension",
         "name": "llm",
-        "addon": "source.hanger.core.extension.qwen.llm.QwenLLMExtension",
+        "addon": "source.hanger.core.extension.bailian.llm.QwenLLMExtension",
         "extension_group": "llm_group",
         "property": {
           "api_key": "sk-679adb8eb9cc479fa879bc2f62c8d9a5",
@@ -30,21 +30,28 @@
       {
         "type": "extension",
         "name": "tts",
-        "addon": "source.hanger.core.extension.qwen.tts.QwenTtsExtension",
+        "addon": "source.hanger.core.extension.bailian.tts.QwenTtsExtension",
         "extension_group": "tts_group",
         "property": {
           "api_key": "sk-679adb8eb9cc479fa879bc2f62c8d9a5",
           "voice_name": "Cherry"
         }
-      },
+      },{
+        "type": "extension",
+        "name": "asr",
+        "addon": "source.hanger.core.extension.bailian.asr.ParaformerASRExtension",
+        "extension_group": "asr_group",
+        "property": {
+          "api_key": "sk-679adb8eb9cc479fa879bc2f62c8d9a5",
+          "model": "paraformer-realtime-v2"
+        }
+      },  
       {
         "type": "extension",
         "name": "interrupt_detector",
         "addon": "source.hanger.core.extension.system.InterruptDetectorExtension",
         "extension_group": "default",
         "property": {
-          "api_key": "sk-679adb8eb9cc479fa879bc2f62c8d9a5",
-          "voice_name": "Cherry"
         }
       }
     ],
@@ -57,6 +64,16 @@
             "dest": [
               {
                 "extension": "interrupt_detector"
+              }
+            ]
+          }
+        ],
+        "audio_frame": [
+          {
+            "name": "audio_frame",
+            "dest": [
+              {
+                "extension": "asr"
               }
             ]
           }
@@ -80,6 +97,21 @@
             "dest": [
               {
                 "extension": "llm"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "extension": "asr",
+        "data": [
+          {
+            "name": "asr_result",
+            "dest": [
+              {
+                "extension": "llm"
+              },{
+                "extension": "client_connection"
               }
             ]
           }

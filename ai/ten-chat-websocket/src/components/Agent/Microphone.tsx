@@ -1,18 +1,25 @@
 "use client";
 
 import * as React from "react";
+import { useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { MicIconByStatus } from "@/components/Icon";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { SessionConnectionState } from "@/types/websocket"; // Import SessionConnectionState
 
 // 聪明的开发杭二: 尝试触发 linter 重新评估
 export default function MicrophoneBlock(props: {
   sendAudioFrame: (audioData: Uint8Array) => void;
   onMuteChange?: (muted: boolean) => void;
+  isConnected: boolean; // Add isConnected prop
+  sessionState: SessionConnectionState; // Add sessionState prop
 }) {
-  const { sendAudioFrame, onMuteChange } = props;
-  const [audioMute, setAudioMute] = React.useState(false);
+  const { sendAudioFrame, onMuteChange, isConnected, sessionState } = props;
+  const [audioMute, setAudioMute] = React.useState(true);
+  const audioMuteRef = React.useRef(audioMute); // Add a ref for audioMute
+  const isConnectedRef = useRef(isConnected); // New: Ref for isConnected
+  const sessionStateRef = useRef(sessionState); // New: Ref for sessionState
   const [mediaStreamTrack, setMediaStreamTrack] =
     React.useState<MediaStreamTrack | null>(null);
   const [audioContext, setAudioContext] = React.useState<AudioContext | null>(
@@ -29,22 +36,37 @@ export default function MicrophoneBlock(props: {
   const [disableAEC, setDisableAEC] = React.useState(true);
   const [showAdvancedSettings, setShowAdvancedSettings] = React.useState(false);
 
+  // Keep refs always up-to-date with the latest props
   React.useEffect(() => {
-    if (!audioMute) {
-      startMicrophone();
-    } else {
+    isConnectedRef.current = isConnected;
+    sessionStateRef.current = sessionState;
+    console.log('MicrophoneBlock: isConnectedRef updated to:', isConnectedRef.current, 'sessionStateRef updated to:', sessionStateRef.current);
+  }, [isConnected, sessionState]);
+
+  React.useEffect(() => {
+    audioMuteRef.current = audioMute; // Update ref whenever audioMute changes
+    console.log('MicrophoneBlock: audioMute state changed to', audioMute, 'isConnected:', isConnected);
+
+    // Stop microphone if muted OR not connected
+    if (audioMute || !isConnected || sessionState !== SessionConnectionState.SESSION_ACTIVE) {
+      console.log('MicrophoneBlock: Calling stopMicrophone due to mute, disconnect, or inactive session');
       stopMicrophone();
+    } else { // Start microphone only if not muted AND connected AND session is active
+      console.log('MicrophoneBlock: Calling startMicrophone');
+      startMicrophone();
     }
 
     // 通知父组件静音状态变化
     onMuteChange?.(audioMute);
 
     return () => {
+      console.log('MicrophoneBlock: Cleanup useEffect');
       stopMicrophone();
     };
-  }, [audioMute, disableAGC, disableNS, disableAEC, onMuteChange]);
+  }, [audioMute, isConnected, sessionState, disableAGC, disableNS, disableAEC, onMuteChange]); // Add isConnected to dependencies
 
   const startMicrophone = async () => {
+    console.log('MicrophoneBlock: startMicrophone called');
     try {
       // 配置音频约束，禁用音频处理
       const audioConstraints: MediaTrackConstraints = {
@@ -85,7 +107,9 @@ export default function MicrophoneBlock(props: {
       setScriptProcessor(processor);
 
       processor.onaudioprocess = (event) => {
-        if (!audioMute) {
+        console.log('MicrophoneBlock: onaudioprocess triggered, audioMute (ref):', audioMuteRef.current, 'isConnected (ref):', isConnectedRef.current, 'sessionState (ref):', sessionStateRef.current);
+        console.log(`MicrophoneBlock: Pre-send check - audioMuteRef.current: ${audioMuteRef.current}, isConnectedRef.current: ${isConnectedRef.current}, sessionStateRef.current: ${sessionStateRef.current}, Expected: ${SessionConnectionState.SESSION_ACTIVE}`);
+        if (!audioMuteRef.current && isConnectedRef.current && sessionStateRef.current === SessionConnectionState.SESSION_ACTIVE) { // Use refs for latest values
           const inputBuffer = event.inputBuffer.getChannelData(0);
           const pcmData = new Int16Array(inputBuffer.length);
           for (let i = 0; i < inputBuffer.length; i++) {
@@ -105,21 +129,30 @@ export default function MicrophoneBlock(props: {
   };
 
   const stopMicrophone = () => {
+    console.log('MicrophoneBlock: stopMicrophone called');
     if (microphone) {
       microphone.disconnect();
-      setMicrophone(null);
+      console.log('MicrophoneBlock: microphone disconnected');
+      setMicrophone(null); // Ensure state is updated to null
     }
     if (scriptProcessor) {
+      scriptProcessor.onaudioprocess = null; // Explicitly stop processing
       scriptProcessor.disconnect();
-      setScriptProcessor(null);
+      console.log('MicrophoneBlock: scriptProcessor disconnected and onaudioprocess set to null');
+      setScriptProcessor(null); // Ensure state is updated to null
     }
     if (audioContext) {
-      audioContext.close();
-      setAudioContext(null);
+      audioContext.close().then(() => {
+        console.log('MicrophoneBlock: audioContext closed');
+        setAudioContext(null);
+      }).catch(error => {
+        console.error('MicrophoneBlock: Failed to close audioContext', error);
+      });
     }
     if (mediaStreamTrack) {
       mediaStreamTrack.stop();
       setMediaStreamTrack(null);
+      console.log('MicrophoneBlock: mediaStreamTrack stopped');
     }
   };
 

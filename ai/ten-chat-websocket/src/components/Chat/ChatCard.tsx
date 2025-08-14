@@ -5,17 +5,21 @@ import { cn } from "@/lib/utils";
 import MessageList from "@/components/Chat/MessageList";
 import { Button } from "@/components/ui/button";
 import { Send } from "lucide-react";
-import { webSocketManager, WebSocketConnectionState } from "@/manager/websocket/websocket";
-import { Data, Command, CommandResult, Location } from "@/types/websocket"; // Added Location
-import { MESSAGE_CONSTANTS } from '@/common/constant'; // Added MESSAGE_CONSTANTS
-import { MessageType } from "@/types/websocket"; // Added MessageType
+import { webSocketManager } from "@/manager/websocket/websocket"; // Keep this import for now, although not used directly in this file
+import { SessionConnectionState, MessageType, CommandType, CommandResult } from "@/types/websocket"; // Keep these types
 import AudioStreamPlayer from "@/components/Agent/AudioStreamPlayer"; // Import AudioStreamPlayer
+import { useWebSocketSession } from "@/hooks/useWebSocketSession"; // Import useWebSocketSession
+import { toast } from "sonner"; // Added for toast notifications
 
 export default function ChatCard(props: { className?: string }) {
   const { className } = props;
   const [inputValue, setInputValue] = React.useState("");
-  const [connectionState, setConnectionState] = React.useState<WebSocketConnectionState>(WebSocketConnectionState.CLOSED);
-  const [isConnected, setIsConnected] = React.useState(false);
+  // Removed local connectionState and sessionState
+  // const [connectionState, setConnectionState] = React.useState<WebSocketConnectionState>(WebSocketConnectionState.CLOSED);
+  // const [sessionState, setSessionState] = React.useState<SessionConnectionState>(SessionConnectionState.IDLE); // New session state
+  
+  const { isConnected, sessionState, defaultLocation } = useWebSocketSession(); // Get sessionState from hook
+
   const [chatMessages, setChatMessages] = React.useState<{
     text: string;
     role: 'user' | 'agent' | 'assistant';
@@ -24,21 +28,33 @@ export default function ChatCard(props: { className?: string }) {
   }[]>([]);
   const lastGroupTimestampRef = React.useRef<number | undefined>(undefined); // New ref for group timestamp
 
-  // 初始化 WebSocket 连接
-  React.useEffect(() => {
-    // 注册连接状态处理器
-    const unsubscribeConnectionState = webSocketManager.onConnectionStateChange((state) => {
-      setConnectionState(state);
-      setIsConnected(state === WebSocketConnectionState.OPEN);
-    });
+  // Removed connectionStateMap as ConnectionTest handles it
+  // const connectionStateMap: Record<WebSocketConnectionState, string> = {
+  //   [WebSocketConnectionState.CONNECTING]: '连接中',
+  //   [WebSocketConnectionState.OPEN]: '已连接',
+  //   [WebSocketConnectionState.CLOSING]: '断开中',
+  //   [WebSocketConnectionState.CLOSED]: '已断开',
+  // };
 
-    // 注册消息处理器
+  // Removed showSettings and srcLoc as they are not needed here
+  // const [showSettings, setShowSettings] = React.useState(false); // New state for toggling settings visibility
+  // const srcLoc: Location = {
+  //   app_uri: appUri,
+  //   graph_id: graphName,
+  //   extension_name: MESSAGE_CONSTANTS.SYS_EXTENSION_NAME,
+  // };
+
+  // Removed WebSocket connection and message handling useEffect, ChatCard should not manage its own connection or session state
+  React.useEffect(() => {
+    // ChatCard should only consume messages, not manage connection or session state
     const unsubscribeData = webSocketManager.onMessage(MessageType.DATA, (message) => {
-      console.log('收到数据消息:', message);
+      console.log('ChatCard: 收到数据消息:', message);
       console.log('ChatCard: received message properties', message.properties);
       // 根据返回数据 的 property 里面的属性 text 和 role 来渲染 已经的 对话框
       if (message.type === MessageType.DATA && message.properties) {
-        const { text, role, end_of_segment, group_timestamp: currentGroupTimestamp } = message.properties;
+        // Use audio_text if available, otherwise fallback to text
+        const { role, end_of_segment, group_timestamp: currentGroupTimestamp } = message.properties;
+        const text = message.properties.audio_text || message.properties.text; // Prefer audio_text
 
         console.log('ChatCard: extracted text', text);
         console.log('ChatCard: currentGroupTimestamp', currentGroupTimestamp);
@@ -105,28 +121,55 @@ export default function ChatCard(props: { className?: string }) {
       }
     });
 
-    const unsubscribeCmdResult = webSocketManager.onMessage('cmd_result', (message) => {
-      console.log('收到命令结果:', message);
+    const unsubscribeCmdResult = webSocketManager.onMessage(MessageType.CMD_RESULT, (message) => {
+      // ChatCard no longer manages its own session state, rely on Home via useWebSocketSession
+      // This handler can still be used for displaying toasts related to command results if needed
+      console.log('ChatCard: 收到命令结果 (via onMessage):', message);
+      const commandResult = message as CommandResult; // Explicit type assertion
+      if (!commandResult.success && commandResult.errorMessage) {
+        toast.error(commandResult.errorMessage, { duration: 5 });
+      } else if (commandResult.success && commandResult.detail) {
+        toast.success(commandResult.detail, { duration: 5 });
+      } else if (commandResult.success) {
+        toast.success('命令执行成功！', { duration: 5 });
+      } else {
+        toast.error('命令执行失败！', { duration: 5 });
+      }
     });
 
-    // 连接 WebSocket
-    const initiateConnection = async () => {
-      try {
-        await webSocketManager.connect();
-      } catch (error) {
-        console.error('WebSocket 连接失败:', error);
-      }
-    };
-    initiateConnection();
+    // Removed subscription to command send events, rely on Home for session state
+    // const unsubscribeCommandSend = webSocketManager.onCommandSend((commandName, properties) => {
+    //   if (commandName === CommandType.START_GRAPH) {
+    //     console.log('ChatCard: START_GRAPH command sent, setting session state to CONNECTING_SESSION.');
+    //     setSessionState(SessionConnectionState.CONNECTING_SESSION);
+    //   }
+    // });
+
+    // Removed initial connection attempt
+    // const initiateConnection = async () => {
+    //   try {
+    //     await webSocketManager.connect();
+    //   } catch (error) {
+    //     console.error('WebSocket 连接失败:', error);
+    //   }
+    // };
+    // initiateConnection();
 
     // 清理函数
     return () => {
-      unsubscribeConnectionState();
       unsubscribeData();
       unsubscribeCmdResult();
-      webSocketManager.disconnect();
+      // unsubscribeCommandSend(); // Removed
+      // webSocketManager.disconnect(); // Removed, Home handles global connection
     };
-  }, []);
+  }, []); // Dependencies are empty as it should only subscribe to data and cmd results, not connection state
+
+  // Removed handleConnect, handleDisconnect, saveSettings, handleTestStartGraph, handleTestStopGraph
+  // const handleConnect = async () => { ... };
+  // const handleDisconnect = () => { ... };
+  // const saveSettings = () => { ... };
+  // const handleTestStartGraph = () => { ... };
+  // const handleTestStopGraph = () => { ... };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setInputValue(e.target.value);
@@ -134,12 +177,13 @@ export default function ChatCard(props: { className?: string }) {
 
   const handleInputSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!inputValue.trim() || !isConnected) {
+    // 仅当会话激活时才允许发送消息
+    if (!inputValue.trim() || sessionState !== SessionConnectionState.SESSION_ACTIVE) {
       return;
     }
 
     // 发送文本消息
-    webSocketManager.sendTextData('text_data', inputValue, srcLoc, destLocs);
+    webSocketManager.sendTextData('text_data', inputValue, defaultLocation, [defaultLocation]); // Use defaultLocation from hook
 
     // 添加用户消息到聊天列表
     setChatMessages((prevMessages) => [
@@ -151,54 +195,73 @@ export default function ChatCard(props: { className?: string }) {
     setInputValue("");
   };
 
-  // 定义 srcLoc 和 destLocs (暂时硬编码)
-  const srcLoc: Location = {
-    app_uri: "mock_front://test_app",
-    graph_id: "test-websocket-echo-graph",
-    extension_name: MESSAGE_CONSTANTS.SYS_EXTENSION_NAME,
-  };
-
-  const destLocs: Location[] = [
-    {
-      app_uri: "mock_front://test_app",
-      graph_id: "test-websocket-echo-graph",
-      extension_name: MESSAGE_CONSTANTS.SYS_EXTENSION_NAME,
-    },
-  ];
+  // Removed srcLoc and destLocs as they are now provided by useWebSocketSession
+  // const srcLoc: Location = { ... };
+  // const destLocs: Location[] = [ ... ];
 
   return (
     <>
       {/* Chat Card */}
-      <div className={cn("h-full overflow-hidden flex flex-col", className)}> {/* Changed flex to flex-col */}
-        <div className="flex w-full flex-col flex-1"> {/* Removed p-4 */}
+      <div className={cn("h-full overflow-hidden flex flex-col", className)}>
+        <div className="flex w-full flex-col flex-1">
           {/* Scrollable messages container */}
-          <div className="flex-1 overflow-y-auto px-4 pt-4"> {/* Added px-4 pt-4 */}
+          <div className="flex-1 overflow-y-auto px-4 pt-4">
             <MessageList messages={chatMessages} />
           </div>
           {/* Input area */}
-          <div className="border-t pt-4 px-4 pb-4"> {/* Added px-4 pb-4 */}
+          <div className="border-t pt-4 px-4 pb-4">
+            {/* 会话状态显示区域 */}
+            <div className="flex items-center space-x-2 mb-2">
+              {sessionState === SessionConnectionState.SESSION_ACTIVE && (
+                <div className="w-2.5 h-2.5 bg-green-500 rounded-full animate-pulse" title="会话已激活"></div>
+              )}
+              {sessionState === SessionConnectionState.CONNECTING_SESSION && (
+                <div className="w-2.5 h-2.5 bg-yellow-500 rounded-full animate-pulse" title="正在连接会话"></div>
+              )}
+              {sessionState === SessionConnectionState.SESSION_FAILED && (
+                <div className="w-2.5 h-2.5 bg-red-500 rounded-full" title="会话连接失败"></div>
+              )}
+              {sessionState === SessionConnectionState.IDLE && (
+                <div className="w-2.5 h-2.5 bg-gray-400 rounded-full" title="AI 待命中"></div>
+              )}
+              <span className="text-sm text-gray-600">
+                {sessionState === SessionConnectionState.IDLE && "AI 待命中"}
+                {sessionState === SessionConnectionState.CONNECTING_SESSION && "正在连接会话..."}
+                {sessionState === SessionConnectionState.SESSION_ACTIVE && "会话已激活"}
+                {sessionState === SessionConnectionState.SESSION_FAILED && "会话连接失败"}
+              </span>
+            </div>
+  
             <AudioStreamPlayer /> {/* Render AudioStreamPlayer */}
             <form onSubmit={handleInputSubmit} className="flex items-center space-x-2">
               <input
                 type="text"
-                placeholder={isConnected ? "输入消息..." : "连接中..."}
+                placeholder={
+                  sessionState === SessionConnectionState.SESSION_ACTIVE
+                    ? "输入消息..."
+                    : sessionState === SessionConnectionState.CONNECTING_SESSION
+                      ? "正在连接会话..."
+                      : sessionState === SessionConnectionState.SESSION_FAILED
+                        ? "会话连接失败，请重试"
+                        : "等待连接..." // Default or IDLE state
+                }
                 value={inputValue}
                 onChange={handleInputChange}
-                disabled={!isConnected}
+                disabled={sessionState !== SessionConnectionState.SESSION_ACTIVE} // Only enabled when session is active
                 className={cn(
                   "flex-grow rounded-md border bg-background p-1.5 focus:outline-none focus:ring-1 focus:ring-ring",
                   {
-                    "opacity-50 cursor-not-allowed": !isConnected,
+                    "opacity-50 cursor-not-allowed": sessionState !== SessionConnectionState.SESSION_ACTIVE,
                   }
                 )}
               />
               <Button
                 type="submit"
-                disabled={inputValue.length === 0 || !isConnected}
+                disabled={inputValue.length === 0 || sessionState !== SessionConnectionState.SESSION_ACTIVE}
                 size="icon"
                 variant="outline"
                 className={cn("bg-transparent", {
-                  ["opacity-50"]: inputValue.length === 0 || !isConnected,
+                  ["opacity-50"]: inputValue.length === 0 || sessionState !== SessionConnectionState.SESSION_ACTIVE,
                 })}
               >
                 <Send className="h-4 w-4" />

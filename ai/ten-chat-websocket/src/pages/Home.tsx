@@ -9,354 +9,45 @@ import { MicIconByStatus } from "@/components/Icon";
 import ChatCard from "@/components/Chat/ChatCard";
 import ConnectionTest from "@/components/Chat/ConnectionTest";
 import AudioVisualizer from "@/components/Agent/AudioVisualizer";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import * as PIXI from 'pixi.js';
-// @ts-ignore
-import { Live2DModel } from 'pixi-live2d-display-lipsyncpatch/cubism4';
-import { Application } from 'pixi.js';
-
-const MODEL_URL = 'https://cdn.jsdelivr.net/gh/guansss/pixi-live2d-display/test/assets/haru/haru_greeter_t03.model3.json';
-
-// 性能监控工具
-const performanceMonitor = {
-  lastLogTime: 0,
-  frameCount: 0,
-  logInterval: 5000, // 每5秒记录一次
-
-  logPerformance() {
-    this.frameCount++;
-    const now = Date.now();
-    if (now - this.lastLogTime > this.logInterval) {
-      const fps = Math.round((this.frameCount * 1000) / (now - this.lastLogTime));
-      console.log(`性能监控: ${fps} FPS, 音频处理频率: 62.5Hz`);
-      this.frameCount = 0;
-      this.lastLogTime = now;
-    }
-  }
-};
-
-// 防抖函数
-function debounce<T extends (...args: any[]) => any>(func: T, wait: number): T {
-  let timeout: NodeJS.Timeout;
-  return ((...args: any[]) => {
-    clearTimeout(timeout);
-    timeout = setTimeout(() => func(...args), wait);
-  }) as T;
-}
-
-// 超高质量 RMS lipsync 计算函数
-function calcMouthOpenByRMS(dataArray: Uint8Array): number {
-  let sum = 0;
-  let count = 0;
-
-  // 分析更精确的频段范围，专注于语音频率
-  const startIndex = Math.floor(dataArray.length * 0.2); // 20% 开始
-  const endIndex = Math.floor(dataArray.length * 0.8);   // 80% 结束
-
-  for (let i = startIndex; i < endIndex; i++) {
-    const v = (dataArray[i] - 128) / 128;
-    sum += v * v;
-    count++;
-  }
-
-  if (count === 0) return 0;
-
-  const rms = Math.sqrt(sum / count);
-
-  // 简化的映射函数
-  const normalizedValue = Math.max(0, (rms - 0.001) * 15);
-  const mouthOpen = Math.min(Math.pow(normalizedValue, 0.8), 1);
-
-  return mouthOpen;
-}
-
-// @ts-ignore
-window.PIXI = PIXI;
-
-// 动态加载 Live2D Cubism 运行时
-if (typeof window !== 'undefined') {
-  if (!(window as any).Live2DCubismCore) {
-    const script = document.createElement('script');
-    script.src = 'https://cubism.live2d.com/sdk-web/cubismcore/live2dcubismcore.min.js';
-    script.onload = () => {
-      console.log('Live2D Cubism runtime loaded');
-    };
-    document.head.appendChild(script);
-  }
-}
-
-// 真实的 TalkingHead 组件 - 参考 playground 实现
-function TalkingHead({ audioTrack }: { audioTrack?: Uint8Array }) {
-  const containerRef = React.useRef<HTMLDivElement>(null);
-  const appRef = React.useRef<Application>();
-  const modelRef = React.useRef<Live2DModel>();
-  const animationIdRef = React.useRef<number>();
-  const fitModelCleanupRef = React.useRef<() => void>();
-
-  // 初始化 Live2D，集成 fitModel
-  React.useEffect(() => {
-    if (!containerRef.current || appRef.current) return;
-
-    const width = containerRef.current.offsetWidth || 600;
-    const height = containerRef.current.offsetHeight || 600;
-    const app = new Application({
-      width,
-      height,
-      backgroundAlpha: 0,
-      antialias: true,
-    });
-    appRef.current = app;
-    containerRef.current.appendChild(app.view as any);
-
-    let destroyed = false;
-
-    Live2DModel.from(MODEL_URL).then((model: Live2DModel) => {
-      if (destroyed) return;
-      modelRef.current = model;
-      app.stage.addChild(model);
-
-      function fitModel() {
-        if (!containerRef.current || !app.renderer) return;
-        const width = containerRef.current.offsetWidth || 600;
-        const height = containerRef.current.offsetHeight || 600;
-        app.renderer.resize(width, height);
-        // 你可以根据实际模型原始尺寸调整
-        const modelWidth = 800;
-        const modelHeight = 1000;
-        const scale = Math.min(width / modelWidth, height / modelHeight) * 0.95;
-        model.scale.set(scale);
-        // anchor(0.5, 0)，头部对齐顶部，y=20
-        model.anchor.set(0.5, 0);
-        model.x = width / 2;
-        model.y = 20;
-      }
-      fitModel();
-      window.addEventListener('resize', fitModel);
-      // 记录清理函数，组件卸载时移除监听
-      fitModelCleanupRef.current = () => {
-        window.removeEventListener('resize', fitModel);
-      };
-    });
-
-    return () => {
-      destroyed = true;
-      fitModelCleanupRef.current?.();
-      appRef.current?.destroy(true, { children: true });
-      appRef.current = undefined;
-      modelRef.current = undefined;
-    };
-  }, []);
-
-  // lipsync 频谱方案
-  React.useEffect(() => {
-    if (!audioTrack) return;
-    let stopped = false;
-    let audioCtx: AudioContext | undefined;
-    let source: MediaStreamAudioSourceNode | undefined;
-    let analyser: AnalyserNode | undefined;
-    let freqArray: Uint8Array;
-    let lastMouthOpen = 0;
-
-    function startLipsync() {
-      if (!modelRef.current) {
-        setTimeout(startLipsync, 200);
-        return;
-      }
-
-      // 使用优化的音频设置
-      audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)({
-        sampleRate: 48000, // 降低采样率
-        latencyHint: 'interactive',
-      });
-
-      // 创建模拟的音频流用于 lipsync
-      const stream = new MediaStream();
-      source = audioCtx.createMediaStreamSource(stream);
-      analyser = audioCtx.createAnalyser();
-
-      // 使用更小的 FFT 大小以减少计算量
-      analyser.fftSize = 2048; // 从 8192 降低到 2048
-      analyser.smoothingTimeConstant = 0.3; // 增加平滑系数
-      analyser.minDecibels = -90;
-      analyser.maxDecibels = -10;
-
-      source.connect(analyser);
-      const dataArray = new Uint8Array(analyser.fftSize);
-
-      function animate() {
-        if (stopped || !modelRef.current || !analyser) return;
-
-        performanceMonitor.logPerformance();
-
-        analyser.getByteTimeDomainData(dataArray);
-        const mouthOpen = calcMouthOpenByRMS(dataArray);
-
-        // 只有当变化足够大时才更新，减少不必要的计算
-        if (Math.abs(mouthOpen - lastMouthOpen) > 0.01) {
-          try {
-            const coreModel = modelRef.current.internalModel?.coreModel as { setParameterValueById?: (id: string, value: number) => void };
-            if (coreModel && typeof coreModel.setParameterValueById === 'function') {
-              const smoothedMouthOpen = Math.min(Math.max(mouthOpen, 0), 1);
-              coreModel.setParameterValueById('ParamMouthOpenY', smoothedMouthOpen);
-              lastMouthOpen = mouthOpen;
-            }
-          } catch (e) {
-            // 忽略 Live2D 参数设置错误
-          }
-        }
-
-        animationIdRef.current = requestAnimationFrame(animate);
-      }
-      animate();
-    }
-    startLipsync();
-
-    return () => {
-      stopped = true;
-      if (animationIdRef.current) cancelAnimationFrame(animationIdRef.current);
-      if (audioCtx) {
-        audioCtx.close().catch(console.warn);
-      }
-    };
-  }, [audioTrack]);
-
-  return (
-    <div
-      ref={containerRef}
-      style={{ width: '100%', height: '100%', minHeight: 300, minWidth: 200, position: 'relative', background: '#f8fafc', borderRadius: 8, overflow: 'hidden' }}
-      className="live2d-container"
-    />
-  );
-}
-
-// 设备选择组件
-function MicrophoneDeviceSelect() {
-  const [devices, setDevices] = React.useState<Array<{label: string, value: string, deviceId: string}>>([]);
-  const [selectedDevice, setSelectedDevice] = React.useState("default");
-
-  React.useEffect(() => {
-    // 获取麦克风设备列表
-    navigator.mediaDevices.enumerateDevices()
-      .then(devices => {
-        const audioDevices = devices
-          .filter(device => device.kind === 'audioinput')
-          .map(device => ({
-            label: device.label || `麦克风 ${device.deviceId.slice(0, 8)}`,
-            value: device.deviceId || `device-${Math.random()}`, // 确保 value 不为空
-            deviceId: device.deviceId
-          }));
-
-        if (audioDevices.length > 0) {
-          setDevices(audioDevices);
-          setSelectedDevice(audioDevices[0].value);
-        }
-      })
-      .catch(error => {
-        console.error('获取设备列表失败:', error);
-      });
-  }, []);
-
-  const handleDeviceChange = (deviceId: string) => {
-    setSelectedDevice(deviceId);
-    console.log('切换到设备:', deviceId);
-  };
-
-  return (
-    <Select value={selectedDevice} onValueChange={handleDeviceChange}>
-      <SelectTrigger className="w-[180px]">
-        <SelectValue placeholder="选择麦克风" />
-      </SelectTrigger>
-      <SelectContent>
-        {devices.map((device) => (
-          <SelectItem key={device.value} value={device.value}>
-            {device.label}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  );
-}
+import TalkingHead from "@/components/Agent/TalkingHead";
+import MicrophoneDeviceSelect from "@/components/Agent/MicrophoneDeviceSelect";
+import { useWebSocketSession } from "@/hooks/useWebSocketSession";
+import { useMicrophoneStream } from "@/hooks/useMicrophoneStream";
+import { performanceMonitor } from "@/common/utils";
+import { SessionConnectionState } from "@/types/websocket";
 
 function Home() {
   try {
     const mobileActiveTab = useAppSelector(
       (state) => state.global.mobileActiveTab,
     );
-    const [mediaStreamTrack, setMediaStreamTrack] = React.useState<MediaStreamTrack | null>(null);
-    const [micPermission, setMicPermission] = React.useState<'granted' | 'denied' | 'pending'>('pending');
-    const [audioMute, setAudioMute] = React.useState(false);
-    const [showLive2D, setShowLive2D] = React.useState(false); // Default hidden
-    // console.log('Home component: audioMute', audioMute);
+    const [showLive2D, setShowLive2D] = React.useState(false);
 
-    // 自动获取麦克风 - 优化音频质量设置
-    React.useEffect(() => {
-      const requestMicrophone = async () => {
-        try {
-          setMicPermission('pending');
+    const { isConnected, sessionState, defaultLocation, startSession } = useWebSocketSession();
+    const { mediaStreamTrack, micPermission, sendAudioFrame } = useMicrophoneStream({ isConnected, sessionState, defaultLocation });
+    const [audioMute, setAudioMute] = React.useState(false); // Managed by MicrophoneBlock now
 
-          // 获取支持的音频约束
-          const capabilities = await navigator.mediaDevices.getSupportedConstraints();
-          console.log('支持的音频约束:', capabilities);
-
-          // 超高质量音频设置
-          const stream = await navigator.mediaDevices.getUserMedia({
-            audio: {
-              // 优化音频质量设置
-              sampleRate: 48000, // 降低采样率
-              channelCount: 1, // 单声道，减少数据量
-              echoCancellation: false, // 关闭回声消除，保持原始音质
-              noiseSuppression: false, // 关闭噪声抑制，保持原始音质
-              autoGainControl: false, // 关闭自动增益控制，保持原始音量
-            }
-          });
-
-          const audioTrack = stream.getAudioTracks()[0];
-
-          // 获取并打印音频轨道的能力
-          if (audioTrack.getCapabilities) {
-            const trackCapabilities = audioTrack.getCapabilities();
-            console.log('音频轨道能力:', trackCapabilities);
-          }
-
-          // 尝试设置音频轨道的约束
-          if (audioTrack.applyConstraints) {
-            try {
-              await audioTrack.applyConstraints({
-                sampleRate: 48000,
-                channelCount: 1,
-                echoCancellation: false,
-                noiseSuppression: false,
-                autoGainControl: false,
-              });
-              console.log('音频约束应用成功');
-            } catch (constraintError) {
-              console.warn('音频约束应用失败:', constraintError);
-            }
-          }
-
-          setMediaStreamTrack(audioTrack);
-          // console.log('麦克风权限已授予，track:', audioTrack);
-          // console.log('Home component: mediaStreamTrack after set', mediaStreamTrack);
-          setMicPermission('granted');
-        } catch (error) {
-          console.error('无法访问麦克风:', error);
-          setMicPermission('denied');
-        }
-      };
-
-      requestMicrophone();
-    }, []);
+    const getSessionStateText = () => {
+      if (!isConnected) {
+        return "WebSocket 未连接";
+      }
+      switch (sessionState) {
+        case SessionConnectionState.IDLE:
+          return "会话准备就绪";
+        case SessionConnectionState.CONNECTING_SESSION:
+          return "正在连接会话...";
+        case SessionConnectionState.SESSION_ACTIVE:
+          return "会话已激活";
+        default:
+          return "未知状态";
+      }
+    };
 
     // 根据静音状态决定是否传递 track
     // const activeTrack = audioMute ? undefined : (mediaStreamTrack || undefined);
     // console.log('Home component: activeTrack', activeTrack);
 
+    console.log('Home component render: isConnected =', isConnected, ', sessionState =', sessionState);
     return (
       <div className="relative mx-auto flex flex-1 min-h-screen flex-col md:h-screen bg-gray-50">
         <Header className="h-[60px]" />
@@ -385,12 +76,33 @@ function Home() {
               {/* 麦克风控制区域 - 放在 TalkingHead 下面，固定高度 */}
               <div className="mt-2 p-3 bg-white rounded-lg shadow-sm border border-gray-200">
                 <div className="space-y-3">
+                  {/* 会话状态显示 */}
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm font-medium">会话状态:</div>
+                    <div className={`px-2 py-1 rounded text-xs ${
+                      sessionState === SessionConnectionState.SESSION_ACTIVE
+                        ? 'bg-green-100 text-green-800'
+                        : 'bg-red-100 text-red-800'
+                    }`}>
+                      {getSessionStateText()}
+                    </div>
+                    <Button
+                      onClick={startSession}
+                      disabled={!isConnected || sessionState !== SessionConnectionState.IDLE}
+                      size="sm"
+                    >
+                      开始会话
+                    </Button>
+                  </div>
+
                   {/* 麦克风控制 - 一行显示所有元素 */}
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <div className="text-sm font-medium">麦克风</div>
                       <MicrophoneDeviceSelect />
                     </div>
+                    {/* Remove this button as MicrophoneBlock handles its own mute control now */}
+                    {/*
                     <div className="flex items-center gap-2">
                       <Button
                         variant="outline"
@@ -399,6 +111,9 @@ function Home() {
                       >
                         <MicIconByStatus className="h-5 w-5" active={!audioMute} />
                       </Button>
+                    </div>
+                    */}
+                    <div className="flex items-center gap-2">
                       <Button
                         variant="outline"
                         className="border-secondary bg-transparent"
@@ -408,6 +123,8 @@ function Home() {
                       </Button>
                     </div>
                   </div>
+                  {/* Move MicrophoneBlock here to prevent overlap */}
+                  <MicrophoneBlock sendAudioFrame={sendAudioFrame} onMuteChange={setAudioMute} isConnected={isConnected} sessionState={sessionState} />
 
                   {/* 音频可视化区域 */}
                   <div>

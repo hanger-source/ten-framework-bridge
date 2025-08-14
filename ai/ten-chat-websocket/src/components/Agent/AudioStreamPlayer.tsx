@@ -173,8 +173,7 @@ const AudioStreamPlayer: React.FC<AudioStreamPlayerProps> = () => {
 
   return (
     <div className="audio-stream-player">
-      {/* 您可以在这里添加一些 UI 来指示播放状态，例如一个简单的文本或动画 */}
-      {isPlaying ? <p className="text-sm text-green-600 animate-pulse">AI 正在说话...</p> : <p className="text-sm text-gray-500">AI 待命中...</p>}
+      {/* 音频播放状态由 ChatCard 统一管理，此处不再显示 */}
     </div>
   );
 };

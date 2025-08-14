@@ -87,3 +87,30 @@ export const deepMerge = (
   }
   return output;
 };
+
+// 性能监控工具
+export const performanceMonitor = {
+  lastLogTime: 0,
+  frameCount: 0,
+  logInterval: 5000, // 每5秒记录一次
+
+  logPerformance() {
+    this.frameCount++;
+    const now = Date.now();
+    if (now - this.lastLogTime > this.logInterval) {
+      const fps = Math.round((this.frameCount * 1000) / (now - this.lastLogTime));
+      console.log(`性能监控: ${fps} FPS, 音频处理频率: 62.5Hz`);
+      this.frameCount = 0;
+      this.lastLogTime = now;
+    }
+  }
+};
+
+// 防抖函数
+export function debounce<T extends (...args: any[]) => any>(func: T, wait: number): T {
+  let timeout: NodeJS.Timeout;
+  return ((...args: any[]) => {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => func(...args), wait);
+  }) as T;
+}

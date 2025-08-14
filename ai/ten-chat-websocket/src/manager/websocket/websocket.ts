@@ -1,7 +1,8 @@
-import { Message, Data, Command, CommandResult, Location, MessageType, StartGraphCommand, StopGraphCommand, CommandType } from '@/types/websocket';
+import { Message, Data, Command, CommandResult, Location, MessageType, StartGraphCommand, StopGraphCommand, CommandType, AudioFrame } from '@/types/websocket';
 import { encode, decode, ExtensionCodec, ExtData } from '@msgpack/msgpack';
 // import { v4 as uuidv4 } from 'uuid'; // Import uuid to generate unique ids
 import { MESSAGE_CONSTANTS } from '@/common/constant'; // Import MESSAGE_CONSTANTS
+import { WebSocketConnectionState } from '@/types/websocket'; // Import WebSocketConnectionState
 
 // TEN框架自定义MsgPack扩展类型码
 const TEN_MSGPACK_EXT_TYPE_MSG = -1; // 恢复自定义扩展类型码
@@ -27,13 +28,6 @@ extensionCodec.register({
     }
 }); // 恢复扩展编解码器注册逻辑
 
-export enum WebSocketConnectionState {
-    CONNECTING = 'connecting',
-    OPEN = 'open',
-    CLOSING = 'closing',
-    CLOSED = 'closed',
-}
-
 export interface WebSocketMessage {
     type: string;
     name: string;
@@ -50,6 +44,7 @@ export class WebSocketManager {
     private reconnectDelay = 1000;
     private messageHandlers: Map<string, Array<(message: Message) => void>> = new Map();
     private connectionStateHandlers: ((state: WebSocketConnectionState) => void)[] = [];
+    private commandSendHandlers: ((commandName: CommandType, properties: Record<string, any>) => void)[] = []; // New: Handlers for command send events
 
     constructor(private url: string) { }
 
@@ -86,12 +81,14 @@ export class WebSocketManager {
 
                 this.ws.onerror = (error) => {
                     console.error('WebSocket 连接错误:', error);
+                    console.error('WebSocket 错误事件:', error); // Added detailed log
                     this.setConnectionState(WebSocketConnectionState.CLOSED);
                     reject(error);
                 };
 
             } catch (error) {
                 console.error('创建 WebSocket 连接失败:', error);
+                console.error('创建 WebSocket 实例时发生错误:', error); // Added detailed log
                 this.setConnectionState(WebSocketConnectionState.CLOSED);
                 reject(error);
             }
@@ -136,7 +133,7 @@ export class WebSocketManager {
             content_type: 'text/plain',
             encoding: 'UTF-8',
             timestamp: Date.now(),
-            properties: { text: text }, // 文本内容放在 properties 中
+            properties: { text: text, is_final: true }, // 文本内容放在 properties 中
         };
         this.sendMessage(dataMessage);
     }
@@ -157,12 +154,42 @@ export class WebSocketManager {
         this.sendMessage(dataMessage);
     }
 
+    // 发送音频帧数据
+    public sendAudioFrame(
+        audioData: Uint8Array,
+        srcLoc: Location,
+        destLocs: Location[] = [],
+        name: string = "audio_frame",
+        sampleRate: number = 48000,
+        channels: number = 1,
+        bitsPerSample: number = 16,
+        isEof: boolean = false,
+    ): void {
+        const audioFrameMessage: AudioFrame = {
+            id: this.generateMessageId(),
+            type: MessageType.AUDIO_FRAME,
+            name: name,
+            src_loc: srcLoc,
+            dest_locs: destLocs,
+            buf: audioData,
+            is_eof: isEof,
+            sample_rate: sampleRate,
+            number_of_channel: channels,
+            bits_per_sample: bitsPerSample,
+            format: "pcm", // Assuming PCM format
+            frame_timestamp: Date.now(), // Add frame_timestamp
+            timestamp: Date.now(),
+        };
+        this.sendMessage(audioFrameMessage);
+    }
+
     // 发送命令
     public sendCommand(
         commandName: CommandType,
         srcLoc: Location,
         destLocs: Location[] = [],
-        properties: Record<string, any> = {}
+        properties: Record<string, any> = {},
+        commandId?: string // Change type to string
     ): void {
         const baseCommand: Command = {
             id: this.generateMessageId(),
@@ -170,7 +197,7 @@ export class WebSocketManager {
             name: commandName, // 命令名称
             src_loc: srcLoc,
             dest_locs: destLocs,
-            cmd_id: this.generateCommandId(),
+            cmd_id: commandId !== undefined ? commandId : this.generateCommandId(), // Use provided commandId or generate new one
             properties: properties,
             timestamp: Date.now(),
         };
@@ -202,6 +229,29 @@ export class WebSocketManager {
         }
 
         this.sendMessage(finalCommand);
+        // New: Notify handlers that a command has been sent
+        this.commandSendHandlers.forEach(handler => handler(commandName, properties));
+    }
+
+    // 注册命令发送处理器
+    public onCommandSend(handler: (commandName: CommandType, properties: Record<string, any>) => void): () => void {
+        this.commandSendHandlers.push(handler);
+        return () => {
+            const index = this.commandSendHandlers.indexOf(handler);
+            if (index > -1) {
+                this.commandSendHandlers.splice(index, 1);
+                console.log(`Unregistered command send handler. Remaining handlers: ${this.commandSendHandlers.length}`);
+            }
+        };
+    }
+
+    // 取消注册命令发送处理器
+    public offCommandSend(handler: (commandName: CommandType, properties: Record<string, any>) => void): void {
+        const index = this.commandSendHandlers.indexOf(handler);
+        if (index > -1) {
+            this.commandSendHandlers.splice(index, 1);
+            console.log(`Unregistered command send handler. Remaining handlers: ${this.commandSendHandlers.length}`);
+        }
     }
 
     // 注册消息处理器
@@ -225,6 +275,18 @@ export class WebSocketManager {
         };
     }
 
+    // 取消注册消息处理器
+    public offMessage(type: string, handler: (message: Message) => void): void {
+        const handlers = this.messageHandlers.get(type);
+        if (handlers) {
+            const index = handlers.indexOf(handler);
+            if (index > -1) {
+                handlers.splice(index, 1);
+                console.log(`Unregistered handler for type: ${type}. Remaining handlers: ${handlers.length}`);
+            }
+        }
+    }
+
     // 注册连接状态处理器
     public onConnectionStateChange(handler: (state: WebSocketConnectionState) => void): () => void {
         this.connectionStateHandlers.push(handler);
@@ -235,6 +297,14 @@ export class WebSocketManager {
                 console.log(`Unregistered connection state handler. Remaining handlers: ${this.connectionStateHandlers.length}`);
             }
         };
+    }
+
+    public offConnectionStateChange(handler: (state: WebSocketConnectionState) => void): void {
+        const index = this.connectionStateHandlers.indexOf(handler);
+        if (index > -1) {
+            this.connectionStateHandlers.splice(index, 1);
+            console.log(`Unregistered connection state handler. Remaining handlers: ${this.connectionStateHandlers.length}`);
+        }
     }
 
     // 获取连接状态
@@ -294,8 +364,8 @@ export class WebSocketManager {
     }
 
     // 生成命令 ID
-    private generateCommandId(): number {
-        return Date.now() + Math.random();
+    private generateCommandId(): string { // Change return type to string
+        return Date.now().toString() + Math.random().toString().substring(2, 8); // Generate a string ID
     }
 
     // 生成消息 ID (使用 Date.now() + Math.random())

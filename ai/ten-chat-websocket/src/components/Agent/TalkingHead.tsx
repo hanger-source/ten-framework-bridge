@@ -9,15 +9,29 @@ import React, { useEffect, useRef } from "react";
 const MODEL_URL =
   "https://cdn.jsdelivr.net/gh/guansss/pixi-live2d-display/test/assets/haru/haru_greeter_t03.model3.json";
 
-// RMS lipsync 计算函数
+// 超高质量 RMS lipsync 计算函数
 function calcMouthOpenByRMS(dataArray: Uint8Array): number {
   let sum = 0;
-  for (let i = 0; i < dataArray.length; i++) {
+  let count = 0;
+
+  // 分析更精确的频段范围，专注于语音频率
+  const startIndex = Math.floor(dataArray.length * 0.2); // 20% 开始
+  const endIndex = Math.floor(dataArray.length * 0.8);   // 80% 结束
+
+  for (let i = startIndex; i < endIndex; i++) {
     const v = (dataArray[i] - 128) / 128;
     sum += v * v;
+    count++;
   }
-  const rms = Math.sqrt(sum / dataArray.length);
-  const mouthOpen = Math.min(Math.max((rms - 0.001) * 12, 0), 1);
+
+  if (count === 0) return 0;
+
+  const rms = Math.sqrt(sum / count);
+
+  // 简化的映射函数
+  const normalizedValue = Math.max(0, (rms - 0.001) * 15);
+  const mouthOpen = Math.min(Math.pow(normalizedValue, 0.8), 1);
+
   return mouthOpen;
 }
 

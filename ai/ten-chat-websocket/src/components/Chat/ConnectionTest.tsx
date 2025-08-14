@@ -1,6 +1,7 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
-import { webSocketManager, WebSocketConnectionState } from '@/manager/websocket/websocket';
+import { webSocketManager } from "@/manager/websocket/websocket";
+import { WebSocketConnectionState } from "@/types/websocket"; // Added Location
 import { CommandType, Location, MessageType, CommandResult, Message, Data } from '@/types/websocket';
 import { toast } from 'sonner';
 import testWebsocketEchoGraph from "../../../public/test_websocket_echo_graph.json";
