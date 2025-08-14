@@ -1,11 +1,13 @@
 import React, { useRef } from "react";
 import { webSocketManager } from "@/manager/websocket/websocket";
 import { Location, WebSocketConnectionState, SessionConnectionState } from "@/types/websocket";
+import { IAgentSettings } from "@/types";
 
 interface UseMicrophoneStreamProps {
   isConnected: boolean;
   sessionState: SessionConnectionState;
   defaultLocation: Location;
+  settings: IAgentSettings; // Add settings to props
 }
 
 interface UseMicrophoneStreamResult {
@@ -14,7 +16,7 @@ interface UseMicrophoneStreamResult {
   sendAudioFrame: (audioData: Uint8Array) => void;
 }
 
-export function useMicrophoneStream({ isConnected, sessionState, defaultLocation }: UseMicrophoneStreamProps): UseMicrophoneStreamResult {
+export function useMicrophoneStream({ isConnected, sessionState, defaultLocation, settings }: UseMicrophoneStreamProps): UseMicrophoneStreamResult {
   const [mediaStreamTrack, setMediaStreamTrack] = React.useState<MediaStreamTrack | null>(null);
   const [micPermission, setMicPermission] = React.useState<'granted' | 'denied' | 'pending'>('pending');
   const streamTrackRef = useRef<MediaStreamTrack | null>(null); // New: useRef for the track
@@ -38,9 +40,9 @@ export function useMicrophoneStream({ isConnected, sessionState, defaultLocation
           audio: {
             sampleRate: 48000,
             channelCount: 1,
-            echoCancellation: false,
-            noiseSuppression: false,
-            autoGainControl: false,
+            echoCancellation: settings.echoCancellation,
+            noiseSuppression: settings.noiseSuppression,
+            autoGainControl: settings.autoGainControl,
           }
         });
 
@@ -57,9 +59,9 @@ export function useMicrophoneStream({ isConnected, sessionState, defaultLocation
             await audioTrack.applyConstraints({
               sampleRate: 48000,
               channelCount: 1,
-              echoCancellation: false,
-              noiseSuppression: false,
-              autoGainControl: false,
+              echoCancellation: settings.echoCancellation,
+              noiseSuppression: settings.noiseSuppression,
+              autoGainControl: settings.autoGainControl,
             });
             console.log('音频约束应用成功');
           } catch (constraintError) {
@@ -82,7 +84,7 @@ export function useMicrophoneStream({ isConnected, sessionState, defaultLocation
         streamTrackRef.current.stop();
       }
     };
-  }, []); // Empty dependency array - run only once
+  }, [settings]); // Add settings to dependency array
 
   return { mediaStreamTrack, micPermission, sendAudioFrame };
 }

@@ -1,86 +1,76 @@
 "use client";
 
-import * as React from "react";
-import { useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { MicIconByStatus } from "@/components/Icon";
+import { MicIcon } from "@/components/icons/mic";
+import { SessionConnectionState, Location } from "@/types/websocket";
+import { useMicrophoneStream } from "@/hooks/useMicrophoneStream";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { SessionConnectionState } from "@/types/websocket"; // Import SessionConnectionState
+import { useAgentSettings } from "@/hooks/useAgentSettings"; // Import useAgentSettings
 
-// 聪明的开发杭二: 尝试触发 linter 重新评估
-export default function MicrophoneBlock(props: {
-  sendAudioFrame: (audioData: Uint8Array) => void;
-  onMuteChange?: (muted: boolean) => void;
-  isConnected: boolean; // Add isConnected prop
-  sessionState: SessionConnectionState; // Add sessionState prop
-  onAudioDataCaptured?: (audioData: Uint8Array) => void; // New: Callback to pass captured audio data
-}) {
-  const { sendAudioFrame, onMuteChange, isConnected, sessionState, onAudioDataCaptured } = props;
-  const [audioMute, setAudioMute] = React.useState(true);
-  const audioMuteRef = React.useRef(audioMute); // Add a ref for audioMute
-  const isConnectedRef = useRef(isConnected); // New: Ref for isConnected
-  const sessionStateRef = useRef(sessionState); // New: Ref for sessionState
-  const [mediaStreamTrack, setMediaStreamTrack] =
-    React.useState<MediaStreamTrack | null>(null);
-  const [audioContext, setAudioContext] = React.useState<AudioContext | null>(
-    null,
-  );
-  const [microphone, setMicrophone] =
-    React.useState<MediaStreamAudioSourceNode | null>(null);
-  const [scriptProcessor, setScriptProcessor] =
-    React.useState<ScriptProcessorNode | null>(null);
+interface MicrophoneProps {
+  isConnected: boolean;
+  sessionState: SessionConnectionState;
+  defaultLocation: Location;
+  onMuteChange: (isMuted: boolean) => void;
+  onAudioDataCaptured?: (audioData: Uint8Array) => void; // New prop for audio data
+}
 
-  // Removed: New: State for recorded audio chunks
-  // const recordedAudioChunksRef = React.useRef<Uint8Array[]>([]);
-  // const [recordedChunksCount, setRecordedChunksCount] = React.useState(0);
+export const Microphone: React.FC<MicrophoneProps> = ({
+  isConnected,
+  sessionState,
+  defaultLocation,
+  onMuteChange,
+  onAudioDataCaptured,
+}) => {
+  const [audioMute, setAudioMute] = useState(true);
+  const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
+  const [audioContext, setAudioContext] = useState<AudioContext | null>(null);
+  const [microphone, setMicrophone] = useState<MediaStreamAudioSourceNode | null>(null);
+  const [scriptProcessor, setScriptProcessor] = useState<ScriptProcessorNode | null>(null);
+  const [mediaStreamTrack, setMediaStreamTrack] = useState<MediaStreamTrack | null>(null);
 
-  // 音频处理控制
-  const [disableAGC, setDisableAGC] = React.useState(true);
-  const [disableNS, setDisableNS] = React.useState(true);
-  const [disableAEC, setDisableAEC] = React.useState(true);
-  const [showAdvancedSettings, setShowAdvancedSettings] = React.useState(false);
+  const audioMuteRef = useRef(audioMute);
+  const isConnectedRef = useRef(isConnected);
+  const sessionStateRef = useRef(sessionState);
 
-  // Keep refs always up-to-date with the latest props
-  React.useEffect(() => {
+  useEffect(() => {
+    audioMuteRef.current = audioMute;
     isConnectedRef.current = isConnected;
     sessionStateRef.current = sessionState;
-    console.log('MicrophoneBlock: isConnectedRef updated to:', isConnectedRef.current, 'sessionStateRef updated to:', sessionStateRef.current);
-  }, [isConnected, sessionState]);
+  }, [audioMute, isConnected, sessionState]);
 
-  React.useEffect(() => {
-    audioMuteRef.current = audioMute; // Update ref whenever audioMute changes
-    console.log('MicrophoneBlock: audioMute state changed to', audioMute, 'isConnected:', isConnected);
+  const { agentSettings, updateSettings } = useAgentSettings(); // Use agent settings
 
-    // Stop microphone if muted OR not connected
-    if (audioMute || !isConnected || sessionState !== SessionConnectionState.SESSION_ACTIVE) {
-      console.log('MicrophoneBlock: Calling stopMicrophone due to mute, disconnect, or inactive session');
-      stopMicrophone();
-    } else { // Start microphone only if not muted AND connected AND session is active
-      console.log('MicrophoneBlock: Calling startMicrophone');
+  const { sendAudioFrame } = useMicrophoneStream({
+    isConnected,
+    sessionState,
+    defaultLocation,
+    settings: agentSettings, // Pass agent settings to useMicrophoneStream
+  });
+
+  useEffect(() => {
+    if (!audioMute && isConnected && sessionState === SessionConnectionState.SESSION_ACTIVE) {
       startMicrophone();
-    }
-
-    // 通知父组件静音状态变化
-    onMuteChange?.(audioMute);
-
-    return () => {
-      console.log('MicrophoneBlock: Cleanup useEffect');
+    } else {
       stopMicrophone();
+    }
+    return () => {
       // Removed: On cleanup, clear recorded audio as well
       // recordedAudioChunksRef.current = [];
       // setRecordedChunksCount(0);
     };
-  }, [audioMute, isConnected, sessionState, disableAGC, disableNS, disableAEC, onMuteChange]); // Add isConnected to dependencies
+  }, [audioMute, isConnected, sessionState, agentSettings.autoGainControl, agentSettings.noiseSuppression, agentSettings.echoCancellation, onMuteChange]); // Add agentSettings to dependencies
 
   const startMicrophone = async () => {
     console.log('MicrophoneBlock: startMicrophone called');
     try {
       // 配置音频约束，禁用音频处理
       const audioConstraints: MediaTrackConstraints = {
-        echoCancellation: !disableAEC,
-        noiseSuppression: !disableNS,
-        autoGainControl: !disableAGC,
+        echoCancellation: agentSettings.echoCancellation,
+        noiseSuppression: agentSettings.noiseSuppression,
+        autoGainControl: agentSettings.autoGainControl,
         // 设置较高的采样率以获得更好的音质
         sampleRate: 16000,
         channelCount: 1,
@@ -186,7 +176,7 @@ export default function MicrophoneBlock(props: {
             className="border-secondary bg-transparent"
             onClick={onClickMute}
           >
-            <MicIconByStatus className="h-5 w-5" active={!audioMute} />
+            <MicIcon className="h-5 w-5" active={!audioMute} />
           </Button>
           {/* Removed: Download Button */}
           {/* <Button
@@ -219,34 +209,34 @@ export default function MicrophoneBlock(props: {
 
             <div className="flex items-center justify-between">
               <Label htmlFor="disable-agc" className="text-xs">
-                禁用自动增益控制 (AGC)
+                启用自动增益控制 (AGC)
               </Label>
               <Switch
                 id="disable-agc"
-                checked={disableAGC}
-                onCheckedChange={setDisableAGC}
+                checked={agentSettings.autoGainControl} // Bind to agentSettings
+                onCheckedChange={(checked) => updateSettings({ autoGainControl: checked })} // Update settings
               />
             </div>
 
             <div className="flex items-center justify-between">
               <Label htmlFor="disable-ns" className="text-xs">
-                禁用噪声抑制 (NS)
+                启用噪声抑制 (NS)
               </Label>
               <Switch
                 id="disable-ns"
-                checked={disableNS}
-                onCheckedChange={setDisableNS}
+                checked={agentSettings.noiseSuppression} // Bind to agentSettings
+                onCheckedChange={(checked) => updateSettings({ noiseSuppression: checked })} // Update settings
               />
             </div>
 
             <div className="flex items-center justify-between">
               <Label htmlFor="disable-aec" className="text-xs">
-                禁用回声消除 (AEC)
+                启用回声消除 (AEC)
               </Label>
               <Switch
                 id="disable-aec"
-                checked={disableAEC}
-                onCheckedChange={setDisableAEC}
+                checked={agentSettings.echoCancellation} // Bind to agentSettings
+                onCheckedChange={(checked) => updateSettings({ echoCancellation: checked })} // Update settings
               />
             </div>
 
@@ -258,4 +248,4 @@ export default function MicrophoneBlock(props: {
       </div>
     </div>
   );
-}
+};

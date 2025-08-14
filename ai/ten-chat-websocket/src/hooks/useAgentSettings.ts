@@ -10,6 +10,9 @@ const DEFAULT_AGENT_SETTINGS: IAgentSettings = {
     GREETING: "",
     CHAT_PROMPT: "",
   },
+  echoCancellation: true,
+  noiseSuppression: true,
+  autoGainControl: true,
 };
 
 class AgentSettingsManager {

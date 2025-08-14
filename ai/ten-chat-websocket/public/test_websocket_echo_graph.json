@@ -109,7 +109,7 @@
             "name": "asr_result",
             "dest": [
               {
-                "extension": "llm"
+                "extension": "interrupt_detector"
               },{
                 "extension": "client_connection"
               }

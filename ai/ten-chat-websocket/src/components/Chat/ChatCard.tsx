@@ -25,6 +25,7 @@ export default function ChatCard(props: { className?: string }) {
     role: 'user' | 'agent' | 'assistant';
     end_of_segment?: boolean; // Added to track streaming status of each message
     groupTimestamp?: number; // Added to link messages to their group
+    asrRequestId?: string; // New: Unique ID for ASR requests to track partial results
   }[]>([]);
   const lastGroupTimestampRef = React.useRef<number | undefined>(undefined); // New ref for group timestamp
 
@@ -52,8 +53,7 @@ export default function ChatCard(props: { className?: string }) {
       console.log('ChatCard: received message properties', message.properties);
       // 根据返回数据 的 property 里面的属性 text 和 role 来渲染 已经的 对话框
       if (message.type === MessageType.DATA && message.properties) {
-        // Use audio_text if available, otherwise fallback to text
-        const { role, end_of_segment, group_timestamp: currentGroupTimestamp } = message.properties;
+        const { role, end_of_segment, group_timestamp: currentGroupTimestamp, asr_request_id: asrRequestId } = message.properties;
         const text = message.properties.audio_text || message.properties.text; // Prefer audio_text
 
         console.log('ChatCard: extracted text', text);
@@ -63,9 +63,37 @@ export default function ChatCard(props: { className?: string }) {
         if (typeof text === 'string' && (role === 'user' || role === 'agent' || role === 'assistant')) {
           setChatMessages((prevMessages) => {
             const newMessages = [...prevMessages];
+
+            // Special handling for ASR results (name === "asr_result" and role === 'user')
+            if (message.name === "asr_result" && role === 'user') {
+              if (typeof asrRequestId === 'string') {
+                const existingAsrMessageIndex = newMessages.findIndex(
+                  (msg) => msg.role === 'user' && msg.asrRequestId === asrRequestId && msg.end_of_segment === false
+                );
+
+                if (existingAsrMessageIndex !== -1) {
+                  // Update existing ASR message
+                  newMessages[existingAsrMessageIndex] = {
+                    ...newMessages[existingAsrMessageIndex],
+                    text: text,
+                    end_of_segment: end_of_segment, // Use end_of_segment for finality
+                  };
+                } else {
+                  // If no existing non-final message found for this asrRequestId, create a new one.
+                  // This covers cases where it's a new asrRequestId or the previous one was finalized.
+                  newMessages.push({ text, role, end_of_segment, asrRequestId });
+                }
+                // When an ASR message (user) is processed, reset AI group tracker
+                lastGroupTimestampRef.current = undefined;
+              }
+              console.log('ChatCard: ASR message updated/added', newMessages);
+              return newMessages;
+            }
+
+            // --- Original text message handling (for non-ASR user messages or AI messages) ---
             const lastMessage = newMessages[newMessages.length - 1];
 
-            // --- 文本消息的 group_timestamp 处理：与音频同步
+            // 文本消息的 group_timestamp 处理：与音频同步
             // 如果是新的 group_timestamp，则更新 lastGroupTimestampRef，并确保旧流终结
             if (typeof currentGroupTimestamp === 'number' && (
               lastGroupTimestampRef.current === undefined || // First frame ever
@@ -84,10 +112,12 @@ export default function ChatCard(props: { className?: string }) {
             }
             // --- End of group_timestamp handling
 
-            // Handle user messages (always new, and reset AI group tracker)
-            if (role === 'user') {
-              newMessages.push({ text, role, end_of_segment: true, groupTimestamp: undefined }); // User messages are always complete
-              lastGroupTimestampRef.current = undefined; // Reset AI group tracker when user speaks
+            // Handle manually sent user messages (always new, and reset AI group tracker) and AI messages
+            if (role === 'user') { // This branch handles user messages *not* from asr_result
+                // For manually typed user messages, ensure they create a new entry.
+                // ASR results are handled in the specific block above.
+                newMessages.push({ text, role, end_of_segment: true, groupTimestamp: undefined });
+                lastGroupTimestampRef.current = undefined; // Reset AI group tracker when user speaks
             } else { // role is 'agent' or 'assistant'
               // Conditions for appending to the last message (streaming within the same group)
               const shouldAppend = (

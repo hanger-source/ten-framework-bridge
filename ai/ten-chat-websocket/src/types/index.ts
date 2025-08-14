@@ -20,10 +20,13 @@ export interface IAgentEnv {
 }
 
 export interface IAgentSettings {
-  prompt: string;
   greeting: string;
+  prompt: string;
   token: string;
-  env: IAgentEnv;
+  env: Record<string, string>;
+  echoCancellation: boolean;
+  noiseSuppression: boolean;
+  autoGainControl: boolean;
 }
 
 export interface ITrulienceSettings {

@@ -7,17 +7,15 @@ interface IMicIconProps extends IconProps {
 }
 
 export const MicIcon = (props: IMicIconProps) => {
-  const { active, color, ...rest } = props;
+  const { active, ...rest } = props; // Removed color from destructuring
 
-  if (active) {
-    return micUnMuteSvg({
-      color: color || "#3D53F5",
-      ...rest,
-    });
-  } else {
-    return micMuteSvg({
-      color: color || "#667085",
-      ...rest,
-    });
-  }
+  const iconSrc = active ? micUnMuteSvg : micMuteSvg;
+
+  return (
+    <img
+      src={iconSrc}
+      alt={active ? "Mic Unmuted" : "Mic Muted"}
+      {...rest} // Pass other props like className, width, height
+    />
+  );
 };

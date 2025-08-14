@@ -3,7 +3,7 @@ import { useAppSelector, EMobileActiveTab } from "@/common";
 import Header from "@/components/Layout/Header";
 import Action from "@/components/Layout/Action";
 import { cn } from "@/lib/utils";
-import MicrophoneBlock from "@/components/Agent/Microphone";
+import { Microphone } from "@/components/Agent/Microphone";
 import { Button } from "@/components/ui/button";
 import { MicIconByStatus } from "@/components/Icon";
 import ChatCard from "@/components/Chat/ChatCard";
@@ -13,6 +13,7 @@ import TalkingHead from "@/components/Agent/TalkingHead";
 import MicrophoneDeviceSelect from "@/components/Agent/MicrophoneDeviceSelect";
 import { useWebSocketSession } from "@/hooks/useWebSocketSession";
 import { useMicrophoneStream } from "@/hooks/useMicrophoneStream";
+import { useAgentSettings } from "@/hooks/useAgentSettings"; // Import useAgentSettings
 import { performanceMonitor } from "@/common/utils";
 import { SessionConnectionState } from "@/types/websocket";
 import { useAudioRecorder } from "@/hooks/useAudioRecorder"; // Import useAudioRecorder
@@ -25,7 +26,8 @@ function Home() {
     const [showLive2D, setShowLive2D] = React.useState(false);
 
     const { isConnected, sessionState, defaultLocation, startSession } = useWebSocketSession();
-    const { mediaStreamTrack, micPermission, sendAudioFrame } = useMicrophoneStream({ isConnected, sessionState, defaultLocation });
+    const { agentSettings } = useAgentSettings(); // Get agent settings
+    const { mediaStreamTrack, micPermission, sendAudioFrame } = useMicrophoneStream({ isConnected, sessionState, defaultLocation, settings: agentSettings }); // Pass settings
     const [audioMute, setAudioMute] = React.useState(false); // Managed by MicrophoneBlock now
 
     const { recordedChunksCount, onAudioDataCaptured, downloadRecordedAudio } = useAudioRecorder(); // Use the audio recorder hook
@@ -137,7 +139,7 @@ function Home() {
                     </Button>
                   </div>
                   {/* Move MicrophoneBlock here to prevent overlap */}
-                  <MicrophoneBlock sendAudioFrame={sendAudioFrame} onMuteChange={setAudioMute} isConnected={isConnected} sessionState={sessionState} onAudioDataCaptured={onAudioDataCaptured} />
+                  <Microphone onMuteChange={setAudioMute} isConnected={isConnected} sessionState={sessionState} defaultLocation={defaultLocation} onAudioDataCaptured={onAudioDataCaptured} />
 
                   {/* 音频可视化区域 */}
                   <div>
