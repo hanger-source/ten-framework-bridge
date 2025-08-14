@@ -6,7 +6,7 @@ const DEFAULT_AGENT_SETTINGS: IAgentSettings = {
   prompt: "",
   token: "",
   env: {
-    BAILIAN_DASHSCOPE_API_KEY: "",
+    // BAILIAN_DASHSCOPE_API_KEY: "", // Removed BAILIAN_DASHSCOPE_API_KEY from default env
     GREETING: "",
     CHAT_PROMPT: "",
   },

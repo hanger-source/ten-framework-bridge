@@ -24,7 +24,7 @@ export const Microphone: React.FC<MicrophoneProps> = ({
   onMuteChange,
   onAudioDataCaptured,
 }) => {
-  const [audioMute, setAudioMute] = useState(true);
+  const [audioMute, setAudioMute] = useState(true); // Changed initial state to true
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
   const [audioContext, setAudioContext] = useState<AudioContext | null>(null);
   const [microphone, setMicrophone] = useState<MediaStreamAudioSourceNode | null>(null);
@@ -159,7 +159,9 @@ export const Microphone: React.FC<MicrophoneProps> = ({
   };
 
   const onClickMute = () => {
-    setAudioMute(!audioMute);
+    const newMuteState = !audioMute;
+    setAudioMute(newMuteState);
+    onMuteChange?.(newMuteState); // Call onMuteChange here
   };
 
   // Removed: downloadRecordedAudio function

@@ -7,7 +7,7 @@ import { Microphone } from "@/components/Agent/Microphone";
 import { Button } from "@/components/ui/button";
 import { MicIconByStatus } from "@/components/Icon";
 import ChatCard from "@/components/Chat/ChatCard";
-import ConnectionTest from "@/components/Chat/ConnectionTest";
+// import ConnectionTest from "@/components/Chat/ConnectionTest";
 import AudioVisualizer from "@/components/Agent/AudioVisualizer";
 import TalkingHead from "@/components/Agent/TalkingHead";
 import MicrophoneDeviceSelect from "@/components/Agent/MicrophoneDeviceSelect";
@@ -16,7 +16,7 @@ import { useMicrophoneStream } from "@/hooks/useMicrophoneStream";
 import { useAgentSettings } from "@/hooks/useAgentSettings"; // Import useAgentSettings
 import { performanceMonitor } from "@/common/utils";
 import { SessionConnectionState } from "@/types/websocket";
-import { useAudioRecorder } from "@/hooks/useAudioRecorder"; // Import useAudioRecorder
+// import { useAudioRecorder } from "@/hooks/useAudioRecorder"; // Commented out import for useAudioRecorder
 
 function Home() {
   try {
@@ -28,9 +28,13 @@ function Home() {
     const { isConnected, sessionState, defaultLocation, startSession } = useWebSocketSession();
     const { agentSettings } = useAgentSettings(); // Get agent settings
     const { mediaStreamTrack, micPermission, sendAudioFrame } = useMicrophoneStream({ isConnected, sessionState, defaultLocation, settings: agentSettings }); // Pass settings
-    const [audioMute, setAudioMute] = React.useState(false); // Managed by MicrophoneBlock now
+    const [audioMute, setAudioMute] = React.useState(true); // Managed by MicrophoneBlock now
 
-    const { recordedChunksCount, onAudioDataCaptured, downloadRecordedAudio } = useAudioRecorder(); // Use the audio recorder hook
+    // const { recordedChunksCount, onAudioDataCaptured, downloadRecordedAudio } = useAudioRecorder(); // Commented out useAudioRecorder hook
+    // Removed recordedChunksCount, onAudioDataCaptured, downloadRecordedAudio from usage below
+    const recordedChunksCount = 0; // Dummy value
+    const onAudioDataCaptured = (audioData: Uint8Array) => {}; // Dummy function
+    const downloadRecordedAudio = () => {}; // Dummy function
 
     const getSessionStateText = () => {
       if (!isConnected) {
@@ -116,19 +120,9 @@ function Home() {
                       <div className="text-sm font-medium">麦克风</div>
                       <MicrophoneDeviceSelect />
                     </div>
-                    {/* Remove this button as MicrophoneBlock handles its own mute control now */}
-                    {/*
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        className="border-secondary bg-transparent"
-                        onClick={() => setAudioMute(!audioMute)}
-                      >
-                        <MicIconByStatus className="h-5 w-5" active={!audioMute} />
-                      </Button>
-                    </div>
-                    */}
+                    {/* Removed: Mute Button from Home, now handled by Microphone component */}
                     {/* Download Recorded Audio Button */}
+                    {/*
                     <Button
                       variant="outline"
                       size="sm"
@@ -137,6 +131,7 @@ function Home() {
                     >
                       下载录音 ({recordedChunksCount})
                     </Button>
+                    */}
                   </div>
                   {/* Move MicrophoneBlock here to prevent overlap */}
                   <Microphone onMuteChange={setAudioMute} isConnected={isConnected} sessionState={sessionState} defaultLocation={defaultLocation} onAudioDataCaptured={onAudioDataCaptured} />
@@ -147,7 +142,6 @@ function Home() {
                       音频可视化 {audioMute ? '(已静音)' : '(录音中)'}
                     </div>
                     <div className="flex h-10 flex-col items-center justify-center gap-2 self-stretch rounded-md border border-gray-200 bg-gray-50 p-2">
-                      {/* {console.log('AudioVisualizer render condition:', micPermission === 'granted' && !audioMute)} */}
                       {micPermission === 'granted' && !audioMute ? (
                         <AudioVisualizer
                           type="user"
@@ -160,30 +154,20 @@ function Home() {
                           track={audioMute ? undefined : mediaStreamTrack}
                         />
                       ) : micPermission === 'denied' ? (
-                        <div className="text-center text-gray-500">
-                          <p className="text-xs">麦克风权限被拒绝</p>
+                        <div className="h-full flex items-center justify-center">
+                          <p className="text-xs text-center text-gray-500">麦克风权限被拒绝</p>
                         </div>
                       ) : audioMute ? (
-                        <div className="text-center text-gray-500">
-                          <p className="text-xs">麦克风已静音</p>
+                        <div className="h-full flex items-center justify-center">
+                          <p className="text-xs text-center text-gray-500">麦克风已静音</p>
                         </div>
                       ) : (
-                        <div className="text-center text-gray-500">
-                          <p className="text-xs">请求麦克风权限中...</p>
+                        <div className="h-full flex items-center justify-center">
+                          <p className="text-xs text-center text-gray-500">请求麦克风权限中...</p>
                         </div>
                       )}
                     </div>
                   </div>
-
-                  {/* 音频质量信息 */}
-                  {micPermission === 'granted' && !audioMute && mediaStreamTrack && (
-                    <div className="mt-1">
-                      <div className="text-xs text-gray-500">
-                        <p>音频设置: 48kHz, 单声道, 优化模式</p>
-                        <p>FFT 大小: 2048, 更新频率: 62.5Hz</p>
-                      </div>
-                    </div>
-                  )}
                 </div>
               </div>
             </div>
@@ -192,9 +176,9 @@ function Home() {
           {/* 聊天区域 */}
           <div className="m-0 w-full rounded-b-lg bg-white shadow-lg border border-gray-200 md:rounded-lg md:flex-1">
             <div className="h-full flex flex-col">
-              <div className="p-4 border-b">
-                <ConnectionTest />
-              </div>
+              {/* <div className="p-4 border-b"> */}
+                {/* <ConnectionTest /> */}
+              {/* </div> */}
               <div className="flex-1">
                 <ChatCard />
               </div>

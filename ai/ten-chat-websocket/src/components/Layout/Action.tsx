@@ -26,6 +26,19 @@ import { Button } from "@/components/ui/button";
 import { Settings } from "lucide-react";
 import SettingsDialog from "@/components/Settings/SettingsDialog";
 import { useAgentSettings } from "@/hooks/useAgentSettings";
+import { z } from "zod";
+
+// 定义 agentSettingSchema 的类型
+const agentSettingSchema = z.object({
+  greeting: z.string().optional(),
+  prompt: z.string().optional(),
+  env: z.string().optional(),
+  echoCancellation: z.boolean().optional(),
+  noiseSuppression: z.boolean().optional(),
+  autoGainControl: z.boolean().optional(),
+});
+
+type AgentSettingFormValues = z.infer<typeof agentSettingSchema>;
 
 // 导入类型
 interface IPingResponse {
@@ -94,7 +107,7 @@ export default function Action(props: { className?: string }) {
         return;
       }
 
-      const { token, env } = agentSettings;
+      const { env } = agentSettings;
       try {
         await apiStartService({
           channel,
@@ -102,7 +115,6 @@ export default function Action(props: { className?: string }) {
           graphName: selectedGraph.name,
           language,
           voiceType,
-          token: token || undefined,
           envProperties: env,
         });
         dispatch(setAgentConnected(true));
@@ -213,20 +225,28 @@ export default function Action(props: { className?: string }) {
         defaultValues={{
           greeting: agentSettings.greeting,
           prompt: agentSettings.prompt,
-          token: agentSettings.token,
-          bailian_dashscope_api_key:
-            agentSettings.env?.BAILIAN_DASHSCOPE_API_KEY || "",
+          env: JSON.stringify(agentSettings.env, null, 2) || "{}", // Pass env as JSON string
+          echoCancellation: agentSettings.echoCancellation,
+          noiseSuppression: agentSettings.noiseSuppression,
+          autoGainControl: agentSettings.autoGainControl,
         }}
-        onSubmit={(values) => {
+        onSubmit={(values: AgentSettingFormValues) => {
+          let parsedEnv: Record<string, string> = {};
+          try {
+            parsedEnv = values.env ? JSON.parse(values.env) : {};
+          } catch (e) {
+            toast.error("环境变量 JSON 格式不正确。");
+            console.error("Error parsing env JSON:", e);
+            return; // Stop form submission if JSON is invalid
+          }
+
           saveSettings({
             greeting: values.greeting || "",
             prompt: values.prompt || "",
-            token: values.token || "",
-            env: {
-              BAILIAN_DASHSCOPE_API_KEY: values.bailian_dashscope_api_key || "",
-              GREETING: values.greeting || "",
-              CHAT_PROMPT: values.prompt || "",
-            },
+            env: parsedEnv,
+            echoCancellation: values.echoCancellation ?? true,
+            noiseSuppression: values.noiseSuppression ?? true,
+            autoGainControl: values.autoGainControl ?? true,
           });
           toast.success("设置已保存");
         }}

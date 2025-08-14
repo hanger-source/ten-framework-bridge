@@ -3,6 +3,8 @@ import { webSocketManager } from "@/manager/websocket/websocket";
 import { WebSocketConnectionState, SessionConnectionState, Message, CommandResult, CommandType, MessageType } from "@/types/websocket";
 import { MESSAGE_CONSTANTS } from '@/common/constant';
 import testWebsocketEchoGraph from "../../public/test_websocket_echo_graph.json"; // Import the graph JSON
+import { useAppDispatch } from "@/common/hooks"; // Import useAppDispatch
+import { setWebsocketConnectionState } from "@/store/reducers/global"; // Import setWebsocketConnectionState
 
 interface UseWebSocketSessionResult {
   isConnected: boolean;
@@ -12,6 +14,7 @@ interface UseWebSocketSessionResult {
 }
 
 export function useWebSocketSession(): UseWebSocketSessionResult {
+  const dispatch = useAppDispatch(); // Get dispatch function
   const [isConnected, setIsConnected] = React.useState(() => {
     const initialState = webSocketManager.getConnectionState() === WebSocketConnectionState.OPEN;
     console.log('useWebSocketSession: Initial isConnected state:', initialState);
@@ -59,6 +62,7 @@ export function useWebSocketSession(): UseWebSocketSessionResult {
     const handleConnectionStateChange = (state: WebSocketConnectionState) => {
       console.log('useWebSocketSession: WebSocket connection state changed to:', state);
       setIsConnected(state === WebSocketConnectionState.OPEN);
+      dispatch(setWebsocketConnectionState(state)); // Update Redux store
       if (state === WebSocketConnectionState.CLOSED || state === WebSocketConnectionState.CLOSING) {
         setSessionState(SessionConnectionState.IDLE);
         console.log('useWebSocketSession: WebSocket disconnected, session state reset to IDLE.');
@@ -107,7 +111,7 @@ export function useWebSocketSession(): UseWebSocketSessionResult {
       webSocketManager.offCommandSend(handleCommandSend);
       webSocketManager.offMessage(MessageType.CMD_RESULT, handleCmdResult); // Use offMessage here
     };
-  }, []);
+  }, [dispatch]); // Add dispatch to dependency array
 
   return { isConnected, sessionState, defaultLocation, startSession };
 }

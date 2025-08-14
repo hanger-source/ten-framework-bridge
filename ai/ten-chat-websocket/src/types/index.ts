@@ -13,7 +13,6 @@ export interface IOptions {
 }
 
 export interface IAgentEnv {
-  BAILIAN_DASHSCOPE_API_KEY?: string;
   GREETING?: string;
   CHAT_PROMPT?: string;
   [key: string]: string | undefined;
@@ -22,7 +21,6 @@ export interface IAgentEnv {
 export interface IAgentSettings {
   greeting: string;
   prompt: string;
-  token: string;
   env: Record<string, string>;
   echoCancellation: boolean;
   noiseSuppression: boolean;
