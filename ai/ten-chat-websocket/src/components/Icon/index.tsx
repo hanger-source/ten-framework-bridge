@@ -406,17 +406,15 @@ export const NetworkIconByLevel = (
 ) => {
   const { level, ...rest } = props;
   switch (level) {
-    case 0:
-      return <NetworkDisconnectedIcon {...rest} />;
-    case 1:
+    case 3:
       return <NetworkExcellentIcon {...rest} />;
     case 2:
       return <NetworkGoodIcon {...rest} />;
-    case 3:
-    case 4:
+    case 1:
       return <NetworkAverageIcon {...rest} />;
+    case 0:
+    case 4:
     case 5:
-      return <NetworkPoorIcon {...rest} />;
     case 6:
     default:
       return <NetworkDisconnectedIcon {...rest} />;

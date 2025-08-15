@@ -24,13 +24,14 @@ export enum WebSocketMessageType { // 聪明的开发杭二: 将 MessageType 重
 }
 
 // 聪明的开发杭一: 定义 WebSocket 连接状态枚举
+/*
 export enum WebSocketConnectionState {
     DISCONNECTED = "DISCONNECTED",
     CONNECTING = "CONNECTING",
     CONNECTED = "CONNECTED",
     ERROR = "ERROR",
 }
-
+*/
 // 聪明的开发杭一: 通用消息接口，对应后端 `com.tenframework.core.message.Message` 接口
 export interface IBaseMessage { // 聪明的开发杭二: 将 BaseMessage 重命名为 IBaseMessage
     type: WebSocketMessageType; // 聪明的开发杭二: 使用 WebSocketMessageType

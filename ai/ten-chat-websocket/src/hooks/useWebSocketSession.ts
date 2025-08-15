@@ -44,18 +44,17 @@ export const useWebSocketSession = (): UseWebSocketSessionResult => {
     extension_name: MESSAGE_CONSTANTS.SYS_EXTENSION_NAME,
   }), [activeGraphId, selectedGraphId]); // FRONTEND_APP_URI is constant, no need in dependency array
 
-  const handleConnectionStateChange = useCallback((state: WebSocketConnectionState) => {
-    console.log(`useWebSocketSession: WebSocket connection state changed to: ${state}`);
-    dispatch(setWebsocketConnectionState(state));
-    if (state === WebSocketConnectionState.OPEN) {
-      // Optionally set agentConnected to true here if connection implies agent readiness
-    } else if (state === WebSocketConnectionState.CLOSED) {
+  const handleConnectionStateChange = useCallback((newState: WebSocketConnectionState) => {
+    console.log("useWebSocketSession: WebSocket connection state changed to:", newState);
+    dispatch(setWebsocketConnectionState(newState));
+    if (newState === WebSocketConnectionState.CLOSED) {
+      dispatch(setAgentConnected(false));
+      dispatch(setActiveGraphId("")); // Clear activeGraphId on disconnect
+      dispatch(setActiveAppUri("")); // Clear activeAppUri on disconnect
+      // webSocketManager.setManualDisconnectFlag(false); // Removed: Flag is reset by WebSocketManager's handleReconnect
       setSessionState(SessionConnectionState.IDLE);
       sessionStateRef.current = SessionConnectionState.IDLE;
-      dispatch(setAgentConnected(false));
-      dispatch(setActiveGraphId(""));
-      dispatch(setActiveAppUri("")); // Clear activeAppUri on disconnect
-      toast.info("WebSocket disconnected, session state reset.");
+      console.log("useWebSocketSession: WebSocket disconnected, session state reset to IDLE.");
     }
   }, [dispatch]);
 
@@ -150,13 +149,16 @@ export const useWebSocketSession = (): UseWebSocketSessionResult => {
     if (sessionStateRef.current === SessionConnectionState.SESSION_ACTIVE) {
       console.log("useWebSocketSession: Explicitly stopping session. Sending STOP_GRAPH command.");
       
+      console.log("useWebSocketSession: About to set _isManualDisconnect to true.");
+      webSocketManager.setManualDisconnectFlag(true); // Set manual disconnect flag BEFORE sending STOP_GRAPH
+      console.log("useWebSocketSession: _isManualDisconnect set to true.");
+
       const destLocsForStop: Location[] = activeAppUri ? [{
         app_uri: activeAppUri,
         graph_id: activeGraphId,
-        extension_name: MESSAGE_CONSTANTS.SYS_EXTENSION_NAME, // Assuming this is needed
       }] : [];
 
-      webSocketManager.sendCommand(CommandType.STOP_GRAPH, defaultLocation, destLocsForStop, { location_uri: activeAppUri }); // Use activeAppUri for location_uri in properties
+      webSocketManager.sendCommand(CommandType.STOP_GRAPH, defaultLocation, destLocsForStop, { location_uri: activeAppUri });
       setSessionState(SessionConnectionState.IDLE);
     } else {
       console.warn("useWebSocketSession: Cannot stop session, not currently connected.");

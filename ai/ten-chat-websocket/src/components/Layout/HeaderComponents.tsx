@@ -17,6 +17,7 @@ import { useAppSelector, useAppDispatch, COLOR_LIST } from "@/common";
 import { setThemeColor } from "@/store/reducers/global";
 import { cn } from "@/lib/utils";
 import { HexColorPicker } from "react-colorful";
+import { RootState } from "@/store"; // Import RootState
 
 import styles from "./Header.module.css";
 
@@ -43,6 +44,7 @@ export function HeaderRoomInfo() {
 }
 
 export function HeaderActions() {
+  const websocketConnectionState = useAppSelector((state: RootState) => state.global.websocketConnectionState);
   return (
     <div className="flex space-x-2 md:space-x-4">
       {/* <NextLink href={GITHUB_URL} target="_blank">
@@ -50,7 +52,7 @@ export function HeaderActions() {
         <span className="sr-only">GitHub</span>
       </NextLink> */}
       <ThemePalettePopover />
-      <NetworkIndicator />
+      <NetworkIndicator connectionState={websocketConnectionState} />
     </div>
   );
 }

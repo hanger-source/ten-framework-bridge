@@ -103,7 +103,7 @@ export enum WebSocketConnectionState {
 export interface Location {
     app_uri: string;
     graph_id: string;
-    extension_name: string;
+    extension_name?: string; // Change to optional
 }
 
 // 消息类型枚举

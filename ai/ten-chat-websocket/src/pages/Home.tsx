@@ -3,34 +3,36 @@ import { useAppSelector, EMobileActiveTab } from "@/common";
 import Header from "@/components/Layout/Header";
 import Action from "@/components/Layout/Action";
 import { cn } from "@/lib/utils";
-import { Microphone } from "@/components/Agent/Microphone";
 import { Button } from "@/components/ui/button";
-import { MicIconByStatus } from "@/components/Icon";
 import ChatCard from "@/components/Chat/ChatCard";
 // import ConnectionTest from "@/components/Chat/ConnectionTest";
-import AudioVisualizer from "@/components/Agent/AudioVisualizer";
-import TalkingHead from "@/components/Agent/TalkingHead";
-// import MicrophoneDeviceSelect from "@/components/Agent/MicrophoneDeviceSelect";
+// import AudioVisualizer from "@/components/Agent/AudioVisualizer"; // Removed
+// import TalkingHead from "@/components/Agent/TalkingHead"; // Removed
+// import MicrophoneDeviceSelect from "@/components/Agent/MicrophoneDeviceSelect"; // Removed
 import { useWebSocketSession } from "@/hooks/useWebSocketSession";
-import { useMicrophoneStream } from "@/hooks/useMicrophoneStream";
-import { useAgentSettings } from "@/hooks/useAgentSettings"; // Import useAgentSettings
+// import { useMicrophoneStream } from "@/hooks/useMicrophoneStream"; // Removed
+// import { useAgentSettings } from "@/hooks/useAgentSettings"; // Removed
 import { performanceMonitor } from "@/common/utils";
 // import { SessionConnectionState } from "@/types/websocket"; // Commented out import for SessionConnectionState
 // import { useAudioRecorder } from "@/hooks/useAudioRecorder"; // Commented out import for useAudioRecorder
 import AuthInitializer from "@/components/authInitializer"; // Add AuthInitializer import
 // import { ConnectionTest } from "@/components/Chat/ConnectionTest"; // Changed from default import
+import RTCCard from "@/components/Dynamic/RTCCard"; // Import RTCCard
+import { RootState } from "@/store"; // Import RootState
+import { WebSocketConnectionState } from "@/types/websocket"; // Import WebSocketConnectionState
 
 function Home() {
   try {
     const mobileActiveTab = useAppSelector(
       (state) => state.global.mobileActiveTab,
     );
-    const [showLive2D, setShowLive2D] = React.useState(false);
+    const websocketConnectionState = useAppSelector((state: RootState) => state.global.websocketConnectionState); // Get from Redux
+    // const [showLive2D, setShowLive2D] = React.useState(false); // Removed
 
-    const { isConnected, sessionState, defaultLocation } = useWebSocketSession();
-    const { agentSettings } = useAgentSettings(); // Get agent settings
-    const { mediaStreamTrack, micPermission, sendAudioFrame } = useMicrophoneStream({ isConnected, sessionState, defaultLocation, settings: agentSettings }); // Pass settings
-    const [audioMute, setAudioMute] = React.useState(true); // Managed by MicrophoneBlock now
+    // const { isConnected, sessionState, defaultLocation } = useWebSocketSession(); // Removed
+    // const { agentSettings } = useAgentSettings(); // Removed
+    // const { mediaStreamTrack, micPermission, sendAudioFrame } = useMicrophoneStream({ isConnected, sessionState, defaultLocation, settings: agentSettings }); // Removed
+    // const [audioMute, setAudioMute] = React.useState(true); // Removed
 
     // const { recordedChunksCount, onAudioDataCaptured, downloadRecordedAudio } = useAudioRecorder(); // Commented out useAudioRecorder hook
     // Removed recordedChunksCount, onAudioDataCaptured, downloadRecordedAudio from usage below
@@ -57,68 +59,7 @@ function Home() {
               },
             )}>
               <div className="flex h-full flex-col min-h-0 bg-gray-50 w-full">
-                {/* TalkingHead 区域 - 占据大部分空间 */}
-                <div className="relative flex-1 min-h-[500px] z-10 bg-white rounded-lg shadow-lg border border-gray-200">
-                  {showLive2D && (
-                    <div
-                      style={{ height: '100%', width: '100%' }}
-                      className="absolute inset-0"
-                    >
-                      <TalkingHead audioTrack={audioMute ? undefined : undefined} />
-                    </div>
-                  )}
-                  {/* Live2D Control Button - fixed to bottom right of this container */}
-                  <div className="absolute bottom-3 right-3 z-20">
-                    <Button
-                      variant="outline"
-                      className="border-secondary bg-transparent"
-                      onClick={() => setShowLive2D(!showLive2D)}
-                    >
-                      {showLive2D ? '隐藏 Live2D' : '显示 Live2D'}
-                    </Button>
-                  </div>
-                </div>
-
-                {/* 麦克风控制区域 - 放在 TalkingHead 下面，固定高度 */}
-                <div className="mt-2 p-3 bg-white rounded-lg shadow-sm border border-gray-200">
-                  <div className="space-y-3">
-                    {/* 会话状态显示 - Removed Entire Block */}
-                    <Microphone onMuteChange={setAudioMute} isConnected={isConnected} sessionState={sessionState} defaultLocation={defaultLocation} onAudioDataCaptured={onAudioDataCaptured} />
-
-                    {/* 音频可视化区域 */}
-                    <div>
-                      <div className="text-sm font-medium text-gray-700 mb-2">
-                        音频可视化 {audioMute ? '(已静音)' : '(录音中)'}
-                      </div>
-                      <div className="flex h-10 flex-col items-center justify-center gap-2 self-stretch rounded-md border border-gray-200 bg-gray-50 p-2">
-                        {micPermission === 'granted' && !audioMute ? (
-                          <AudioVisualizer
-                            type="user"
-                            barWidth={3}
-                            minBarHeight={2}
-                            maxBarHeight={16}
-                            // frequencies={[]} // Removed subscribedVolumes
-                            borderRadius={2}
-                            gap={3}
-                            track={audioMute ? undefined : mediaStreamTrack}
-                          />
-                        ) : micPermission === 'denied' ? (
-                          <div className="h-full flex items-center justify-center">
-                            <p className="text-xs text-center text-gray-500">麦克风权限被拒绝</p>
-                          </div>
-                        ) : audioMute ? (
-                          <div className="h-full flex items-center justify-center">
-                            <p className="text-xs text-center text-gray-500">麦克风已静音</p>
-                          </div>
-                        ) : (
-                          <div className="h-full flex items-center justify-center">
-                            <p className="text-xs text-center text-gray-500">请求麦克风权限中...</p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                <RTCCard className="flex-1" />
               </div>
             </div>
 

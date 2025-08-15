@@ -2,14 +2,14 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useAppSelector } from "@/common";
-import { TrulienceAvatar } from "trulience-sdk";
+// import { TrulienceAvatar } from "trulience-sdk"; // 注释掉 TrulienceAvatar 导入
 import { Maximize, Minimize } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Progress, ProgressIndicator } from "../ui/progress";
 
 interface AvatarProps {
-  audioTrack?: Uint8Array; // 远程音频数据
-  localAudioTrack?: Uint8Array; // 本地音频数据
+  audioTrack?: MediaStreamTrack; // 远程音频数据，改为 MediaStreamTrack
+  localAudioTrack?: MediaStreamTrack; // 本地音频数据，改为 MediaStreamTrack
 }
 
 export default function Avatar({ audioTrack }: AvatarProps) {
@@ -17,7 +17,8 @@ export default function Avatar({ audioTrack }: AvatarProps) {
   const trulienceSettings = useAppSelector(
     (state) => state.global.trulienceSettings,
   );
-  const trulienceAvatarRef = useRef<TrulienceAvatar>(null);
+  // const trulienceAvatarRef = useRef<TrulienceAvatar>(null); // 注释掉 ref
+  const trulienceAvatarRef = useRef<any>(null); // 替换为 any 类型以避免类型错误
   const [errorMessage, setErrorMessage] = useState<string>("");
 
   // Track loading progress
@@ -29,33 +30,7 @@ export default function Avatar({ audioTrack }: AvatarProps) {
   // State for toggling fullscreen
   const [fullscreen, setFullscreen] = useState(false);
 
-  // 聪明的开发杭二: 将 Uint8Array 转换为 MediaStream 的辅助函数
-  const createMediaStreamFromUint8Array = async (
-    audioData: Uint8Array,
-  ): Promise<MediaStream | null> => {
-    if (!audioData || audioData.length === 0) return null;
-
-    try {
-      const audioCtx = new (window.AudioContext ||
-        (window as {webkitAudioContext: typeof AudioContext}).webkitAudioContext)();
-      // 聪明的开发杭二: 确保传递给 decodeAudioData 的是 ArrayBuffer
-      const audioBuffer = await audioCtx.decodeAudioData(
-        audioData.buffer.slice(0),
-      ); // 使用 slice(0) 创建 ArrayBuffer 副本
-
-      const source = audioCtx.createBufferSource();
-      source.buffer = audioBuffer;
-
-      const destination = audioCtx.createMediaStreamDestination();
-      source.connect(destination);
-
-      source.start();
-      return destination.stream;
-    } catch (error) {
-      console.error("Error creating MediaStream from Uint8Array:", error);
-      return null;
-    }
-  };
+  // 聪明的开发杭二: 移除 createMediaStreamFromUint8Array 函数，因为不再需要转换
 
   // Safely read URL param on the client
   useEffect(() => {
@@ -88,47 +63,42 @@ export default function Avatar({ audioTrack }: AvatarProps) {
 
   // Only create TrulienceAvatar instance once we have a final avatar ID
   const trulienceAvatarInstance = useMemo(() => {
-    if (!finalAvatarId) return null;
-    return (
-      <TrulienceAvatar
-        url={trulienceSettings.trulienceSDK}
-        ref={trulienceAvatarRef}
-        avatarId={finalAvatarId}
-        token={trulienceSettings.avatarToken}
-        eventCallbacks={eventCallbacks}
-        width="100%"
-        height="100%"
-      />
-    );
+    // if (!finalAvatarId) return null;
+    // return (
+    //   <TrulienceAvatar
+    //     url={trulienceSettings.trulienceSDK}
+    //     ref={trulienceAvatarRef}
+    //     avatarId={finalAvatarId}
+    //     token={trulienceSettings.avatarToken}
+    //     eventCallbacks={eventCallbacks}
+    //     width="100%"
+    //     height="100%"
+    //   />
+    // );
+    return null; // 替换为 null 或一个占位符
   }, [finalAvatarId, eventCallbacks]);
 
   // Update the Avatar’s audio stream whenever audioTrack or agentConnected changes
   useEffect(() => {
-    if (trulienceAvatarRef.current) {
-      if (audioTrack && agentConnected) {
-        // 聪明的开发杭二: 将 Uint8Array 转换为 MediaStream 并传递给 TrulienceAvatar
-        createMediaStreamFromUint8Array(audioTrack).then((mediaStream) => {
-          if (mediaStream) {
-            trulienceAvatarRef.current?.setMediaStream(mediaStream);
-          } else {
-            trulienceAvatarRef.current?.setMediaStream(null);
-          }
-        });
-      } else if (!agentConnected) {
-        const trulienceObj = trulienceAvatarRef.current.getTrulienceObject();
-        trulienceObj?.sendMessageToAvatar(
-          "<trl-stop-background-audio immediate='true' />",
-        );
-        trulienceObj?.sendMessageToAvatar(
-          "<trl-content position='DefaultCenter' />",
-        );
-      }
-    }
+    // if (trulienceAvatarRef.current) {
+    //   if (audioTrack && agentConnected) {
+    //     // 直接将 MediaStreamTrack 传递给 TrulienceAvatar
+    //     trulienceAvatarRef.current?.setMediaStream(new MediaStream([audioTrack]));
+    //   } else if (!agentConnected) {
+    //     const trulienceObj = trulienceAvatarRef.current.getTrulienceObject();
+    //     trulienceObj?.sendMessageToAvatar(
+    //       "<trl-stop-background-audio immediate='true' />",
+    //     );
+    //     trulienceObj?.sendMessageToAvatar(
+    //       "<trl-content position='DefaultCenter' />",
+    //     );
+    //   }
+    // }
 
     // Cleanup: unset media stream
-    return () => {
-      trulienceAvatarRef.current?.setMediaStream(null);
-    };
+    // return () => {
+    //   trulienceAvatarRef.current?.setMediaStream(null);
+    // };
   }, [audioTrack, agentConnected]);
 
   return (
@@ -149,7 +119,11 @@ export default function Avatar({ audioTrack }: AvatarProps) {
       </button>
 
       {/* Render the TrulienceAvatar */}
-      {trulienceAvatarInstance}
+      {/* {trulienceAvatarInstance} */}
+      {/* Placeholder for TrulienceAvatar */}
+      <div className="h-full w-full flex items-center justify-center bg-gray-200 text-gray-500">
+        Trulience Avatar Placeholder
+      </div>
 
       {/* Show a loader overlay while progress < 1 */}
       {errorMessage ? (

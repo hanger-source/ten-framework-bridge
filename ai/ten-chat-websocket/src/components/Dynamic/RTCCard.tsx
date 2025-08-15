@@ -11,12 +11,10 @@ import {
   setWebsocketConnectionState,
 } from "@/store/reducers/global";
 import Avatar from "@/components/Agent/AvatarTrulience";
-import MicrophoneBlock from "@/components/Agent/Microphone";
 import TalkingheadBlock from "@/components/Agent/TalkingHead";
 import {
   WebSocketEvents,
   WebSocketMessageType,
-  WebSocketConnectionState,
   IAudioFrame,
   IDataMessage,
   IDataMessageRaw,
@@ -29,17 +27,22 @@ import {
   EMessageDataType,
   VoiceType,
 } from "@/types";
-import NetworkIndicator from "@/components/Dynamic/NetworkIndicator";
+// import NetworkIndicator from "@/components/Dynamic/NetworkIndicator"; // Removed
 import DynamicChatCard from "@/components/Chat/ChatCard";
+import { Message, MessageType, WebSocketConnectionState } from "@/types/websocket";
+import { useMicrophoneStream } from "@/hooks/useMicrophoneStream"; // Import useMicrophoneStream
+import { useWebSocketSession } from "@/hooks/useWebSocketSession"; // Import useWebSocketSession
+import { useAgentSettings } from "@/hooks/useAgentSettings"; // Import useAgentSettings
+import { Microphone } from "@/components/Agent/Microphone"; // Import Microphone
+import AudioVisualizer from "@/components/Agent/AudioVisualizer"; // Import AudioVisualizer
+import { Button } from "@/components/ui/button"; // Import Button
 
 let hasInit: boolean = false;
 
 export default function RTCCard({
   className,
-  connectionState,
 }: {
   className?: string;
-  connectionState: WebSocketConnectionState;
 }) {
   const dispatch = useAppDispatch();
   const options = useAppSelector((state: RootState) => state.global.options);
@@ -51,67 +54,41 @@ export default function RTCCard({
   );
   const { userId, channel } = options;
   const [remoteAudioData, setRemoteAudioData] = React.useState<Uint8Array>();
-  const useTrulienceAvatar = trulienceSettings.enabled;
+  const useTrulienceAvatar = false; // Temporarily force to false for debugging
   const avatarInLargeWindow = trulienceSettings.avatarDesktopLargeWindow;
   const selectedGraphId = useAppSelector(
     (state: RootState) => state.global.selectedGraphId,
   );
 
   const isCompactLayout = useIsCompactLayout();
+  const { isConnected, sessionState, defaultLocation } = useWebSocketSession();
+  const { agentSettings } = useAgentSettings();
+  const { mediaStreamTrack, micPermission, sendAudioFrame } = useMicrophoneStream({ isConnected, sessionState, defaultLocation, settings: agentSettings }); // Pass settings and get micPermission and sendAudioFrame
+  const [audioMute, setAudioMute] = React.useState(true); // Add audioMute state
+  const [showLive2D, setShowLive2D] = React.useState(false); // Add showLive2D state
+  // const onAudioDataCaptured = (audioData: Uint8Array) => {}; // Dummy function for Microphone
 
   React.useEffect(() => {
     if (!options.channel) {
       return;
     }
-    if (hasInit) {
-      return;
-    }
+    // Removed hasInit check as connect is no longer called here
 
-    init();
+    // init(); // Removed init call
 
+    // Return cleanup function to disconnect only if connected and not manual disconnect
     return () => {
-      if (hasInit) {
-        destory();
-      }
+      // No automatic disconnect here, rely on Action.tsx stopSession
     };
-  }, [options.channel]);
+  }, [options.channel]); // options.channel is the only dependency as webSocketManager.connect is removed
 
   const init = async () => {
     console.log("[websocket] init");
-    webSocketManager.on(WebSocketEvents.DataReceived, onTextChanged);
-    webSocketManager.on(
-      WebSocketEvents.AudioFrameReceived,
-      onRemoteAudioTrack as (audioFrame: IAudioFrame) => void,
-    );
+    webSocketManager.onMessage(MessageType.DATA, onTextChanged);
+    webSocketManager.onMessage(MessageType.AUDIO_FRAME, onRemoteAudioTrack as (message: Message) => void);
 
-    // 聪明的开发杭三: 定义appUri常量，并传递给connect方法
-    const APP_URI = "app://client";
-    await webSocketManager.connect(
-      `ws://localhost:8080/ws?userId=${userId}&channel=${channel}`,
-      // 聪明的开发杭一: 新增 onOpen, onMessage, onClose, onError 回调函数
-      () => {
-        console.log(`聪明的开发杭一: [${new Date().toISOString()}] RTCCard: WebSocket connected via connect callback.`);
-        // dispatch(setRoomConnected(true)); // 如果需要更新 Redux 状态，可以在此处添加
-      },
-      (message) => {
-        // 聪明的开发杭一: connect 方法的 onMessage 回调，主要用于内部存储和转发。实际消息处理通过 webSocketManager.on() 事件完成。
-        console.log(`聪明的开发杭一: [${new Date().toISOString()}] RTCCard: WebSocket message received via connect callback. Message Type: ${message.type || 'unknown'}`);
-      },
-      () => {
-        console.log(`聪明的开发杭一: [${new Date().toISOString()}] RTCCard: WebSocket disconnected via connect callback.`);
-        // dispatch(setRoomConnected(false)); // 如果需要更新 Redux 状态，可以在此处添加
-      },
-      (error) => {
-        console.error(`聪明的开发杭一: [${new Date().toISOString()}] RTCCard: WebSocket error via connect callback. Error: ${error instanceof Error ? error.message : error.type || 'Unknown error'}`, error);
-        dispatch(setWebsocketConnectionState(WebSocketConnectionState.ERROR)); // 聪明的开发杭一: 调度错误状态
-      },
-      { userId: String(userId), channel }, // 聪明的开发杭二: 将 userId 转换为 string
-      APP_URI,
-      selectedGraphId,
-    ).catch(err => {
-        console.error(`聪明的开发杭一: [${new Date().toISOString()}] RTCCard: Failed to connect WebSocket: ${err instanceof Error ? err.message : 'Unknown error'}`, err);
-        dispatch(setWebsocketConnectionState(WebSocketConnectionState.ERROR)); // 聪明的开发杭一: 调度错误状态
-    });
+    // await webSocketManager.connect(); // Removed automatic connect
+
     dispatch(
       setOptions({
         ...options,
@@ -121,34 +98,32 @@ export default function RTCCard({
   };
 
   const destory = async () => {
-    console.log(`聪明的开发杭一: [${new Date().toISOString()}] RTCCard: Destroying WebSocket connection.`);
-    webSocketManager.off(WebSocketEvents.DataReceived, onTextChanged);
-    webSocketManager.off(
-      WebSocketEvents.AudioFrameReceived,
-      onRemoteAudioTrack as (audioFrame: IAudioFrame) => void,
-    );
+    console.log(`[${new Date().toISOString()}] RTCCard: Destroying WebSocket connection.`);
+    webSocketManager.offMessage(MessageType.DATA, onTextChanged);
+    webSocketManager.offMessage(MessageType.AUDIO_FRAME, onRemoteAudioTrack as (message: Message) => void);
     webSocketManager.disconnect();
     hasInit = false;
   };
 
-  const onRemoteAudioTrack = (audioFrame: IAudioFrame) => { // 聪明的开发杭二: 将 audioData: Uint8Array 替换为 audioFrame: IAudioFrame
-    console.log(
-      `[websocket] Received remote audio track ${audioFrame.data.length} bytes`,
-    );
-    setRemoteAudioData(audioFrame.data); // 聪明的开发杭二: 使用 audioFrame.data
+  const onRemoteAudioTrack = (message: Message) => {
+    if (message.type === MessageType.AUDIO_FRAME) {
+      const audioFrame = message as unknown as IAudioFrame;
+      console.log(
+        `[websocket] Received remote audio track ${audioFrame.data.length} bytes`,
+      );
+      setRemoteAudioData(audioFrame.data);
+    }
   };
 
-  const onTextChanged = (message: IDataMessage) => {
-    console.log(`聪明的开发杭一: [${new Date().toISOString()}] RTCCard: onTextChanged message:`, message);
+  const onTextChanged = (message: Message) => {
+    console.log(`[${new Date().toISOString()}] RTCCard: onTextChanged message:`, message);
     let chatType: EMessageType | undefined;
-    let chatItem: IChatItem | undefined; // 聪明的开发杭一: 声明 chatItem
+    let chatItem: IChatItem | undefined;
 
-    if (message.type === WebSocketMessageType.Data) {
-      // 聪明的开发杭一: 使用类型守卫区分 IDataMessageRaw 和 IDataMessageJson
-      if (message.content_type === "application/json") {
-        // 聪明的开发杭一: 如果是 JSON 数据消息
-        const jsonMessage = message as IDataMessageJson; // 聪明的开发杭一: 类型断言为 IDataMessageJson
-        // 聪明的开发杭三: 确认 IDataMessageJson 的 json_payload 包含所有预期的聊天相关属性
+    if (message.type === MessageType.DATA) {
+      const dataMessage = message as unknown as IDataMessage;
+      if (dataMessage.content_type === "application/json") {
+        const jsonMessage = dataMessage as unknown as IDataMessageJson;
         const payload = jsonMessage.json_payload;
 
         chatType = (payload.chat_role as EMessageType) || EMessageType.AGENT;
@@ -162,69 +137,115 @@ export default function RTCCard({
           time: payload.time || Date.now(),
           userName: payload.user_name || "",
         };
-      } else if (message.data) { // 聪明的开发杭一: 如果存在 data 字段 (视为 IDataMessageRaw)
-        const rawMessage = message as IDataMessageRaw; // 聪明的开发杭一: 类型断言为 IDataMessageRaw
+      } else if (dataMessage.data) {
+        const rawMessage = dataMessage as unknown as IDataMessageRaw;
         const textContent = new TextDecoder().decode(rawMessage.data);
 
-        chatType = EMessageType.AGENT; // 聪明的开发杭一: 默认代理消息
+        chatType = EMessageType.AGENT;
         chatItem = {
           userId: rawMessage.name || "",
           text: textContent,
           data_type: EMessageDataType.TEXT,
           type: chatType,
-          isFinal: rawMessage.is_eof, // 聪明的开发杭一: 假设 is_eof 可以作为 isFinal
+          isFinal: rawMessage.is_eof,
           time: rawMessage.timestamp || Date.now(),
           userName: rawMessage.name || "Agent",
         };
       } else {
-        console.warn(`聪明的开发杭一: [${new Date().toISOString()}] RTCCard: Received unexpected Data message content type: ${message.content_type || 'N/A'}`, message);
+        console.warn(`[${new Date().toISOString()}] RTCCard: Received unexpected Data message content type: ${dataMessage.content_type || 'N/A'}`, dataMessage);
       }
-    } else {
-      console.warn(`聪明的开发杭一: [${new Date().toISOString()}] RTCCard: Received unexpected message type for chat item: ${message.type || 'N/A'}`, message);
+    }
+     else {
+      console.warn(`[${new Date().toISOString()}] RTCCard: Received unexpected message type for chat item: ${message.type || 'N/A'}`, message);
     }
 
-    if (chatType && chatItem) { // 聪明的开发杭一: 确保 chatItem 已经被赋值
+    if (chatType && chatItem) {
       dispatch(addChatItem(chatItem));
-    } else {
-      console.warn(`聪明的开发杭一: [${new Date().toISOString()}] RTCCard: Failed to determine chatType or chatItem for message. Message Type: ${message.type || 'N/A'}`, message);
+    }
+     else {
+      console.warn(`[${new Date().toISOString()}] RTCCard: Failed to determine chatType or chatItem for message. Message Type: ${message.type || 'N/A'}`, message);
     }
   };
 
-  const onVoiceChange = (value: VoiceType) => { // 聪明的开发杭二: 将 'unknown' 替换为 'VoiceType'
+  const onVoiceChange = (value: VoiceType) => {
     dispatch(setVoiceType(value));
   };
 
   return (
     <div className={cn("flex h-full flex-col min-h-0 bg-gray-50", className)}>
-      {/* 聪明的开发杭一: 新增网络状态指示器 */}
-      <div className="flex items-center justify-end p-2">
-        <NetworkIndicator connectionState={websocketConnectionState} />
-      </div>
       {/* Scrollable top region (Avatar or ChatCard or Talkinghead) */}
-      <div className="flex-1 min-h-0 z-10">
-        {useTrulienceAvatar ? (
-          !avatarInLargeWindow ? (
-            <div className="h-60 w-full p-1">
-              <Avatar audioTrack={remoteAudioData} />
-            </div>
-          ) : (
-            !isCompactLayout && (
-              <DynamicChatCard className="m-0 w-full h-full rounded-b-lg bg-white shadow-lg border border-gray-200 md:rounded-lg" />
-            )
-          )
-        ) : (
-          <div
-            style={{ height: 700, minHeight: 500 }}
-            className="bg-white rounded-lg shadow-lg border border-gray-200"
-          >
-            <TalkingheadBlock audioTrack={remoteAudioData} />
+      {useTrulienceAvatar ? (
+        !avatarInLargeWindow ? (
+          <div className="h-60 w-full p-1">
+            <Avatar audioTrack={mediaStreamTrack || undefined} />
           </div>
-        )}
-      </div>
+        ) : (
+          !isCompactLayout && (
+            <DynamicChatCard className="m-0 w-full h-full rounded-b-lg bg-white shadow-lg border border-gray-200 md:rounded-lg" />
+          )
+        )
+      ) : (
+        <div className="flex-1 min-h-[500px] z-10 relative bg-white rounded-lg shadow-lg border border-gray-200"> {/* Combined classes */}
+          {/* TalkingHead 区域 */}
+          <div className="h-full w-full">
+            {showLive2D && (
+              <div
+                style={{ height: '100%', width: '100%' }}
+                className="absolute inset-0"
+              >
+                <TalkingheadBlock audioTrack={audioMute ? undefined : remoteAudioData} /> {/* Use remoteAudioData for TalkingHead */}
+              </div>
+            )}
+            {/* Live2D Control Button */}
+            <div className="absolute bottom-3 right-3 z-20">
+              <Button
+                variant="outline"
+                className={cn("border-secondary bg-transparent", showLive2D ? "text-white" : "text-black")} // Dynamic text color
+                onClick={() => setShowLive2D(!showLive2D)}
+              >
+                {showLive2D ? '隐藏 Live2D' : '显示 Live2D'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Bottom region for microphone and video blocks */}
       <div className="w-full space-y-2 px-2 py-2 bg-white rounded-lg shadow-sm border border-gray-200">
-        <MicrophoneBlock sendAudioFrame={webSocketManager.sendAudioFrame} />
+        {/* Microphone control area */}
+        <Microphone onMuteChange={setAudioMute} isConnected={isConnected} sessionState={sessionState} defaultLocation={defaultLocation} onAudioDataCaptured={sendAudioFrame} /> {/* Pass sendAudioFrame */}
+
+        {/* Audio Visualizer area */}
+        <div>
+          <div className="text-sm font-medium text-gray-700 mb-2">
+            音频可视化 {audioMute ? '(已静音)' : '(录音中)'}
+          </div>
+          <div className="flex h-10 flex-col items-center justify-center gap-2 self-stretch rounded-md border border-gray-200 bg-gray-50 p-2">
+            {micPermission === 'granted' && !audioMute ? (
+              <AudioVisualizer
+                type="user"
+                barWidth={3}
+                minBarHeight={2}
+                maxBarHeight={16} // Added missing prop
+                borderRadius={2}
+                gap={3}
+                track={audioMute ? undefined : mediaStreamTrack}
+              />
+            ) : micPermission === 'denied' ? (
+              <div className="h-full flex items-center justify-center">
+                <p className="text-xs text-center text-gray-500">麦克风权限被拒绝</p>
+              </div>
+            ) : audioMute ? (
+              <div className="h-full flex items-center justify-center">
+                <p className="text-xs text-center text-gray-500">麦克风已静音</p>
+              </div>
+            ) : (
+              <div className="h-full flex items-center justify-center">
+                <p className="text-xs text-center text-gray-500">请求麦克风权限中...</p>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -2,7 +2,7 @@ import { Message, Data, Command, CommandResult, Location, MessageType, StartGrap
 import { encode, decode, ExtensionCodec, ExtData } from '@msgpack/msgpack';
 // import { v4 as uuidv4 } from 'uuid'; // Import uuid to generate unique ids
 import { MESSAGE_CONSTANTS } from '@/common/constant'; // Import MESSAGE_CONSTANTS
-import { WebSocketConnectionState } from '@/types/websocket'; // Import WebSocketConnectionState
+import { WebSocketConnectionState } from '@/types/websocket'; // Ensure this points to correct WebSocketConnectionState
 
 // TEN框架自定义MsgPack扩展类型码
 const TEN_MSGPACK_EXT_TYPE_MSG = -1; // 恢复自定义扩展类型码
@@ -45,6 +45,7 @@ export class WebSocketManager {
     private messageHandlers: Map<string, Array<(message: Message) => void>> = new Map();
     private connectionStateHandlers: ((state: WebSocketConnectionState) => void)[] = [];
     private commandSendHandlers: ((commandName: CommandType, properties: Record<string, any>) => void)[] = []; // New: Handlers for command send events
+    private _isManualDisconnect: boolean = false; // New: Flag to indicate manual disconnect
 
     constructor(private url: string) { }
 
@@ -75,6 +76,7 @@ export class WebSocketManager {
 
                 this.ws.onclose = (event) => {
                     console.log('WebSocket 连接已关闭:', event.code, event.reason);
+                    console.log("WebSocketManager: onclose triggered. Calling handleReconnect.");
                     this.setConnectionState(WebSocketConnectionState.CLOSED);
                     this.handleReconnect();
                 };
@@ -102,6 +104,12 @@ export class WebSocketManager {
             this.ws.close();
             this.ws = null;
         }
+    }
+
+    // 设置手动断开标志
+    public setManualDisconnectFlag(isManual: boolean): void {
+        this._isManualDisconnect = isManual;
+        console.log(`WebSocketManager: Manual disconnect flag set to ${isManual}`);
     }
 
     // 发送消息
@@ -343,12 +351,20 @@ export class WebSocketManager {
 
     // 设置连接状态
     private setConnectionState(state: WebSocketConnectionState): void {
+        console.log(`WebSocketManager: Connection state changed from ${this.connectionState} to ${state}. Notifying ${this.connectionStateHandlers.length} handlers.`);
         this.connectionState = state;
         this.connectionStateHandlers.forEach(handler => handler(state));
     }
 
     // 处理重连
     private handleReconnect(): void {
+        console.log(`WebSocketManager: handleReconnect called. _isManualDisconnect: ${this._isManualDisconnect}, connectionState: ${this.connectionState}`);
+        if (this._isManualDisconnect) {
+            console.log("WebSocketManager: Manual disconnect detected, skipping reconnect.");
+            this._isManualDisconnect = false; // Reset flag
+            return; // Skip reconnect logic
+        }
+
         if (this.reconnectAttempts < this.maxReconnectAttempts) {
             this.reconnectAttempts++;
             console.log(`尝试重连 (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
