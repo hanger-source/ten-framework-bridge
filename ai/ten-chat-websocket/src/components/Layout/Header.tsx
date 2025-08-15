@@ -17,7 +17,7 @@ export default function Header(props: { className?: string }) {
           {/* <LogoIcon className="hidden h-5 md:block" />
           <SmallLogoIcon className="block h-4 md:hidden" /> */}
           <h1 className="text-sm font-bold md:text-xl text-gray-800">
-            实时对话智能体
+            实时对话
           </h1>
         </div>
         <HeaderRoomInfo />

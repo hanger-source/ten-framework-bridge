@@ -110,7 +110,7 @@ export default function Action(props: { className?: string }) {
 
       } catch (error) {
         console.error("Error during connection or session start:", error); // Updated error message
-        toast.error("连接或会话启动失败"); // Updated toast message
+        toast.error("AI 连接或启动失败"); // Updated toast message
       }
     }
     setLoading(false);

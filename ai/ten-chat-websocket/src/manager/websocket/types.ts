@@ -45,7 +45,7 @@ export interface IBaseMessage { // 聪明的开发杭二: 将 BaseMessage 重命
 // 聪明的开发杭一: 音频帧消息接口，对应后端 `com.tenframework.core.message.AudioFrame` 类
 export interface IAudioFrame extends IBaseMessage { // 聪明的开发杭二: 将 AudioFrameMessage 重命名为 IAudioFrame
     type: WebSocketMessageType.AudioFrame; // 聪明的开发杭二: 使用 WebSocketMessageType
-    data: Uint8Array; // 音频数据的字节数组
+    buf: Uint8Array; // 音频数据的字节数组 (与 sendAudioFrame 对齐)
     is_eof: boolean; // 是否文件结束
     sample_rate: number; // 采样率
     channels: number; // 声道数

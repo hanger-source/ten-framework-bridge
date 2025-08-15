@@ -25,6 +25,21 @@ export default function ChatCard(props: { className?: string }) {
   }[]>([]);
   const lastGroupTimestampRef = React.useRef<number | undefined>(undefined);
 
+  const sessionStatusText = React.useMemo(() => {
+    switch (sessionState) {
+      case SessionConnectionState.IDLE:
+        return "AI 待命中";
+      case SessionConnectionState.CONNECTING_SESSION:
+        return "正在连接 AI...";
+      case SessionConnectionState.SESSION_ACTIVE:
+        return "AI 已激活";
+      case SessionConnectionState.SESSION_FAILED:
+        return "AI 连接失败";
+      default:
+        return "未知状态";
+    }
+  }, [sessionState]);
+
   // Removed connectionStateMap as ConnectionTest handles it
   // Removed showSettings and srcLoc as they are not needed here
 
@@ -197,23 +212,19 @@ export default function ChatCard(props: { className?: string }) {
             {/* 会话状态显示区域 */}
             <div className="flex items-center space-x-2 mb-2">
               {sessionState === SessionConnectionState.SESSION_ACTIVE && (
-                <div className="w-2.5 h-2.5 bg-green-500 rounded-full animate-pulse" title="会话已激活"></div>
+                <div className="w-2.5 h-2.5 bg-green-500 rounded-full animate-pulse" title="AI 已激活"></div>
               )}
               {sessionState === SessionConnectionState.CONNECTING_SESSION && (
-                <div className="w-2.5 h-2.5 bg-yellow-500 rounded-full animate-pulse" title="正在连接会话"></div>
+                <div className="w-2.5 h-2.5 bg-yellow-500 rounded-full animate-pulse" title="正在连接 AI"></div>
               )}
               {sessionState === SessionConnectionState.SESSION_FAILED && (
-                <div className="w-2.5 h-2.5 bg-red-500 rounded-full" title="会话连接失败"></div>
+                <div className="w-2.5 h-2.5 bg-red-500 rounded-full" title="AI 连接失败"></div>
               )}
               {sessionState === SessionConnectionState.IDLE && (
                 <div className="w-2.5 h-2.5 bg-gray-400 rounded-full" title="AI 待命中"></div>
               )}
               <span className="text-sm text-gray-600">
-                {sessionState === SessionConnectionState.IDLE && "AI 待命中"}
-                {sessionState === SessionConnectionState.CONNECTING_SESSION && "正在连接会话..."}
-                {sessionState === SessionConnectionState.SESSION_ACTIVE && "会话已激活"
-                }
-                {sessionState === SessionConnectionState.SESSION_FAILED && "会话连接失败"}
+                {sessionStatusText}
               </span>
             </div>
 
@@ -225,9 +236,9 @@ export default function ChatCard(props: { className?: string }) {
                   sessionState === SessionConnectionState.SESSION_ACTIVE
                     ? "输入消息..."
                     : sessionState === SessionConnectionState.CONNECTING_SESSION
-                      ? "正在连接会话..."
+                      ? "正在连接 AI..." // Changed placeholder
                       : sessionState === SessionConnectionState.SESSION_FAILED
-                        ? "会话连接失败，请重试"
+                        ? "AI 连接失败，请重试" // Changed placeholder
                         : "等待连接..."
                 }
                 value={inputValue}

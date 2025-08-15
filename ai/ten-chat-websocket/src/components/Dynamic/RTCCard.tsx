@@ -36,6 +36,7 @@ import { useAgentSettings } from "@/hooks/useAgentSettings"; // Import useAgentS
 import { Microphone } from "@/components/Agent/Microphone"; // Import Microphone
 import AudioVisualizer from "@/components/Agent/AudioVisualizer"; // Import AudioVisualizer
 import { Button } from "@/components/ui/button"; // Import Button
+import { useState } from "react"; // Import useState
 
 let hasInit: boolean = false;
 
@@ -64,17 +65,16 @@ export default function RTCCard({
   const { isConnected, sessionState, defaultLocation } = useWebSocketSession();
   const { agentSettings } = useAgentSettings();
   const { mediaStreamTrack, micPermission, sendAudioFrame } = useMicrophoneStream({ isConnected, sessionState, defaultLocation, settings: agentSettings }); // Pass settings and get micPermission and sendAudioFrame
-  const [audioMute, setAudioMute] = React.useState(true); // Add audioMute state
-  const [showLive2D, setShowLive2D] = React.useState(false); // Add showLive2D state
+  const [audioMute, setAudioMute] = React.useState(true);
+  // Live2D 控制
+  const [showLive2D, setShowLive2D] = useState(true); 
   // const onAudioDataCaptured = (audioData: Uint8Array) => {}; // Dummy function for Microphone
 
   React.useEffect(() => {
     if (!options.channel) {
       return;
     }
-    // Removed hasInit check as connect is no longer called here
-
-    // init(); // Removed init call
+    init(); // 聪明的开发杭二: 重新启用 init 调用以注册 WebSocket 消息监听器
 
     // Return cleanup function to disconnect only if connected and not manual disconnect
     return () => {
@@ -106,12 +106,15 @@ export default function RTCCard({
   };
 
   const onRemoteAudioTrack = (message: Message) => {
+    console.log("RTCCard: onRemoteAudioTrack called with message:", message.type);
     if (message.type === MessageType.AUDIO_FRAME) {
+      console.log("RTCCard: Full audio frame message received:", message); // Add this line to log the full message
       const audioFrame = message as unknown as IAudioFrame;
       console.log(
-        `[websocket] Received remote audio track ${audioFrame.data.length} bytes`,
+        `[websocket] Received remote audio track ${audioFrame.buf.length} bytes`,
       );
-      setRemoteAudioData(audioFrame.data);
+      setRemoteAudioData(audioFrame.buf);
+      console.log("RTCCard: remoteAudioData updated with length:", audioFrame.buf.length);
     }
   };
 

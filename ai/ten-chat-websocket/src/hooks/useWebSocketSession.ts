@@ -7,6 +7,7 @@ import { setWebsocketConnectionState, setAgentConnected, setSelectedGraphId, set
 import { Graph } from "@/common/graph";
 import { toast } from 'sonner';
 import { RootState } from "@/store";
+import { useAgentSettings } from "./useAgentSettings"; // Import useAgentSettings
 
 const FRONTEND_APP_URI = "mock_front://test_app"; // Define fixed frontend URI
 
@@ -31,6 +32,10 @@ export const useWebSocketSession = (): UseWebSocketSessionResult => {
   const activeGraphId = useAppSelector((state: RootState) => state.global.activeGraphId);
   const activeAppUri = useAppSelector((state: RootState) => state.global.activeAppUri); // Get activeAppUri from Redux
   const selectedGraph = selectedGraphId ? graphMap[selectedGraphId] : null;
+
+  // 获取设置中的属性
+  const { agentSettings } = useAgentSettings(); // Get agentSettings using the hook
+  const options = useAppSelector((state: RootState) => state.global.options);
 
   // console.log(`useWebSocketSession: Render - selectedGraphId: ${selectedGraphId}, activeGraphId: ${activeGraphId}, activeAppUri: ${activeAppUri}`);
 
@@ -71,7 +76,7 @@ export const useWebSocketSession = (): UseWebSocketSessionResult => {
         setSessionState(SessionConnectionState.SESSION_ACTIVE);
         sessionStateRef.current = SessionConnectionState.SESSION_ACTIVE;
         dispatch(setAgentConnected(true));
-        toast.success("会话已启动！");
+        toast.success("AI 已启动！"); // Changed message
         if (cmdResult.properties && cmdResult.properties.graph_id) {
           dispatch(setActiveGraphId(cmdResult.properties.graph_id));
           // console.log("useWebSocketSession: Active Graph ID set to", cmdResult.properties.graph_id);
@@ -84,7 +89,7 @@ export const useWebSocketSession = (): UseWebSocketSessionResult => {
         setSessionState(SessionConnectionState.IDLE);
         sessionStateRef.current = SessionConnectionState.IDLE;
         dispatch(setAgentConnected(false));
-        toast.error(`启动会话失败: ${cmdResult.errorMessage || cmdResult.error}`);
+        toast.error(`AI 启动失败: ${cmdResult.errorMessage || cmdResult.error}`); // Changed message
       }
     } else if (cmdResult.original_cmd_name === CommandType.STOP_GRAPH) {
       if (cmdResult.success) {
@@ -93,9 +98,9 @@ export const useWebSocketSession = (): UseWebSocketSessionResult => {
         dispatch(setAgentConnected(false));
         dispatch(setActiveGraphId(""));
         dispatch(setActiveAppUri("")); // Clear activeAppUri on successful stop
-        toast.info("会话已停止。");
+        toast.info("AI 已停止。"); // Changed message
       } else {
-        toast.error(`停止会话失败: ${cmdResult.errorMessage || cmdResult.error}`);
+        toast.error(`AI 停止失败: ${cmdResult.errorMessage || cmdResult.error}`); // Changed message
       }
     }
   }, [dispatch]);
@@ -122,7 +127,7 @@ export const useWebSocketSession = (): UseWebSocketSessionResult => {
     const currentWebsocketConnectionState = webSocketManager.getConnectionState();
     console.log(`useWebSocketSession: Attempting to start session. websocketConnectionState: ${currentWebsocketConnectionState} sessionState: ${sessionStateRef.current}`);
     if (currentWebsocketConnectionState !== WebSocketConnectionState.OPEN || sessionStateRef.current !== SessionConnectionState.IDLE) {
-      toast.error("无法启动会话：WebSocket 未连接或会话已激活");
+      toast.error("无法启动 AI：WebSocket 未连接或 AI 已激活"); // Changed message
       return;
     }
 
@@ -140,6 +145,9 @@ export const useWebSocketSession = (): UseWebSocketSessionResult => {
       graph_id: selectedGraph.uuid, // Use selected graph's UUID for START_GRAPH
     }, [], { // dest_locs for START_GRAPH can be empty or handled by backend implicitly
       predefined_graph_name: selectedGraph.name,
+      // 将智能体设置和 options 打平放入 properties
+      ...agentSettings, // Spread agentSettings here
+      ...options,
     });
     setSessionState(SessionConnectionState.CONNECTING_SESSION);
 
@@ -147,7 +155,7 @@ export const useWebSocketSession = (): UseWebSocketSessionResult => {
 
   const stopSession = useCallback(async () => {
     if (sessionStateRef.current === SessionConnectionState.SESSION_ACTIVE) {
-      console.log("useWebSocketSession: Explicitly stopping session. Sending STOP_GRAPH command.");
+      console.log("useWebSocketSession: Explicitly stopping AI. Sending STOP_GRAPH command."); // Changed message
       
       console.log("useWebSocketSession: About to set _isManualDisconnect to true.");
       webSocketManager.setManualDisconnectFlag(true); // Set manual disconnect flag BEFORE sending STOP_GRAPH
@@ -161,7 +169,7 @@ export const useWebSocketSession = (): UseWebSocketSessionResult => {
       webSocketManager.sendCommand(CommandType.STOP_GRAPH, defaultLocation, destLocsForStop, { location_uri: activeAppUri });
       setSessionState(SessionConnectionState.IDLE);
     } else {
-      console.warn("useWebSocketSession: Cannot stop session, not currently connected.");
+      console.warn("useWebSocketSession: Cannot stop AI, not currently connected."); // Changed message
     }
   }, [defaultLocation, dispatch, activeAppUri, activeGraphId]); // Added activeAppUri, activeGraphId to dependencies
 

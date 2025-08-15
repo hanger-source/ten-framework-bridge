@@ -124,6 +124,7 @@ const AudioStreamPlayer: React.FC<AudioStreamPlayerProps> = () => {
       const currentGroupTimestamp = message.properties?.group_timestamp; // Get group_timestamp from properties (corrected)
       const lastTs = activeGroupTimestampRef.current;
       console.log(`AudioStreamPlayer: handleAudioFrame - currentGroupTimestamp: ${currentGroupTimestamp}, lastGroupTimestampRef.current: ${lastTs}`);
+      console.log(`AudioStreamPlayer: Received audio frame with ${message.buf?.byteLength || 0} bytes.`); // Add logging
 
       // If this is the *first* frame we've ever received, or if a new group has started
       if (lastTs === undefined || (typeof currentGroupTimestamp === 'number' && currentGroupTimestamp > lastTs)) {
