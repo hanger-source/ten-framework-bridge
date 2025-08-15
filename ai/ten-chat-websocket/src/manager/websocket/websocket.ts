@@ -260,7 +260,7 @@ export class WebSocketManager {
             this.messageHandlers.set(type, []);
         }
         this.messageHandlers.get(type)?.push(handler);
-        console.log(`Registered handler for type: ${type}. Total handlers: ${this.messageHandlers.get(type)?.length}`);
+        // console.log(`Registered handler for type: ${type}. Total handlers: ${this.messageHandlers.get(type)?.length}`);
 
         // 返回一个取消订阅函数
         return () => {
@@ -269,7 +269,7 @@ export class WebSocketManager {
                 const index = handlers.indexOf(handler);
                 if (index > -1) {
                     handlers.splice(index, 1);
-                    console.log(`Unregistered handler for type: ${type}. Remaining handlers: ${handlers.length}`);
+                    // console.log(`Unregistered handler for type: ${type}. Remaining handlers: ${handlers.length}`);
                 }
             }
         };
@@ -282,7 +282,7 @@ export class WebSocketManager {
             const index = handlers.indexOf(handler);
             if (index > -1) {
                 handlers.splice(index, 1);
-                console.log(`Unregistered handler for type: ${type}. Remaining handlers: ${handlers.length}`);
+                // console.log(`Unregistered handler for type: ${type}. Remaining handlers: ${handlers.length}`);
             }
         }
     }
@@ -294,7 +294,7 @@ export class WebSocketManager {
             const index = this.connectionStateHandlers.indexOf(handler);
             if (index > -1) {
                 this.connectionStateHandlers.splice(index, 1);
-                console.log(`Unregistered connection state handler. Remaining handlers: ${this.connectionStateHandlers.length}`);
+                // console.log(`Unregistered connection state handler. Remaining handlers: ${this.connectionStateHandlers.length}`);
             }
         };
     }
@@ -303,7 +303,7 @@ export class WebSocketManager {
         const index = this.connectionStateHandlers.indexOf(handler);
         if (index > -1) {
             this.connectionStateHandlers.splice(index, 1);
-            console.log(`Unregistered connection state handler. Remaining handlers: ${this.connectionStateHandlers.length}`);
+            // console.log(`Unregistered connection state handler. Remaining handlers: ${this.connectionStateHandlers.length}`);
         }
     }
 

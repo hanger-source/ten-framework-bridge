@@ -27,6 +27,10 @@ import { Settings } from "lucide-react";
 import SettingsDialog from "@/components/Settings/SettingsDialog";
 import { useAgentSettings } from "@/hooks/useAgentSettings";
 import { z } from "zod";
+import { useWebSocketSession } from "@/hooks/useWebSocketSession";
+import { SessionConnectionState } from "@/types/websocket";
+import { webSocketManager } from "@/manager/websocket/websocket"; // Corrected import path
+import { CommandType } from "@/types/websocket";
 
 // 定义 agentSettingSchema 的类型
 const agentSettingSchema = z.object({
@@ -44,8 +48,6 @@ type AgentSettingFormValues = z.infer<typeof agentSettingSchema>;
 interface IPingResponse {
   message: string;
 }
-
-let intervalId: NodeJS.Timeout | null = null;
 
 export default function Action(props: { className?: string }) {
   const { className } = props;
@@ -65,23 +67,15 @@ export default function Action(props: { className?: string }) {
   const [loading, setLoading] = React.useState(false);
   const [settingsOpen, setSettingsOpen] = React.useState(false);
   const { agentSettings, saveSettings } = useAgentSettings();
+  const { isConnected, sessionState, defaultLocation, startSession, stopSession } = useWebSocketSession();
 
   React.useEffect(() => {
     if (channel) {
-      checkAgentConnected();
+      // No longer need to check agent connected here, useWebSocketSession handles it
     }
   }, [channel]);
 
-  const checkAgentConnected = async () => {
-    try {
-      const res = await apiPing(channel);
-      // 如果 ping 成功，说明 Agent 已连接
-      dispatch(setAgentConnected(true));
-    } catch (error) {
-      console.log("Agent not connected:", error);
-    }
-  };
-
+  // Removed checkAgentConnected function
   const onClickConnect = async () => {
     if (loading) {
       return;
@@ -89,12 +83,12 @@ export default function Action(props: { className?: string }) {
     setLoading(true);
     if (agentConnected) {
       try {
-        await apiStopService(channel);
-        dispatch(setAgentConnected(false));
-        toast.success("Agent 已断开连接");
-        stopPing();
+        // Disconnect logic
+        // Instead of direct sendCommand, call stopSession from useWebSocketSession
+        await stopSession(); // Call stopSession
+        // setAgentConnected(false) and toast will be handled by stopSession's CMD_RESULT handler
       } catch (error) {
-        console.error("Error stopping service:", error);
+        console.error("Error during connection or session start/stop:", error);
         toast.error("断开连接失败");
       }
     } else {
@@ -109,40 +103,20 @@ export default function Action(props: { className?: string }) {
 
       const { env } = agentSettings;
       try {
-        await apiStartService({
-          channel,
-          userId,
-          graphName: selectedGraph.name,
-          language,
-          voiceType,
-          envProperties: env,
-        });
-        dispatch(setAgentConnected(true));
-        toast.success("Agent 已连接");
-        startPing();
+        await webSocketManager.connect(); // Ensure WebSocket is connected
+        // No longer set agentConnected or show success here, startSession will handle it
+        console.log('Action.tsx: Before calling startSession - isConnected:', isConnected, 'sessionState:', sessionState);
+        await startSession(); // Directly call startSession after WebSocket connects
+
       } catch (error) {
-        console.error("Error starting service:", error);
-        toast.error("连接失败");
+        console.error("Error during connection or session start:", error); // Updated error message
+        toast.error("连接或会话启动失败"); // Updated toast message
       }
     }
     setLoading(false);
   };
 
-  const startPing = () => {
-    if (intervalId) {
-      stopPing();
-    }
-    intervalId = setInterval(() => {
-      apiPing(channel);
-    }, 3000);
-  };
-
-  const stopPing = () => {
-    if (intervalId) {
-      clearInterval(intervalId);
-      intervalId = null;
-    }
-  };
+  // Removed startPing and stopPing functions
 
   const onChangeMobileActiveTab = (tab: string) => {
     dispatch(setMobileActiveTab(tab as EMobileActiveTab));

@@ -187,7 +187,9 @@ const useGraphs = () => {
   );
 
   const initialize = async () => {
-    await dispatch(initializeGraphData());
+    console.log('useGraphs: initialize function called');
+    const result = await dispatch(initializeGraphData());
+    console.log('useGraphs: initializeGraphData dispatch result:', result);
   };
 
   const update = async (graph: Graph, updates: Partial<Graph>) => {

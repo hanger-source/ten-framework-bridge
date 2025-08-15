@@ -34,7 +34,7 @@ export function useMicrophoneStream({ isConnected, sessionState, defaultLocation
       try {
         setMicPermission('pending');
         const capabilities = await navigator.mediaDevices.getSupportedConstraints();
-        console.log('支持的音频约束:', capabilities);
+        // console.log('支持的音频约束:', capabilities);
 
         const stream = await navigator.mediaDevices.getUserMedia({
           audio: {
@@ -51,7 +51,7 @@ export function useMicrophoneStream({ isConnected, sessionState, defaultLocation
 
         if (audioTrack.getCapabilities) {
           const trackCapabilities = audioTrack.getCapabilities();
-          console.log('音频轨道能力:', trackCapabilities);
+          // console.log('音频轨道能力:', trackCapabilities);
         }
 
         if (audioTrack.applyConstraints) {

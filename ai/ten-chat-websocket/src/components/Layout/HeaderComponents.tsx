@@ -37,51 +37,7 @@ export function HeaderRoomInfo() {
 
   return (
     <>
-      <TooltipProvider delayDuration={200}>
-        <Tooltip>
-          <TooltipTrigger className="flex items-center space-x-2 text-lg font-semibold">
-            <InfoIcon className="h-4 w-4 md:h-5 md:w-5" />
-            <span className="hidden text-sm md:inline-block">频道名: </span>
-            <span className="max-w-24 text-sm md:text-base">{channel}</span>
-          </TooltipTrigger>
-          <TooltipContent className="bg-[var(--background-color,#1C1E22)] text-gray-600">
-            <table className="border-collapse">
-              <tbody>
-                <tr>
-                  <td className="pr-2 font-bold text-primary">INFO</td>
-                  <td></td>
-                </tr>
-                <tr>
-                  <td className="pr-2">房间:</td>
-                  <td className="text-[#0888FF]">{channel}</td>
-                </tr>
-                <tr>
-                  <td className="pr-2">参与者:</td>
-                  <td className="text-[#0888FF]">{userId}</td>
-                </tr>
-                <tr>
-                  <td colSpan={2}>
-                    <hr className="my-2 border-t border-gray-600" />
-                  </td>
-                </tr>
-                <tr>
-                  <td className="pr-2 font-bold text-primary" colSpan={2}>
-                    STATUS
-                  </td>
-                </tr>
-                <tr>
-                  <td className="pr-2">房间连接:</td>
-                  <td className="text-[#0888FF]">{roomConnectedText}</td>
-                </tr>
-                <tr>
-                  <td className="pr-2">Agent 连接:</td>
-                  <td className="text-[#0888FF]">{agentConnectedText}</td>
-                </tr>
-              </tbody>
-            </table>
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
+      {/* Removed HeaderRoomInfo content */}
     </>
   );
 }

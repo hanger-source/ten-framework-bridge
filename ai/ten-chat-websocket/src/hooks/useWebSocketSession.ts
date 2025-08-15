@@ -1,117 +1,221 @@
-import React, { useRef } from "react";
+import React, { useRef, useEffect, useCallback, useMemo, useState } from "react";
 import { webSocketManager } from "@/manager/websocket/websocket";
-import { WebSocketConnectionState, SessionConnectionState, Message, CommandResult, CommandType, MessageType } from "@/types/websocket";
+import { WebSocketConnectionState, SessionConnectionState, Message, CommandResult, CommandType, MessageType, Location } from "@/types/websocket";
 import { MESSAGE_CONSTANTS } from '@/common/constant';
-import testWebsocketEchoGraph from "../../public/test_websocket_echo_graph.json"; // Import the graph JSON
-import { useAppDispatch } from "@/common/hooks"; // Import useAppDispatch
-import { setWebsocketConnectionState } from "@/store/reducers/global"; // Import setWebsocketConnectionState
+import { useAppDispatch, useAppSelector } from "@/common/hooks";
+import { setWebsocketConnectionState, setAgentConnected, setSelectedGraphId, setActiveGraphId, setActiveAppUri } from "@/store/reducers/global"; // Import setActiveAppUri
+import { Graph } from "@/common/graph";
+import { toast } from 'sonner';
+import { RootState } from "@/store";
+
+const FRONTEND_APP_URI = "mock_front://test_app"; // Define fixed frontend URI
 
 interface UseWebSocketSessionResult {
   isConnected: boolean;
   sessionState: SessionConnectionState;
-  defaultLocation: { app_uri: string; graph_id: string; extension_name: string };
-  startSession: () => void; // Added startSession to the interface
+  startSession: () => Promise<void>;
+  stopSession: () => Promise<void>;
+  sendMessage: (name: string, messageContent: string) => void; // Changed message type to string
+  sendCommand: (commandType: CommandType, srcLoc?: Location, destLocs?: Location[], properties?: Record<string, any>) => void; // Make srcLoc and destLocs optional
+  defaultLocation: Location;
+  activeAppUri: string; // Add activeAppUri
+  activeGraphId: string; // Add activeGraphId
 }
 
-export function useWebSocketSession(): UseWebSocketSessionResult {
-  const dispatch = useAppDispatch(); // Get dispatch function
-  const [isConnected, setIsConnected] = React.useState(() => {
-    const initialState = webSocketManager.getConnectionState() === WebSocketConnectionState.OPEN;
-    console.log('useWebSocketSession: Initial isConnected state:', initialState);
-    return initialState;
-  });
+export const useWebSocketSession = (): UseWebSocketSessionResult => {
+  const dispatch = useAppDispatch();
+  const isConnected = useAppSelector((state: RootState) => state.global.agentConnected);
+  const websocketConnectionState = useAppSelector((state: RootState) => state.global.websocketConnectionState);
+  const selectedGraphId = useAppSelector((state: RootState) => state.global.selectedGraphId);
+  const graphMap = useAppSelector((state: RootState) => state.global.graphMap);
+  const activeGraphId = useAppSelector((state: RootState) => state.global.activeGraphId);
+  const activeAppUri = useAppSelector((state: RootState) => state.global.activeAppUri); // Get activeAppUri from Redux
+  const selectedGraph = selectedGraphId ? graphMap[selectedGraphId] : null;
 
-  const [sessionState, setSessionState] = React.useState<SessionConnectionState>(SessionConnectionState.IDLE);
-  const sessionStateRef = useRef(sessionState); // New: useRef to store the latest sessionState
+  // console.log(`useWebSocketSession: Render - selectedGraphId: ${selectedGraphId}, activeGraphId: ${activeGraphId}, activeAppUri: ${activeAppUri}`);
 
-  const defaultLocation = {
-    app_uri: "mock_front://test_app",
-    graph_id: "test-websocket-echo-graph",
+  const sessionStateRef = useRef<SessionConnectionState>(SessionConnectionState.IDLE);
+  const [sessionState, setSessionState] = useState<SessionConnectionState>(SessionConnectionState.IDLE);
+
+  // Default location for commands (src_loc)
+  const defaultLocation: Location = useMemo(() => ({
+    app_uri: FRONTEND_APP_URI, // Frontend fixed URI for src_loc
+    graph_id: activeGraphId || selectedGraphId || "",
     extension_name: MESSAGE_CONSTANTS.SYS_EXTENSION_NAME,
-  };
+  }), [activeGraphId, selectedGraphId]); // FRONTEND_APP_URI is constant, no need in dependency array
 
-  // Keep the ref always up-to-date with the latest sessionState
-  React.useEffect(() => {
-    sessionStateRef.current = sessionState;
-    console.log('useWebSocketSession: sessionStateRef updated to:', sessionStateRef.current);
-  }, [sessionState]);
-
-  // New: Function to start the session explicitly
-  const startSession = React.useCallback(() => {
-    if (isConnected && sessionStateRef.current === SessionConnectionState.IDLE) {
-      console.log('useWebSocketSession: Explicitly starting session. Sending START_GRAPH command.');
-      const graphDefinition = {
-        graph_name: defaultLocation.graph_id,
-        graph_id: defaultLocation.graph_id,
-        app_uri: defaultLocation.app_uri,
-        nodes: testWebsocketEchoGraph.graph.nodes,
-        connections: testWebsocketEchoGraph.graph.connections,
-      };
-      webSocketManager.sendCommand(CommandType.START_GRAPH, defaultLocation, [], {
-        graph_json: JSON.stringify(graphDefinition),
-      });
-      setSessionState(SessionConnectionState.CONNECTING_SESSION);
-    } else {
-      console.warn('useWebSocketSession: Cannot start session. isConnected:', isConnected, 'sessionState:', sessionStateRef.current);
+  const handleConnectionStateChange = useCallback((state: WebSocketConnectionState) => {
+    console.log(`useWebSocketSession: WebSocket connection state changed to: ${state}`);
+    dispatch(setWebsocketConnectionState(state));
+    if (state === WebSocketConnectionState.OPEN) {
+      // Optionally set agentConnected to true here if connection implies agent readiness
+    } else if (state === WebSocketConnectionState.CLOSED) {
+      setSessionState(SessionConnectionState.IDLE);
+      sessionStateRef.current = SessionConnectionState.IDLE;
+      dispatch(setAgentConnected(false));
+      dispatch(setActiveGraphId(""));
+      dispatch(setActiveAppUri("")); // Clear activeAppUri on disconnect
+      toast.info("WebSocket disconnected, session state reset.");
     }
-  }, [isConnected, defaultLocation]); // defaultLocation is a dependency because it's used in sendCommand
+  }, [dispatch]);
 
-  React.useEffect(() => {
-    console.log('useWebSocketSession: useEffect for WebSocket lifecycle and session state triggered');
+  const handleCommandResult = useCallback((message: Message) => {
+    if (message.type !== MessageType.CMD_RESULT) {
+      console.warn("useWebSocketSession: Received non-CMD_RESULT message, ignoring.", message);
+      return;
+    }
+    const cmdResult = message as CommandResult;
 
-    const handleConnectionStateChange = (state: WebSocketConnectionState) => {
-      console.log('useWebSocketSession: WebSocket connection state changed to:', state);
-      setIsConnected(state === WebSocketConnectionState.OPEN);
-      dispatch(setWebsocketConnectionState(state)); // Update Redux store
-      if (state === WebSocketConnectionState.CLOSED || state === WebSocketConnectionState.CLOSING) {
+    console.log(`useWebSocketSession: Received CMD_RESULT for ${cmdResult.original_cmd_name}: success=${cmdResult.success}, message=${cmdResult.errorMessage || cmdResult.error}`);
+    if (cmdResult.original_cmd_name === CommandType.START_GRAPH) {
+      if (cmdResult.success) {
+        setSessionState(SessionConnectionState.SESSION_ACTIVE);
+        sessionStateRef.current = SessionConnectionState.SESSION_ACTIVE;
+        dispatch(setAgentConnected(true));
+        toast.success("会话已启动！");
+        if (cmdResult.properties && cmdResult.properties.graph_id) {
+          dispatch(setActiveGraphId(cmdResult.properties.graph_id));
+          // console.log("useWebSocketSession: Active Graph ID set to", cmdResult.properties.graph_id);
+        }
+        if (cmdResult.properties && cmdResult.properties.app_uri) { // Extract app_uri
+          dispatch(setActiveAppUri(cmdResult.properties.app_uri));
+          // console.log("useWebSocketSession: Active App URI set to", cmdResult.properties.app_uri);
+        }
+      } else {
         setSessionState(SessionConnectionState.IDLE);
-        console.log('useWebSocketSession: WebSocket disconnected, session state reset to IDLE.');
-      } 
-      // Removed automatic START_GRAPH command sending when connection is OPEN
-      // Session state will remain IDLE until a command like START_GRAPH is explicitly sent.
-    };
-
-    const handleCmdResult = (rawMessage: Message) => {
-      const message = rawMessage as CommandResult;
-      console.log('useWebSocketSession: Received command result:', message, 'Message Name:', message.name, 'Message Type:', message.type, 'Received Original Cmd Name:', message.original_cmd_name);
-      
-      console.log(`useWebSocketSession: Checking condition - message.type: ${message.type}, MessageType.CMD_RESULT: ${MessageType.CMD_RESULT}, message.original_cmd_name: ${message.original_cmd_name}, CommandType.START_GRAPH: ${CommandType.START_GRAPH}. Current sessionStateRef: ${sessionStateRef.current}`);
-      // Only process CMD_RESULT if it matches CommandType.START_GRAPH by original_cmd_name
-      if (message.type === MessageType.CMD_RESULT && message.original_cmd_name === CommandType.START_GRAPH) {
-        console.log('useWebSocketSession: CMD_RESULT for START_GRAPH matched. Attempting to update sessionState.');
-        setSessionState((prevSessionState) => {
-          console.log('useWebSocketSession: Inside setSessionState callback. Previous state:', prevSessionState, 'New state:', message.success ? 'SESSION_ACTIVE' : 'SESSION_FAILED');
-          return message.success ? SessionConnectionState.SESSION_ACTIVE : SessionConnectionState.SESSION_FAILED;
-        });
-        console.log('useWebSocketSession: setSessionState (updated based on success) called. CommandResult success:', message.success);
-      } else if (message.type === MessageType.CMD_RESULT) {
-          console.warn('useWebSocketSession: Received CMD_RESULT for unknown or non-START_GRAPH command, ignoring.', message);
+        sessionStateRef.current = SessionConnectionState.IDLE;
+        dispatch(setAgentConnected(false));
+        toast.error(`启动会话失败: ${cmdResult.errorMessage || cmdResult.error}`);
       }
-    };
+    } else if (cmdResult.original_cmd_name === CommandType.STOP_GRAPH) {
+      if (cmdResult.success) {
+        setSessionState(SessionConnectionState.IDLE);
+        sessionStateRef.current = SessionConnectionState.IDLE;
+        dispatch(setAgentConnected(false));
+        dispatch(setActiveGraphId(""));
+        dispatch(setActiveAppUri("")); // Clear activeAppUri on successful stop
+        toast.info("会话已停止。");
+      } else {
+        toast.error(`停止会话失败: ${cmdResult.errorMessage || cmdResult.error}`);
+      }
+    }
+  }, [dispatch]);
 
-    const handleCommandSend = (commandName: CommandType, properties: Record<string, any>) => {
-      // This callback is for observing commands sent, not for sending them.
-      // The START_GRAPH command is now initiated when the WebSocket connects and session is idle.
-      console.log('useWebSocketSession: Command sent from elsewhere:', commandName, 'properties:', properties);
-      // No longer automatically setting CONNECTING_SESSION here, as it's set where command is initiated.
-    };
-
+  useEffect(() => {
     webSocketManager.onConnectionStateChange(handleConnectionStateChange);
-    webSocketManager.onMessage(MessageType.CMD_RESULT, handleCmdResult);
-    webSocketManager.onCommandSend(handleCommandSend);
-
-    webSocketManager.connect().catch(error => {
-      console.error('useWebSocketSession: WebSocket 连接失败:', error);
-    });
+    webSocketManager.onMessage(MessageType.CMD_RESULT, handleCommandResult);
 
     return () => {
-      console.log('useWebSocketSession: Cleaning up WebSocket connection and session listeners');
-      webSocketManager.disconnect();
       webSocketManager.offConnectionStateChange(handleConnectionStateChange);
-      webSocketManager.offCommandSend(handleCommandSend);
-      webSocketManager.offMessage(MessageType.CMD_RESULT, handleCmdResult); // Use offMessage here
+      webSocketManager.offMessage(MessageType.CMD_RESULT, handleCommandResult);
+      console.log("useWebSocketSession: Cleaning up WebSocket connection and session listeners");
+      setSessionState(SessionConnectionState.IDLE);
+      sessionStateRef.current = SessionConnectionState.IDLE;
     };
-  }, [dispatch]); // Add dispatch to dependency array
+  }, [handleConnectionStateChange, handleCommandResult]);
 
-  return { isConnected, sessionState, defaultLocation, startSession };
-}
+  const startSession = useCallback(async () => {
+    if (!selectedGraph) {
+      toast.error("请先选择一个图");
+      return;
+    }
+
+    const currentWebsocketConnectionState = webSocketManager.getConnectionState();
+    console.log(`useWebSocketSession: Attempting to start session. websocketConnectionState: ${currentWebsocketConnectionState} sessionState: ${sessionStateRef.current}`);
+    if (currentWebsocketConnectionState !== WebSocketConnectionState.OPEN || sessionStateRef.current !== SessionConnectionState.IDLE) {
+      toast.error("无法启动会话：WebSocket 未连接或会话已激活");
+      return;
+    }
+
+    // `graphDefinition` is still needed for predefined_graph_name in properties
+    const graphDefinition = {
+      graph_name: selectedGraph.name,
+      graph_id: selectedGraph.uuid,
+      app_uri: defaultLocation.app_uri, // Frontend app_uri for the graph definition
+      nodes: selectedGraph.nodes,
+      connections: selectedGraph.connections,
+    };
+
+    webSocketManager.sendCommand(CommandType.START_GRAPH, {
+      ...defaultLocation, // Use defaultLocation for src_loc of START_GRAPH command
+      graph_id: selectedGraph.uuid, // Use selected graph's UUID for START_GRAPH
+    }, [], { // dest_locs for START_GRAPH can be empty or handled by backend implicitly
+      predefined_graph_name: selectedGraph.name,
+    });
+    setSessionState(SessionConnectionState.CONNECTING_SESSION);
+
+  }, [selectedGraph, defaultLocation, dispatch]);
+
+  const stopSession = useCallback(async () => {
+    if (sessionStateRef.current === SessionConnectionState.SESSION_ACTIVE) {
+      console.log("useWebSocketSession: Explicitly stopping session. Sending STOP_GRAPH command.");
+      
+      const destLocsForStop: Location[] = activeAppUri ? [{
+        app_uri: activeAppUri,
+        graph_id: activeGraphId,
+        extension_name: MESSAGE_CONSTANTS.SYS_EXTENSION_NAME, // Assuming this is needed
+      }] : [];
+
+      webSocketManager.sendCommand(CommandType.STOP_GRAPH, defaultLocation, destLocsForStop, { location_uri: activeAppUri }); // Use activeAppUri for location_uri in properties
+      setSessionState(SessionConnectionState.IDLE);
+    } else {
+      console.warn("useWebSocketSession: Cannot stop session, not currently connected.");
+    }
+  }, [defaultLocation, dispatch, activeAppUri, activeGraphId]); // Added activeAppUri, activeGraphId to dependencies
+
+  const sendMessage = useCallback((name: string, messageContent: string) => {
+    if (websocketConnectionState === WebSocketConnectionState.OPEN) {
+      // console.log(`sendMessage: Using name: ${name}, activeAppUri: ${activeAppUri}, activeGraphId: ${activeGraphId}`);
+      const message: Message = {
+        id: Date.now().toString() + Math.random().toString().substring(2, 8),
+        type: MessageType.DATA,
+        src_loc: defaultLocation,
+        dest_locs: activeAppUri ? [{
+          app_uri: activeAppUri,
+          graph_id: activeGraphId,
+          extension_name: MESSAGE_CONSTANTS.SYS_EXTENSION_NAME,
+        }] : [],
+        name: name, // Use passed name
+        properties: { text: messageContent, is_final: true }, // 重新添加 is_final: true
+        timestamp: Date.now(),
+      };
+      webSocketManager.sendMessage(message);
+    } else {
+      console.warn("Cannot send message, WebSocket is not open.");
+      toast.error("WebSocket 未连接，无法发送消息。");
+    }
+  }, [websocketConnectionState, activeAppUri, activeGraphId, defaultLocation]);
+
+  const sendCommand = useCallback((commandType: CommandType, srcLocOverride?: Location, destLocsOverride?: Location[], properties?: Record<string, any>) => {
+    if (websocketConnectionState === WebSocketConnectionState.OPEN) {
+      const finalSrcLoc = srcLocOverride || defaultLocation;
+
+      let finalDestLocs: Location[] = destLocsOverride || [];
+      // If no explicit destLocs were provided and an activeAppUri exists, construct a default dest_loc
+      if (!destLocsOverride && activeAppUri) {
+        finalDestLocs = [{
+          app_uri: activeAppUri,
+          graph_id: activeGraphId,
+          extension_name: MESSAGE_CONSTANTS.SYS_EXTENSION_NAME,
+        }];
+      }
+
+      webSocketManager.sendCommand(commandType, finalSrcLoc, finalDestLocs, { ...properties, graph_id: activeGraphId });
+    } else {
+      console.warn("Cannot send command, WebSocket is not open.");
+      toast.error("WebSocket 未连接，无法发送命令。");
+    }
+  }, [websocketConnectionState, activeAppUri, activeGraphId, defaultLocation]);
+
+  return {
+    isConnected: isConnected,
+    sessionState,
+    startSession,
+    stopSession,
+    sendMessage,
+    sendCommand,
+    defaultLocation,
+    activeAppUri,
+    activeGraphId,
+  };
+};

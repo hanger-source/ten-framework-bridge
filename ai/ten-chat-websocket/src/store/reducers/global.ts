@@ -4,8 +4,8 @@ import {
   Language,
   VoiceType,
   ITrulienceSettings,
-  WebSocketConnectionState, // 聪明的开发杭一: 导入 WebSocketConnectionState
 } from "@/types";
+import { WebSocketConnectionState } from "@/types/websocket"; // Corrected import path for WebSocketConnectionState
 import { createAsyncThunk, createSlice, PayloadAction } from "@reduxjs/toolkit";
 import {
   EMobileActiveTab,
@@ -33,7 +33,7 @@ export interface InitialState {
   options: IOptions;
   roomConnected: boolean;
   agentConnected: boolean;
-  websocketConnectionState: WebSocketConnectionState; // 聪明的开发杭一: 新增WebSocket连接状态
+  websocketConnectionState: WebSocketConnectionState;
   themeColor: string;
   language: Language;
   voiceType: VoiceType;
@@ -41,9 +41,11 @@ export interface InitialState {
   selectedGraphId: string;
   graphList: Graph[];
   graphMap: Record<string, Graph>;
-  addonModules: AddonDef.Module[]; // addon modules
+  addonModules: AddonDef[]; // Corrected type: AddonDef.Module[] -> AddonDef[]
   mobileActiveTab: EMobileActiveTab;
   trulienceSettings: ITrulienceSettings;
+  activeGraphId: string;
+  activeAppUri: string; // New: To store the active app_uri from backend
 }
 
 const getInitialState = (): InitialState => {
@@ -52,7 +54,7 @@ const getInitialState = (): InitialState => {
     themeColor: COLOR_LIST[0].active,
     roomConnected: false,
     agentConnected: false,
-    websocketConnectionState: "closed", // 聪明的开发杭一: 初始化WebSocket连接状态
+    websocketConnectionState: WebSocketConnectionState.CLOSED, // 聪明的开发杭一: 初始化WebSocket连接状态, changed from "closed"
     language: "en-US",
     voiceType: "male",
     chatItems: [],
@@ -62,6 +64,8 @@ const getInitialState = (): InitialState => {
     addonModules: [],
     mobileActiveTab: EMobileActiveTab.AGENT,
     trulienceSettings: DEFAULT_TRULIENCE_OPTIONS,
+    activeGraphId: "", // Initialize activeGraphId
+    activeAppUri: "", // Initialize activeAppUri
   };
 };
 
@@ -161,6 +165,25 @@ export const globalSlice = createSlice({
     },
     setGraphList: (state, action: PayloadAction<Graph[]>) => {
       state.graphList = action.payload;
+      console.log('Redux: graphList updated', action.payload);
+
+      // Also populate graphMap with all fetched graphs
+      action.payload.forEach(graph => {
+        state.graphMap[graph.uuid] = graph;
+      });
+      console.log('Redux: graphMap populated with all graphs from list', state.graphMap);
+
+      // If selectedGraphId is empty OR existing selectedGraphId is not in the new graphList, set to the first graph's UUID
+      const currentSelectedGraphExists = action.payload.some(graph => graph.uuid === state.selectedGraphId);
+      if (!state.selectedGraphId || !currentSelectedGraphExists) {
+        if (action.payload.length > 0) {
+          state.selectedGraphId = action.payload[0].uuid;
+          console.log('Redux: selectedGraphId auto-set/reset to first graph', state.selectedGraphId);
+        } else {
+          state.selectedGraphId = ""; // No graphs available, clear selected ID
+          console.log('Redux: No graphs available, selectedGraphId cleared.');
+        }
+      }
     },
     setVoiceType: (state, action: PayloadAction<VoiceType>) => {
       state.voiceType = action.payload;
@@ -174,6 +197,9 @@ export const globalSlice = createSlice({
       action: PayloadAction<WebSocketConnectionState>,
     ) => {
       state.websocketConnectionState = action.payload;
+      if (action.payload === WebSocketConnectionState.CLOSED) {
+        state.agentConnected = false; // Reset agentConnected if WebSocket closes
+      }
     },
     reset: (state) => {
       Object.assign(state, getInitialState());
@@ -187,8 +213,17 @@ export const globalSlice = createSlice({
       graphMap[action.payload.uuid] = action.payload;
       state.graphMap = graphMap;
     },
-    setAddonModules: (state, action: PayloadAction<AddonDef.Module[]>) => {
+    setAddonModules: (state, action: PayloadAction<AddonDef[]>) => { // Corrected type: AddonDef.Module[] -> AddonDef[]
       state.addonModules = JSON.parse(JSON.stringify(action.payload));
+    },
+    // Add setActiveGraphId reducer
+    setActiveGraphId: (state, action: PayloadAction<string>) => {
+      state.activeGraphId = action.payload;
+      console.log('Redux: activeGraphId set to', action.payload);
+    },
+    setActiveAppUri: (state, action: PayloadAction<string>) => { // New reducer for activeAppUri
+      state.activeAppUri = action.payload;
+      console.log('Redux: activeAppUri set to', action.payload);
     },
   },
 });
@@ -264,6 +299,8 @@ export const {
   setAddonModules,
   setTrulienceSettings,
   setWebsocketConnectionState, // 聪明的开发杭一: 导出新增的reducer
+  setActiveGraphId, // Add setActiveGraphId to exports
+  setActiveAppUri, // Add setActiveAppUri to exports
 } = globalSlice.actions;
 
 export { initializeGraphData, fetchGraphDetails };

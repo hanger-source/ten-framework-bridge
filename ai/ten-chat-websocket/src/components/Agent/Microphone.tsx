@@ -192,7 +192,7 @@ export const Microphone: React.FC<MicrophoneProps> = ({
           </Button> */}
         </div>
       {/* 高级音频设置 */}
-      <div className="space-y-2">
+      {/* <div className="space-y-2">
         <Button
           variant="ghost"
           size="sm"
@@ -246,7 +246,7 @@ export const Microphone: React.FC<MicrophoneProps> = ({
             </div>
           </div>
         )}
-      </div>
+      </div> */}
     </div>
   );
 };

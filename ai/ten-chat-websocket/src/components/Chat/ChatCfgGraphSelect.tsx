@@ -16,6 +16,9 @@ export function RemoteGraphSelect() {
   const graphs = useAppSelector((state) => state.global.graphList);
   const websocketConnectionState = useAppSelector((state) => state.global.websocketConnectionState);
 
+  // console.log('RemoteGraphSelect: graphName', graphName);
+  // console.log('RemoteGraphSelect: graphs', graphs);
+
   const onGraphNameChange = (val: string) => {
     dispatch(setSelectedGraphId(val));
   };
@@ -25,19 +28,20 @@ export function RemoteGraphSelect() {
     value: item.uuid,
   }));
 
+  // console.log('RemoteGraphSelect: graphOptions', graphOptions);
+
   return (
     <>
       <Select
         value={graphName}
         onValueChange={onGraphNameChange}
-        disabled={websocketConnectionState !== "open"}
       >
         <SelectTrigger
           className={cn(
             "w-auto", // or "w-auto max-w-full" if you want to keep the existing defaults
           )}
         >
-          <SelectValue placeholder={"选择流程图"} />
+          <SelectValue placeholder={"选择模式"} />
         </SelectTrigger>
         <SelectContent>
           {graphOptions.map((item) => (

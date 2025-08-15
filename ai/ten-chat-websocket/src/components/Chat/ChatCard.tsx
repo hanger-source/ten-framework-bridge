@@ -5,20 +5,16 @@ import { cn } from "@/lib/utils";
 import MessageList from "@/components/Chat/MessageList";
 import { Button } from "@/components/ui/button";
 import { Send } from "lucide-react";
-import { webSocketManager } from "@/manager/websocket/websocket"; // Keep this import for now, although not used directly in this file
-import { SessionConnectionState, MessageType, CommandType, CommandResult } from "@/types/websocket"; // Keep these types
-import AudioStreamPlayer from "@/components/Agent/AudioStreamPlayer"; // Import AudioStreamPlayer
-import { useWebSocketSession } from "@/hooks/useWebSocketSession"; // Import useWebSocketSession
-import { toast } from "sonner"; // Added for toast notifications
+import { webSocketManager } from "@/manager/websocket/websocket"; // Uncommented
+import { SessionConnectionState, MessageType, CommandType, CommandResult, Message } from "@/types/websocket"; // Added Message type
+import AudioStreamPlayer from "@/components/Agent/AudioStreamPlayer";
+import { useWebSocketSession } from "@/hooks/useWebSocketSession";
+import { toast } from "sonner";
 
 export default function ChatCard(props: { className?: string }) {
   const { className } = props;
   const [inputValue, setInputValue] = React.useState("");
-  // Removed local connectionState and sessionState
-  // const [connectionState, setConnectionState] = React.useState<WebSocketConnectionState>(WebSocketConnectionState.CLOSED);
-  // const [sessionState, setSessionState] = React.useState<SessionConnectionState>(SessionConnectionState.IDLE); // New session state
-  
-  const { isConnected, sessionState, defaultLocation } = useWebSocketSession(); // Get sessionState from hook
+  const { isConnected, sessionState, defaultLocation, sendMessage } = useWebSocketSession();
 
   const [chatMessages, setChatMessages] = React.useState<{
     text: string;
@@ -27,28 +23,14 @@ export default function ChatCard(props: { className?: string }) {
     groupTimestamp?: number; // Added to link messages to their group
     asrRequestId?: string; // New: Unique ID for ASR requests to track partial results
   }[]>([]);
-  const lastGroupTimestampRef = React.useRef<number | undefined>(undefined); // New ref for group timestamp
+  const lastGroupTimestampRef = React.useRef<number | undefined>(undefined);
 
   // Removed connectionStateMap as ConnectionTest handles it
-  // const connectionStateMap: Record<WebSocketConnectionState, string> = {
-  //   [WebSocketConnectionState.CONNECTING]: '连接中',
-  //   [WebSocketConnectionState.OPEN]: '已连接',
-  //   [WebSocketConnectionState.CLOSING]: '断开中',
-  //   [WebSocketConnectionState.CLOSED]: '已断开',
-  // };
-
   // Removed showSettings and srcLoc as they are not needed here
-  // const [showSettings, setShowSettings] = React.useState(false); // New state for toggling settings visibility
-  // const srcLoc: Location = {
-  //   app_uri: appUri,
-  //   graph_id: graphName,
-  //   extension_name: MESSAGE_CONSTANTS.SYS_EXTENSION_NAME,
-  // };
 
-  // Removed WebSocket connection and message handling useEffect, ChatCard should not manage its own connection or session state
   React.useEffect(() => {
     // ChatCard should only consume messages, not manage connection or session state
-    const unsubscribeData = webSocketManager.onMessage(MessageType.DATA, (message) => {
+    const unsubscribeData = webSocketManager.onMessage(MessageType.DATA, (message: Message) => { // Explicitly typed message
       console.log('ChatCard: 收到数据消息:', message);
       console.log('ChatCard: received message properties', message.properties);
       // 根据返回数据 的 property 里面的属性 text 和 role 来渲染 已经的 对话框
@@ -151,7 +133,7 @@ export default function ChatCard(props: { className?: string }) {
       }
     });
 
-    const unsubscribeCmdResult = webSocketManager.onMessage(MessageType.CMD_RESULT, (message) => {
+    const unsubscribeCmdResult = webSocketManager.onMessage(MessageType.CMD_RESULT, (message: Message) => { // Explicitly typed message
       // ChatCard no longer manages its own session state, rely on Home via useWebSocketSession
       // This handler can still be used for displaying toasts related to command results if needed
       console.log('ChatCard: 收到命令结果 (via onMessage):', message);
@@ -168,38 +150,14 @@ export default function ChatCard(props: { className?: string }) {
     });
 
     // Removed subscription to command send events, rely on Home for session state
-    // const unsubscribeCommandSend = webSocketManager.onCommandSend((commandName, properties) => {
-    //   if (commandName === CommandType.START_GRAPH) {
-    //     console.log('ChatCard: START_GRAPH command sent, setting session state to CONNECTING_SESSION.');
-    //     setSessionState(SessionConnectionState.CONNECTING_SESSION);
-    //   }
-    // });
-
     // Removed initial connection attempt
-    // const initiateConnection = async () => {
-    //   try {
-    //     await webSocketManager.connect();
-    //   } catch (error) {
-    //     console.error('WebSocket 连接失败:', error);
-    //   }
-    // };
-    // initiateConnection();
 
     // 清理函数
     return () => {
       unsubscribeData();
       unsubscribeCmdResult();
-      // unsubscribeCommandSend(); // Removed
-      // webSocketManager.disconnect(); // Removed, Home handles global connection
     };
-  }, []); // Dependencies are empty as it should only subscribe to data and cmd results, not connection state
-
-  // Removed handleConnect, handleDisconnect, saveSettings, handleTestStartGraph, handleTestStopGraph
-  // const handleConnect = async () => { ... };
-  // const handleDisconnect = () => { ... };
-  // const saveSettings = () => { ... };
-  // const handleTestStartGraph = () => { ... };
-  // const handleTestStopGraph = () => { ... };
+  }, []);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setInputValue(e.target.value);
@@ -213,7 +171,7 @@ export default function ChatCard(props: { className?: string }) {
     }
 
     // 发送文本消息
-    webSocketManager.sendTextData('text_data', inputValue, defaultLocation, [defaultLocation]); // Use defaultLocation from hook
+    sendMessage("text_data", inputValue); // Corrected: Use sendMessage from useWebSocketSession with single argument
 
     // 添加用户消息到聊天列表
     setChatMessages((prevMessages) => [
@@ -224,10 +182,6 @@ export default function ChatCard(props: { className?: string }) {
     console.log("发送消息:", inputValue);
     setInputValue("");
   };
-
-  // Removed srcLoc and destLocs as they are now provided by useWebSocketSession
-  // const srcLoc: Location = { ... };
-  // const destLocs: Location[] = [ ... ];
 
   return (
     <>
@@ -257,12 +211,13 @@ export default function ChatCard(props: { className?: string }) {
               <span className="text-sm text-gray-600">
                 {sessionState === SessionConnectionState.IDLE && "AI 待命中"}
                 {sessionState === SessionConnectionState.CONNECTING_SESSION && "正在连接会话..."}
-                {sessionState === SessionConnectionState.SESSION_ACTIVE && "会话已激活"}
+                {sessionState === SessionConnectionState.SESSION_ACTIVE && "会话已激活"
+                }
                 {sessionState === SessionConnectionState.SESSION_FAILED && "会话连接失败"}
               </span>
             </div>
-  
-            <AudioStreamPlayer /> {/* Render AudioStreamPlayer */}
+
+            <AudioStreamPlayer />
             <form onSubmit={handleInputSubmit} className="flex items-center space-x-2">
               <input
                 type="text"
@@ -273,11 +228,11 @@ export default function ChatCard(props: { className?: string }) {
                       ? "正在连接会话..."
                       : sessionState === SessionConnectionState.SESSION_FAILED
                         ? "会话连接失败，请重试"
-                        : "等待连接..." // Default or IDLE state
+                        : "等待连接..."
                 }
                 value={inputValue}
                 onChange={handleInputChange}
-                disabled={sessionState !== SessionConnectionState.SESSION_ACTIVE} // Only enabled when session is active
+                disabled={sessionState !== SessionConnectionState.SESSION_ACTIVE}
                 className={cn(
                   "flex-grow rounded-md border bg-background p-1.5 focus:outline-none focus:ring-1 focus:ring-ring",
                   {

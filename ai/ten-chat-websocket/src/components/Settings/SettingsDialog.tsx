@@ -39,7 +39,7 @@ type AgentSettingFormValues = z.infer<typeof agentSettingSchema>;
 interface SettingsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  defaultValues: AgentSettingFormValues;
+  defaultValues: AgentSettingFormValues & { env?: string };
   onSubmit: (values: AgentSettingFormValues) => void;
 }
 
@@ -96,7 +96,7 @@ export default function SettingsDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>代理设置</DialogTitle>
+          <DialogTitle>智能体设置</DialogTitle>
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
