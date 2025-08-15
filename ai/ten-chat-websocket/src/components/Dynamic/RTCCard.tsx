@@ -106,20 +106,20 @@ export default function RTCCard({
   };
 
   const onRemoteAudioTrack = (message: Message) => {
-    console.log("RTCCard: onRemoteAudioTrack called with message:", message.type);
+    // console.log("RTCCard: onRemoteAudioTrack called with message:", message.type);
     if (message.type === MessageType.AUDIO_FRAME) {
-      console.log("RTCCard: Full audio frame message received:", message); // Add this line to log the full message
+      // console.log("RTCCard: Full audio frame message received:", message); // Add this line to log the full message
       const audioFrame = message as unknown as IAudioFrame;
-      console.log(
-        `[websocket] Received remote audio track ${audioFrame.buf.length} bytes`,
-      );
+      // console.log(
+      //   `[websocket] Received remote audio track ${audioFrame.buf.length} bytes`,
+      // );
       setRemoteAudioData(audioFrame.buf);
-      console.log("RTCCard: remoteAudioData updated with length:", audioFrame.buf.length);
+      // console.log("RTCCard: remoteAudioData updated with length:", audioFrame.buf.length);
     }
   };
 
   const onTextChanged = (message: Message) => {
-    console.log(`[${new Date().toISOString()}] RTCCard: onTextChanged message:`, message);
+    // console.log(`[${new Date().toISOString()}] RTCCard: onTextChanged message:`, message);
     let chatType: EMessageType | undefined;
     let chatItem: IChatItem | undefined;
 
@@ -155,18 +155,18 @@ export default function RTCCard({
           userName: rawMessage.name || "Agent",
         };
       } else {
-        console.warn(`[${new Date().toISOString()}] RTCCard: Received unexpected Data message content type: ${dataMessage.content_type || 'N/A'}`, dataMessage);
+        // console.warn(`[${new Date().toISOString()}] RTCCard: Received unexpected Data message content type: ${dataMessage.content_type || 'N/A'}`, dataMessage);
       }
     }
      else {
-      console.warn(`[${new Date().toISOString()}] RTCCard: Received unexpected message type for chat item: ${message.type || 'N/A'}`, message);
+      // console.warn(`[${new Date().toISOString()}] RTCCard: Received unexpected message type for chat item: ${message.type || 'N/A'}`, message);
     }
 
     if (chatType && chatItem) {
       dispatch(addChatItem(chatItem));
     }
      else {
-      console.warn(`[${new Date().toISOString()}] RTCCard: Failed to determine chatType or chatItem for message. Message Type: ${message.type || 'N/A'}`, message);
+      // console.warn(`[${new Date().toISOString()}] RTCCard: Failed to determine chatType or chatItem for message. Message Type: ${message.type || 'N/A'}`, message);
     }
   };
 
@@ -196,7 +196,8 @@ export default function RTCCard({
                 style={{ height: '100%', width: '100%' }}
                 className="absolute inset-0"
               >
-                <TalkingheadBlock audioTrack={audioMute ? undefined : remoteAudioData} /> {/* Use remoteAudioData for TalkingHead */}
+                {/* console.log("RTCCard: Passing audioTrack to TalkingHead. audioMute:", audioMute, "remoteAudioData length:", remoteAudioData?.length, "remoteAudioData content (first 20 bytes):"), remoteAudioData?.slice(0, 20) */}
+                <TalkingheadBlock audioTrack={remoteAudioData} /> {/* Use remoteAudioData for TalkingHead */}
               </div>
             )}
             {/* Live2D Control Button */}

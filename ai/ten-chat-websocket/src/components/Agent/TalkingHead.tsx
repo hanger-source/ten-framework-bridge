@@ -60,6 +60,7 @@ export default function Talkinghead({
 }: {
   audioTrack?: Uint8Array;
 }) {
+  // console.log("TalkingHead: Component rendered with audioTrack prop:", audioTrack ? "defined" : "undefined", "length:", audioTrack?.length); // 组件顶层日志
   const containerRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<Application>();
   const modelRef = useRef<Live2DModel>();
@@ -142,9 +143,9 @@ export default function Talkinghead({
 
   // lipsync 频谱方案
   useEffect(() => {
-    console.log("TalkingHead useEffect: AudioTrack state on update:", audioTrack);
+    // console.log("TalkingHead useEffect: AudioTrack state on update:", audioTrack ? "defined" : "undefined", "length:", audioTrack?.length); // useEffect 入口日志
     if (!audioTrack || audioTrack.length === 0) {
-      console.log("TalkingHead: AudioTrack is null or empty, skipping lipsync update.");
+      // console.log("TalkingHead: AudioTrack is null or empty, skipping lipsync update.");
       // If audioTrack becomes empty, ensure animation is stopped and audio context is closed
       if (animationIdRef.current) {
         cancelAnimationFrame(animationIdRef.current);
@@ -169,7 +170,7 @@ export default function Talkinghead({
       }
       return;
     }
-    console.log(`TalkingHead: AudioTrack updated with ${audioTrack.length} bytes.`);
+    // console.log(`TalkingHead: AudioTrack updated with ${audioTrack.length} bytes.`);
 
     // 初始化 AudioContext 和 AnalyserNode (只创建一次)
     if (!audioCtxRef.current) {
@@ -182,11 +183,20 @@ export default function Talkinghead({
     const currentAnalyser = analyserRef.current;
 
     // 添加日志来确认 modelRef.current 和 currentAnalyser 的状态
-    console.log("TalkingHead: Before playAudioData - modelRef.current:", !!modelRef.current, "analyserRef.current:", !!analyserRef.current);
+    // console.log("TalkingHead: Before playAudioData - modelRef.current:", !!modelRef.current, "analyserRef.current:", !!analyserRef.current);
 
     const playAudioData = async () => {
-      console.log("TalkingHead: playAudioData called with audioTrack:", audioTrack);
-      if (!audioTrack || audioTrack.length === 0 || !currentAudioCtx || !currentAnalyser) return;
+      // console.log("TalkingHead: playAudioData called. audioTrack (length):", audioTrack.length); // playAudioData 入口日志
+      if (!audioTrack || audioTrack.length === 0) {
+          // console.log("TalkingHead: audioTrack is null or empty in playAudioData.");
+          return;
+      }
+      // 添加对 audioTrack 长度是否为偶数的检查
+      if (audioTrack.length % 2 !== 0) {
+          console.warn("TalkingHead: Received audioTrack with odd byte length. Skipping this frame to prevent Int16Array error.", audioTrack.length);
+          return;
+      }
+      // console.log("TalkingHead: audioTrack (first 20 bytes):", audioTrack.slice(0, 20)); // Log first 20 bytes
 
       // 如果有之前的 source 节点，停止并断开连接
       if (sourceRef.current) {
@@ -201,7 +211,8 @@ export default function Talkinghead({
 
       // 创建 AudioBuffer
       const float32Data = new Float32Array(audioTrack.length / 2);
-      const int16Array = new Int16Array(audioTrack.buffer);
+      const byteLength = audioTrack.buffer.byteLength;
+      const int16Array = new Int16Array(audioTrack.buffer, 0, Math.floor(byteLength / 2)); // 确保是偶数长度
       for (let i = 0; i < int16Array.length; i++) {
         float32Data[i] = int16Array[i] / 32768;
       }
@@ -215,24 +226,29 @@ export default function Talkinghead({
 
       const newSource = currentAudioCtx.createBufferSource();
       newSource.buffer = buffer;
-      newSource.connect(currentAnalyser);
+      if (currentAnalyser) { // 添加空值检查
+        newSource.connect(currentAnalyser);
+      }
       newSource.start(0); // Start immediately
 
       sourceRef.current = newSource;
 
       // Ensure dataArray is correctly sized and accessible
-      const dataArray = new Uint8Array(currentAnalyser.frequencyBinCount);
+      const dataArray = new Uint8Array(currentAnalyser!.frequencyBinCount); // 添加非空断言
 
       function animate() {
+        // console.log("TalkingHead: animate function called."); // animate 函数入口日志
         // 添加日志来确认 modelRef.current 和 currentAnalyser 的状态，以及 dataArray 的长度
-        console.log("TalkingHead: animate running - modelRef.current:", !!modelRef.current, "currentAnalyser:", !!currentAnalyser, "dataArray.length:", dataArray.length);
+        // console.log("TalkingHead: animate running - modelRef.current:", !!modelRef.current, "currentAnalyser:", !!currentAnalyser, "dataArray.length:", dataArray.length);
 
         if (!modelRef.current || !currentAnalyser) {
-            console.log("TalkingHead: animate stopped due to missing model or analyser", { model: modelRef.current, analyser: currentAnalyser });
+            // console.log("TalkingHead: animate stopped due to missing model or analyser", { model: modelRef.current, analyser: currentAnalyser });
             return;
         }
         currentAnalyser.getByteTimeDomainData(dataArray);
+        // console.log(`calcMouthOpenByRMS: Called with dataArray length = ${dataArray.length}`); // calcMouthOpenByRMS 调用前日志
         const mouthOpen = calcMouthOpenByRMS(dataArray);
+        // console.log("TalkingHead: animate - mouthOpen value:", mouthOpen); // mouthOpen 值日志
 
         try {
           const coreModel = modelRef.current.internalModel?.coreModel as {
@@ -259,7 +275,7 @@ export default function Talkinghead({
     playAudioData();
 
     return () => {
-      console.log("TalkingHead: Cleaning up useEffect for audioTrack.");
+      // console.log("TalkingHead: Cleaning up useEffect for audioTrack.");
       if (animationIdRef.current) {
         cancelAnimationFrame(animationIdRef.current);
         animationIdRef.current = undefined;

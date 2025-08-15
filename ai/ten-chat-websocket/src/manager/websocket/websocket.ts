@@ -411,6 +411,10 @@ export class WebSocketManager {
         console.log('Data to decode (first 20 bytes):', new Uint8Array(data).slice(0, 20)); // 打印前20个字节
         try {
             const decoded = decode(new Uint8Array(data), { extensionCodec });
+            console.log('MsgPack decoded object:', decoded); // Add log to inspect decoded object
+            if (decoded && typeof decoded === 'object' && 'type' in decoded) {
+                console.log('Decoded message type:', (decoded as any).type); // Log the type if it exists
+            }
             return decoded as Message;
         } catch (error) {
             console.error('MsgPack 解码错误:', error);
